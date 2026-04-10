@@ -10,6 +10,8 @@
     "feedback-record": "node tools/feedback-record.mjs",
     "reindex": "node tools/reindex.mjs",
     "search": "node tools/search.mjs",
+    "lint": "node tools/lint.mjs",
+    "health-check": "node tools/health-check.mjs",
     "commit": "node tools/commit.mjs"
   },
   "engines": {

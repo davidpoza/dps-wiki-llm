@@ -1,34 +1,34 @@
 <div align="center">
   <img src="docs/assets/logo.svg" alt="dps-wiki-llm logo" width="132">
   <h1>dps-wiki-llm</h1>
-  <p><strong>Tooling determinista en Node.js para mantener un wiki persistente basado en markdown.</strong></p>
-  <p><code>raw/</code> para eventos, <code>wiki/</code> para conocimiento derivado, <code>state/</code> para indices y <code>outputs/</code> para artefactos.</p>
+  <p><strong>Deterministic Node.js tooling for maintaining a persistent markdown-based wiki.</strong></p>
+  <p><code>raw/</code> for events, <code>wiki/</code> for derived knowledge, <code>state/</code> for indexes, and <code>outputs/</code> for artifacts.</p>
 </div>
 
-## Resumen
+## Overview
 
-`dps-wiki-llm` implementa el nucleo operativo de un sistema de conocimiento persistente basado en el modelo `raw -> wiki -> state -> outputs`. La idea no es responder como un chat con memoria improvisada, sino mantener notas reutilizables, trazables y actualizables con reglas explicitas.
+`dps-wiki-llm` implements the operational core of a persistent knowledge system built around the model `raw -> wiki -> state -> outputs`. The goal is not to behave like a chat system with improvised memory, but to maintain reusable, traceable notes that evolve through explicit rules.
 
-El repositorio actual contiene el tooling base para aplicar mutation plans y registrar feedback auditable. El vault vive fuera de este repo o montado localmente; este repo aloja los scripts que operan sobre ese vault.
+The current repository contains the base tooling for applying mutation plans and recording auditable feedback. The vault itself lives outside this repo, or is mounted locally; this repo hosts the scripts that operate on that vault.
 
-## Principios
+## Principles
 
-- Separacion estricta entre `raw/` y `wiki/`.
-- Ingesta reactiva solo sobre `raw/**`.
-- Mutaciones pequenas, deterministas e idempotentes.
-- JSON como contrato canonico entre orquestacion y scripts.
-- Markdown como estado durable y SQLite FTS como capa de busqueda.
-- La propagacion desde respuestas es condicional y siempre auditable.
+- Strict separation between `raw/` and `wiki/`.
+- Reactive ingestion only on `raw/**`.
+- Small, deterministic, idempotent mutations.
+- JSON as the canonical contract between orchestration and scripts.
+- Markdown as the durable state layer and SQLite FTS as the retrieval layer.
+- Propagation from generated outputs is conditional and always auditable.
 
-## Estado actual
+## Current Status
 
-Scripts disponibles hoy:
+Scripts currently available:
 
-- `tools/apply-update.mjs`: consume un Mutation Plan JSON, crea o actualiza notas markdown y registra claves de idempotencia en `state/runtime/idempotency-keys.json`.
-- `tools/feedback-record.mjs`: normaliza un Feedback Record, escribe artefactos en `state/feedback/` y puede derivar un mutation plan cuando la decision es `propagate`.
-- `tools/lib/*.mjs`: utilidades internas para CLI, filesystem, frontmatter y composicion de markdown.
+- `tools/apply-update.mjs`: consumes a Mutation Plan JSON object, creates or updates markdown notes, and records idempotency keys in `state/runtime/idempotency-keys.json`.
+- `tools/feedback-record.mjs`: normalizes a Feedback Record, writes artifacts into `state/feedback/`, and can derive a mutation plan when the decision is `propagate`.
+- `tools/lib/*.mjs`: internal utilities for CLI handling, filesystem access, frontmatter parsing, and markdown composition.
 
-Componentes descritos en la arquitectura pero todavia no implementados aqui:
+Components described by the architecture but not yet implemented here:
 
 - `init-db.mjs`
 - `ingest-source.mjs`
@@ -38,7 +38,7 @@ Componentes descritos en la arquitectura pero todavia no implementados aqui:
 - `health-check.mjs`
 - `commit.mjs`
 
-## Estructura del repo
+## Repository Structure
 
 ```text
 .
@@ -56,7 +56,7 @@ Componentes descritos en la arquitectura pero todavia no implementados aqui:
     └── lib/
 ```
 
-Vault esperado por la arquitectura:
+Vault layout expected by the architecture:
 
 ```text
 vault/
@@ -66,54 +66,54 @@ vault/
 └── outputs/
 ```
 
-## Workflow objetivo
+## Target Workflow
 
-El siguiente diagrama resume el workflow objetivo del sistema. En verde aparecen scripts ya presentes en este repo; en amarillo, componentes previstos en la arquitectura pero aun pendientes.
+The following diagram summarizes the intended system workflow. Green nodes are scripts already present in this repo; yellow nodes are planned architecture components that are still pending.
 
-Render generado desde la web oficial de PlantUML:
+Rendered using the official PlantUML web service:
 
 ![Workflow dps-wiki-llm](docs/diagrams/workflow.svg)
 
-Fuente canonica: [`docs/diagrams/workflow.puml`](docs/diagrams/workflow.puml)  
-Render versionado: [`docs/diagrams/workflow.svg`](docs/diagrams/workflow.svg)
+Canonical source: [`docs/diagrams/workflow.puml`](docs/diagrams/workflow.puml)  
+Versioned render: [`docs/diagrams/workflow.svg`](docs/diagrams/workflow.svg)
 
-## Uso rapido
+## Quick Start
 
-Requisitos:
+Requirements:
 
-- Node.js 20 o superior
+- Node.js 20 or newer
 
-Ejecutar un mutation plan:
-
-```bash
-npm run apply-update -- --vault /ruta/al/vault --input ./plan.json
-```
-
-Registrar una decision de feedback:
+Run a mutation plan:
 
 ```bash
-npm run feedback-record -- --vault /ruta/al/vault --input ./feedback.json
+npm run apply-update -- --vault /path/to/vault --input ./plan.json
 ```
 
-Ambos scripts:
+Record a feedback decision:
 
-- aceptan JSON por `--input` o `stdin`
-- responden con JSON machine-readable
-- resuelven rutas dentro del vault para evitar escrituras fuera de raiz
+```bash
+npm run feedback-record -- --vault /path/to/vault --input ./feedback.json
+```
 
-## Contratos operativos
+Both scripts:
 
-- `apply-update.mjs` espera el contrato `Mutation Plan`.
-- `feedback-record.mjs` espera el contrato `Feedback Record`.
-- Si la decision es `propagate`, `feedback-record.mjs` genera un mutation plan reutilizable por `apply-update.mjs`.
+- accept JSON via `--input` or `stdin`
+- return machine-readable JSON
+- resolve paths inside the vault root to prevent writes outside the vault
 
-## Regla critica
+## Operational Contracts
 
-Nunca dispares automatizaciones sobre `wiki/**`. El limite correcto es:
+- `apply-update.mjs` expects the `Mutation Plan` contract.
+- `feedback-record.mjs` expects the `Feedback Record` contract.
+- If the decision is `propagate`, `feedback-record.mjs` generates a mutation plan that can be reused by `apply-update.mjs`.
+
+## Critical Rule
+
+Never trigger automations on `wiki/**`. The correct boundary is:
 
 ```text
-raw/  = event stream reactivo
-wiki/ = estado derivado y estable
+raw/  = reactive event stream
+wiki/ = stable derived state
 ```
 
-Romper esa separacion introduce bucles, ruido y actualizaciones no deterministas.
+Breaking that separation introduces loops, noise, and non-deterministic updates.

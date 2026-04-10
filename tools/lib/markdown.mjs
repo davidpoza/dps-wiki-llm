@@ -103,7 +103,7 @@ function mergeParagraphContent(existingContent, items) {
   return merged.join("\n\n").trim();
 }
 
-function parseSections(body) {
+export function parseSections(body) {
   const lines = body.split("\n");
   let title = "";
   let index = 0;
