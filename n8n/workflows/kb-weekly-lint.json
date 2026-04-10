@@ -1,0 +1,109 @@
+{
+  "name": "KB - Weekly Lint",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -620,
+        -80
+      ],
+      "id": "cf304736-e595-4ab1-a96a-9cdee956bb8d",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {},
+      "id": "8dcc07df-3dff-470b-9580-c37dcaef38d1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -620,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "command": "node /app/tools/lint.mjs --vault /data/vault",
+        "executeOnce": true
+      },
+      "id": "7d5231fa-d1ef-449c-b8b9-15dc99a23c9b",
+      "name": "Run lint.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "By default lint.mjs writes JSON and Markdown reports into state/maintenance/."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('lint.mjs returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "b3156adc-2a7d-4fd8-8348-8b2f8e186f2d",
+      "name": "Parse Lint Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        16
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Run lint.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Run lint.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run lint.mjs": {
+      "main": [
+        [
+          {
+            "node": "Parse Lint Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

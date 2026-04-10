@@ -5,6 +5,17 @@ import { relativeVaultPath, resolveVaultRoot, resolveWithinRoot } from "./lib/fs
 import { ensureSchema, openDatabase, rebuildFts } from "./lib/db.mjs";
 import { loadWikiDocs } from "./lib/wiki-inspect.mjs";
 
+/**
+ * Rebuild the docs table and FTS index from the current wiki markdown state.
+ */
+
+/**
+ * Resolve the database location, defaulting to the canonical vault path.
+ *
+ * @param {{ db: string | null }} args
+ * @param {string} vaultRoot
+ * @returns {string}
+ */
 function parseDbPath(args, vaultRoot) {
   if (args.db) {
     return resolveWithinRoot(vaultRoot, args.db);

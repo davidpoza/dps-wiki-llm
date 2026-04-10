@@ -12,10 +12,31 @@ import { analyzeWikiGraph, loadWikiDocs } from "./lib/wiki-inspect.mjs";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Run deeper semantic and traceability validation over the wiki graph.
+ */
+
+/**
+ * Create a filesystem-safe timestamp used in report filenames.
+ *
+ * @returns {string}
+ */
 function nowStamp() {
   return new Date().toISOString().replaceAll(":", "-");
 }
 
+/**
+ * Normalize a health-check finding into the shared maintenance result shape.
+ *
+ * @param {"critical" | "warning" | "suggestion"} severity
+ * @param {string} targetPath
+ * @param {string} issueType
+ * @param {string} description
+ * @param {string} recommendedAction
+ * @param {boolean} [autoFixable=false]
+ * @param {Record<string, any>} [extra={}]
+ * @returns {Record<string, any>}
+ */
 function buildFinding(severity, targetPath, issueType, description, recommendedAction, autoFixable = false, extra = {}) {
   return {
     severity,
@@ -28,6 +49,12 @@ function buildFinding(severity, targetPath, issueType, description, recommendedA
   };
 }
 
+/**
+ * Sort findings by severity before path-level tie breaking.
+ *
+ * @param {string} severity
+ * @returns {number}
+ */
 function severityRank(severity) {
   if (severity === "critical") {
     return 0;
@@ -40,6 +67,12 @@ function severityRank(severity) {
   return 2;
 }
 
+/**
+ * Compute the age of a note in whole days from its updated timestamp.
+ *
+ * @param {string} updatedAt
+ * @returns {number | null}
+ */
 function ageInDays(updatedAt) {
   const date = new Date(updatedAt);
   if (Number.isNaN(date.getTime())) {
@@ -49,16 +82,40 @@ function ageInDays(updatedAt) {
   return Math.floor((Date.now() - date.getTime()) / DAY_IN_MS);
 }
 
+/**
+ * Check whether a named markdown section exists and contains content.
+ *
+ * @param {{ sectionMap: Map<string, { content: string }> }} doc
+ * @param {string} sectionName
+ * @returns {boolean}
+ */
 function sectionHasContent(doc, sectionName) {
   const section = doc.sectionMap.get(sectionName.toLowerCase());
   return Boolean(section && section.content.trim());
 }
 
+/**
+ * Read an array-valued frontmatter field while discarding falsey entries.
+ *
+ * @param {{ frontmatter: Record<string, any> }} doc
+ * @param {string} key
+ * @returns {any[]}
+ */
 function frontmatterArray(doc, key) {
   const value = doc.frontmatter[key];
   return Array.isArray(value) ? value.filter(Boolean) : [];
 }
 
+/**
+ * Decide whether a note has explicit or linked source support.
+ *
+ * @param {{ frontmatter: Record<string, any>, relativePath: string }} doc
+ * @param {{
+ *   resolvedLinks: Map<string, string[]>
+ * }} graph
+ * @param {Map<string, { docType: string }>} docsByPath
+ * @returns {boolean}
+ */
 function hasSourceSupport(doc, graph, docsByPath) {
   const explicitSourceIds = frontmatterArray(doc, "source_ids");
   const explicitSourceRefs = frontmatterArray(doc, "source_refs");
@@ -76,6 +133,12 @@ function hasSourceSupport(doc, graph, docsByPath) {
   );
 }
 
+/**
+ * Collapse broken-link data into unique missing-page targets.
+ *
+ * @param {{ brokenLinks: Map<string, { normalized: string }[]> }} graph
+ * @returns {Array<{ target: string, referenced_from: string[] }>}
+ */
 function collectMissingPages(graph) {
   const missing = new Map();
 
@@ -93,6 +156,18 @@ function collectMissingPages(graph) {
   return Array.from(missing.values()).sort((a, b) => a.target.localeCompare(b.target));
 }
 
+/**
+ * Render a short markdown summary that mirrors the JSON health-check result.
+ *
+ * @param {{
+ *   run_id: string,
+ *   kind: string,
+ *   findings: Record<string, any>[],
+ *   missing_pages: Array<{ target: string, referenced_from: string[] }>,
+ *   stats: { docs: number }
+ * }} result
+ * @returns {string}
+ */
 function renderSummary(result) {
   const lines = [
     `# Health Check Report: ${result.run_id}`,

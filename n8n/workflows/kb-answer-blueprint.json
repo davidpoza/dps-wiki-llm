@@ -1,0 +1,156 @@
+{
+  "name": "KB - Answer Blueprint",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "kb-answer",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -900,
+        -80
+      ],
+      "id": "6d5eb332-6ad7-4b8e-a5f0-8d8b66432667",
+      "name": "Webhook",
+      "webhookId": "kb-answer"
+    },
+    {
+      "parameters": {},
+      "id": "f37e17fb-6ca0-4083-9f65-7f1bf80ff9f6",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst question = typeof body.question === 'string' && body.question.trim() ? body.question.trim() : 'What should I know from the current wiki state?';\nconst limit = Number.isFinite(Number(body.limit)) && Number(body.limit) > 0 ? Number(body.limit) : 8;\nreturn [{ json: { question, limit } }];"
+      },
+      "id": "9bb85ad8-6020-4a97-9a2e-ad8f7f13cf1f",
+      "name": "Prepare Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "Expected input: { question, limit? }"
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node /app/tools/search.mjs --vault /data/vault --limit \" + $json.limit + \" \" + JSON.stringify($json.question) }}",
+        "executeOnce": true
+      },
+      "id": "531c1047-7162-4cac-8177-eb1fa83139ad",
+      "name": "Run search.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -220,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('search.mjs returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "af188e0a-55a2-42f8-a4d5-0a1c21f8e4c5",
+      "name": "Parse Search Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $node[\"Prepare Query\"].json.question;\nconst retrieval = $input.first().json;\nconst outputId = `out-${new Date().toISOString().slice(0, 10)}-answer-${Math.random().toString(36).slice(2, 8)}`;\nconst slug = query.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'answer';\nconst answerRecord = {\n  output_id: outputId,\n  question: query,\n  output_path: `outputs/${new Date().toISOString().slice(0, 10)}-${slug}.md`,\n  evidence_used: retrieval.results.map((item) => item.path),\n  should_review_for_feedback: true\n};\nreturn [{\n  json: {\n    status: 'needs_llm_node',\n    question: query,\n    retrieval,\n    answer_record,\n    llm_instructions: [\n      'Insert your provider-specific AI node after this step.',\n      'Read the retrieved wiki notes from retrieval.results[*].path.',\n      'Generate the answer first.',\n      'Then produce a canonical Feedback Record and send it to KB - Apply Feedback.'\n    ],\n    next_workflow: 'KB - Apply Feedback'\n  }\n}];"
+      },
+      "id": "ab13d918-54cb-4870-9563-f7bfb8de363b",
+      "name": "Build Answer Packet",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "Provider-neutral blueprint: wire your AI node after this step, not before search."
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Query": {
+      "main": [
+        [
+          {
+            "node": "Run search.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run search.mjs": {
+      "main": [
+        [
+          {
+            "node": "Parse Search Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Search Result": {
+      "main": [
+        [
+          {
+            "node": "Build Answer Packet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

@@ -16,14 +16,36 @@ const BULLET_SECTIONS = new Set([
   "evidence"
 ]);
 
+/**
+ * Markdown parsing and rendering helpers for deterministic note updates.
+ */
+
+/**
+ * Normalize a line for duplicate detection while preserving semantic content.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
 function normalizeLine(value) {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+/**
+ * Normalize a bullet item for duplicate detection.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
 function normalizeItem(value) {
   return normalizeLine(value.replace(/^- /, ""));
 }
 
+/**
+ * Build a human-readable title from the relative file path.
+ *
+ * @param {string} relativePath
+ * @returns {string}
+ */
 function titleFromPath(relativePath) {
   const fileName = path.basename(relativePath, path.extname(relativePath));
   return fileName
@@ -33,6 +55,14 @@ function titleFromPath(relativePath) {
     .join(" ");
 }
 
+/**
+ * Decide whether a section should render as bullets or paragraphs.
+ *
+ * @param {string} sectionName
+ * @param {string} existingContent
+ * @param {string[]} items
+ * @returns {"bullet" | "paragraph"}
+ */
 function sectionMode(sectionName, existingContent, items) {
   if (BULLET_SECTIONS.has(sectionName.trim().toLowerCase())) {
     return "bullet";
@@ -54,6 +84,12 @@ function sectionMode(sectionName, existingContent, items) {
   return "paragraph";
 }
 
+/**
+ * Split paragraph content on blank lines while trimming empty entries.
+ *
+ * @param {string} content
+ * @returns {string[]}
+ */
 function splitParagraphs(content) {
   return content
     .trim()
@@ -62,6 +98,13 @@ function splitParagraphs(content) {
     .filter(Boolean);
 }
 
+/**
+ * Merge bullet items idempotently into an existing section body.
+ *
+ * @param {string} existingContent
+ * @param {string[]} items
+ * @returns {string}
+ */
 function mergeBulletContent(existingContent, items) {
   const existingLines = existingContent
     .split("\n")
@@ -84,6 +127,13 @@ function mergeBulletContent(existingContent, items) {
   return merged.join("\n").trim();
 }
 
+/**
+ * Merge paragraph-like content idempotently into an existing section body.
+ *
+ * @param {string} existingContent
+ * @param {string[]} items
+ * @returns {string}
+ */
 function mergeParagraphContent(existingContent, items) {
   const paragraphs = splitParagraphs(existingContent);
   const seen = new Set(paragraphs.map(normalizeLine));
@@ -103,6 +153,12 @@ function mergeParagraphContent(existingContent, items) {
   return merged.join("\n\n").trim();
 }
 
+/**
+ * Parse a markdown note body into title, preamble, and second-level sections.
+ *
+ * @param {string} body
+ * @returns {{ title: string, preamble: string, sections: Array<{ name: string, content: string }> }}
+ */
 export function parseSections(body) {
   const lines = body.split("\n");
   let title = "";
@@ -163,6 +219,12 @@ export function parseSections(body) {
   };
 }
 
+/**
+ * Serialize a parsed note body back into markdown.
+ *
+ * @param {{ title: string, preamble: string, sections: Array<{ name: string, content: string }> }} param0
+ * @returns {string}
+ */
 function stringifySections({ title, preamble, sections }) {
   const chunks = [`# ${title}`];
 
@@ -177,6 +239,12 @@ function stringifySections({ title, preamble, sections }) {
   return `${chunks.join("\n").replace(/\n{3,}/g, "\n\n").trim()}\n`;
 }
 
+/**
+ * Normalize section payload values into a clean list of strings.
+ *
+ * @param {string[] | string | unknown} items
+ * @returns {string[]}
+ */
 function normalizeItems(items) {
   if (!Array.isArray(items)) {
     return typeof items === "string" ? [items] : [];
@@ -185,6 +253,13 @@ function normalizeItems(items) {
   return items.filter((item) => typeof item === "string").map((item) => item.trim()).filter(Boolean);
 }
 
+/**
+ * Insert or merge a section without duplicating content.
+ *
+ * @param {Array<{ name: string, content: string }>} sectionEntries
+ * @param {string} sectionName
+ * @param {string[] | string} items
+ */
 function upsertSection(sectionEntries, sectionName, items) {
   const incomingItems = normalizeItems(items);
   if (incomingItems.length === 0) {
@@ -209,6 +284,15 @@ function upsertSection(sectionEntries, sectionName, items) {
       : mergeParagraphContent(existing.content, incomingItems);
 }
 
+/**
+ * Render the next markdown state for a note while preserving existing content.
+ *
+ * @param {string} relativePath
+ * @param {string | null} existingText
+ * @param {Record<string, any>} [payload={}]
+ * @param {{ updatedDate?: string, updatedBy?: string }} [runtime={}]
+ * @returns {string}
+ */
 export function renderMarkdown(relativePath, existingText, payload = {}, runtime = {}) {
   const base = existingText ? splitFrontmatter(existingText) : { frontmatter: {}, body: "" };
   const parsedBody = parseSections(base.body || "");

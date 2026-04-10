@@ -1,3 +1,13 @@
+/**
+ * Minimal frontmatter parsing and serialization for deterministic note updates.
+ */
+
+/**
+ * Count leading spaces so nested frontmatter blocks can be parsed by indentation.
+ *
+ * @param {string} line
+ * @returns {number}
+ */
 function countIndent(line) {
   let indent = 0;
 
@@ -8,11 +18,24 @@ function countIndent(line) {
   return indent;
 }
 
+/**
+ * Ignore blank lines and comment lines inside frontmatter blocks.
+ *
+ * @param {string} line
+ * @returns {boolean}
+ */
 function isMeaningful(line) {
   const trimmed = line.trim();
   return trimmed !== "" && !trimmed.startsWith("#");
 }
 
+/**
+ * Find the next line that contains actual frontmatter content.
+ *
+ * @param {string[]} lines
+ * @param {number} startIndex
+ * @returns {number}
+ */
 function nextMeaningfulIndex(lines, startIndex) {
   for (let index = startIndex; index < lines.length; index += 1) {
     if (isMeaningful(lines[index])) {
@@ -23,6 +46,12 @@ function nextMeaningfulIndex(lines, startIndex) {
   return -1;
 }
 
+/**
+ * Parse a scalar frontmatter value from the limited YAML subset this project uses.
+ *
+ * @param {string} rawValue
+ * @returns {any}
+ */
 function parseScalar(rawValue) {
   const value = rawValue.trim();
 
@@ -58,6 +87,14 @@ function parseScalar(rawValue) {
   return value;
 }
 
+/**
+ * Parse either a mapping or a sequence at the current indentation level.
+ *
+ * @param {string[]} lines
+ * @param {number} startIndex
+ * @param {number} indent
+ * @returns {{ value: any, nextIndex: number }}
+ */
 function parseBlock(lines, startIndex, indent) {
   const meaningfulIndex = nextMeaningfulIndex(lines, startIndex);
 
@@ -79,6 +116,14 @@ function parseBlock(lines, startIndex, indent) {
   return parseMapping(lines, meaningfulIndex, lineIndent);
 }
 
+/**
+ * Parse a frontmatter mapping node.
+ *
+ * @param {string[]} lines
+ * @param {number} startIndex
+ * @param {number} indent
+ * @returns {{ value: Record<string, any>, nextIndex: number }}
+ */
 function parseMapping(lines, startIndex, indent) {
   const output = {};
   let index = startIndex;
@@ -135,6 +180,14 @@ function parseMapping(lines, startIndex, indent) {
   return { value: output, nextIndex: index };
 }
 
+/**
+ * Parse a frontmatter sequence node.
+ *
+ * @param {string[]} lines
+ * @param {number} startIndex
+ * @param {number} indent
+ * @returns {{ value: any[], nextIndex: number }}
+ */
 function parseSequence(lines, startIndex, indent) {
   const output = [];
   let index = startIndex;
@@ -185,6 +238,12 @@ function parseSequence(lines, startIndex, indent) {
   return { value: output, nextIndex: index };
 }
 
+/**
+ * Serialize a scalar back into frontmatter-safe text.
+ *
+ * @param {any} value
+ * @returns {string}
+ */
 function formatScalar(value) {
   if (value === null) {
     return "null";
@@ -201,10 +260,23 @@ function formatScalar(value) {
   throw new Error(`Unsupported frontmatter scalar: ${String(value)}`);
 }
 
+/**
+ * Check whether a value is a non-array plain object.
+ *
+ * @param {unknown} value
+ * @returns {boolean}
+ */
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+/**
+ * Serialize nested frontmatter nodes with stable indentation.
+ *
+ * @param {any} value
+ * @param {number} [indent=0]
+ * @returns {string}
+ */
 function stringifyNode(value, indent = 0) {
   if (Array.isArray(value)) {
     return value
@@ -235,6 +307,12 @@ function stringifyNode(value, indent = 0) {
   return `${" ".repeat(indent)}${formatScalar(value)}`;
 }
 
+/**
+ * Split markdown text into parsed frontmatter and body content.
+ *
+ * @param {string} text
+ * @returns {{ frontmatter: Record<string, any>, body: string }}
+ */
 export function splitFrontmatter(text) {
   const normalized = text.replaceAll("\r\n", "\n");
 
@@ -255,6 +333,12 @@ export function splitFrontmatter(text) {
   return { frontmatter: parsed.value, body };
 }
 
+/**
+ * Serialize frontmatter back into a markdown-compatible fenced block.
+ *
+ * @param {Record<string, any>} frontmatter
+ * @returns {string}
+ */
 export function stringifyFrontmatter(frontmatter) {
   if (!frontmatter || Object.keys(frontmatter).length === 0) {
     return "";
@@ -263,6 +347,13 @@ export function stringifyFrontmatter(frontmatter) {
   return `---\n${stringifyNode(frontmatter)}\n---\n\n`;
 }
 
+/**
+ * Merge frontmatter recursively while deduplicating array entries.
+ *
+ * @param {any} [baseValue={}]
+ * @param {any} [nextValue={}]
+ * @returns {any}
+ */
 export function mergeFrontmatter(baseValue = {}, nextValue = {}) {
   if (Array.isArray(baseValue) && Array.isArray(nextValue)) {
     const seen = new Set();

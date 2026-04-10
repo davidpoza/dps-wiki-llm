@@ -5,6 +5,16 @@ import { splitFrontmatter } from "./frontmatter.mjs";
 import { parseSections } from "./markdown.mjs";
 import { relativeVaultPath, resolveWithinRoot, toPosixPath } from "./fs-utils.mjs";
 
+/**
+ * Wiki loading and graph-analysis helpers shared by indexing and maintenance.
+ */
+
+/**
+ * Recursively collect markdown files below a directory in sorted order.
+ *
+ * @param {string} dirPath
+ * @returns {Promise<string[]>}
+ */
 async function walkMarkdownFiles(dirPath) {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
   const files = [];
@@ -25,6 +35,13 @@ async function walkMarkdownFiles(dirPath) {
   return files.sort();
 }
 
+/**
+ * Infer a document type from explicit frontmatter or its folder placement.
+ *
+ * @param {string} relativePath
+ * @param {Record<string, any>} frontmatter
+ * @returns {string}
+ */
 export function inferDocType(relativePath, frontmatter) {
   if (typeof frontmatter.type === "string" && frontmatter.type.trim()) {
     return frontmatter.type.trim();
@@ -58,6 +75,14 @@ export function inferDocType(relativePath, frontmatter) {
   return "unknown";
 }
 
+/**
+ * Extract the preferred note title from frontmatter, markdown, or filename.
+ *
+ * @param {string} relativePath
+ * @param {Record<string, any>} frontmatter
+ * @param {string} body
+ * @returns {string}
+ */
 export function extractTitle(relativePath, frontmatter, body) {
   if (typeof frontmatter.title === "string" && frontmatter.title.trim()) {
     return frontmatter.title.trim();
@@ -71,6 +96,13 @@ export function extractTitle(relativePath, frontmatter, body) {
   return path.basename(relativePath, path.extname(relativePath));
 }
 
+/**
+ * Extract the best available updated timestamp for indexing and maintenance.
+ *
+ * @param {Record<string, any>} frontmatter
+ * @param {{ mtime: Date }} stats
+ * @returns {string}
+ */
 export function extractUpdatedAt(frontmatter, stats) {
   if (typeof frontmatter.updated === "string" && frontmatter.updated.trim()) {
     return frontmatter.updated.trim();
@@ -83,10 +115,22 @@ export function extractUpdatedAt(frontmatter, stats) {
   return stats.mtime.toISOString();
 }
 
+/**
+ * Remove the markdown extension from a vault-relative path.
+ *
+ * @param {string} relativePath
+ * @returns {string}
+ */
 function fileStem(relativePath) {
   return toPosixPath(relativePath).replace(/\.md$/i, "");
 }
 
+/**
+ * Normalize a wiki-link target so aliases can be matched consistently.
+ *
+ * @param {string} target
+ * @returns {string}
+ */
 function normalizeLinkTarget(target) {
   return toPosixPath(target.trim())
     .replace(/^\//, "")
@@ -97,6 +141,13 @@ function normalizeLinkTarget(target) {
     .trim();
 }
 
+/**
+ * Build the alias set that can resolve wiki links to this document.
+ *
+ * @param {string} relativePath
+ * @param {string} title
+ * @returns {Set<string>}
+ */
 function buildAliases(relativePath, title) {
   const stem = fileStem(relativePath);
   const relativeToWiki = stem.replace(/^wiki\//, "");
@@ -105,6 +156,12 @@ function buildAliases(relativePath, title) {
   return new Set([stem, relativeToWiki, base, title].filter(Boolean).map((entry) => normalizeLinkTarget(entry)));
 }
 
+/**
+ * Extract raw and normalized wiki-link targets from markdown content.
+ *
+ * @param {string} body
+ * @returns {Array<{ raw: string, normalized: string }>}
+ */
 export function extractWikiLinks(body) {
   const results = [];
   const regex = /\[\[([^\]]+)\]\]/g;
@@ -125,6 +182,12 @@ export function extractWikiLinks(body) {
   return results;
 }
 
+/**
+ * Load all wiki markdown files and derive the metadata used by the rest of the toolchain.
+ *
+ * @param {string} vaultRoot
+ * @returns {Promise<Array<Record<string, any>>>}
+ */
 export async function loadWikiDocs(vaultRoot) {
   const wikiRoot = resolveWithinRoot(vaultRoot, "wiki");
   const files = await walkMarkdownFiles(wikiRoot).catch((error) => {
@@ -170,6 +233,23 @@ export async function loadWikiDocs(vaultRoot) {
   return docs;
 }
 
+/**
+ * Build a lightweight link graph over loaded wiki documents.
+ *
+ * @param {Array<{
+ *   relativePath: string,
+ *   aliases: Set<string>,
+ *   wikiLinks: Array<{ raw: string, normalized: string }>
+ * }>} docs
+ * @returns {{
+ *   aliasMap: Map<string, string[]>,
+ *   pathMap: Map<string, any>,
+ *   inboundCounts: Map<string, number>,
+ *   resolvedLinks: Map<string, string[]>,
+ *   brokenLinks: Map<string, Array<{ raw: string, normalized: string }>>,
+ *   ambiguousTargets: Map<string, Array<{ raw: string, normalized: string, matches: string[] }>>
+ * }}
+ */
 export function analyzeWikiGraph(docs) {
   const aliasMap = new Map();
   const pathMap = new Map();

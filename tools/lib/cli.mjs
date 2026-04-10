@@ -1,5 +1,23 @@
 import fs from "node:fs/promises";
 
+/**
+ * Shared CLI helpers for the repository's JSON-first Node.js scripts.
+ */
+
+/**
+ * Parse the common command-line flags used by the toolchain.
+ *
+ * @param {string[]} [argv=process.argv.slice(2)]
+ * @returns {{
+ *   _: string[],
+ *   vault: string,
+ *   input: string | null,
+ *   db: string | null,
+ *   limit: number | null,
+ *   write: boolean,
+ *   pretty: boolean
+ * }}
+ */
 export function parseArgs(argv = process.argv.slice(2)) {
   const args = {
     _: [],
@@ -63,6 +81,12 @@ export function parseArgs(argv = process.argv.slice(2)) {
   return args;
 }
 
+/**
+ * Read JSON input from a file path or from stdin when available.
+ *
+ * @param {string | null} inputPath
+ * @returns {Promise<any>}
+ */
 export async function readJsonInput(inputPath) {
   if (inputPath) {
     return JSON.parse(await fs.readFile(inputPath, "utf8"));
@@ -78,11 +102,22 @@ export async function readJsonInput(inputPath) {
   throw new Error("Expected JSON input via --input <file> or stdin");
 }
 
+/**
+ * Emit machine-readable JSON to stdout with optional pretty printing.
+ *
+ * @param {unknown} value
+ * @param {boolean} [pretty=true]
+ */
 export function writeJsonStdout(value, pretty = true) {
   const indent = pretty ? 2 : 0;
   process.stdout.write(`${JSON.stringify(value, null, indent)}\n`);
 }
 
+/**
+ * Buffer stdin and return it as a UTF-8 string.
+ *
+ * @returns {Promise<string>}
+ */
 async function readStdin() {
   const chunks = [];
 

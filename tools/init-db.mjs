@@ -1,11 +1,20 @@
 #!/usr/bin/env node
 
-import path from "node:path";
-
 import { parseArgs, writeJsonStdout } from "./lib/cli.mjs";
 import { relativeVaultPath, resolveVaultRoot, resolveWithinRoot } from "./lib/fs-utils.mjs";
 import { ensureSchema, openDatabase } from "./lib/db.mjs";
 
+/**
+ * Initialize the SQLite database used for wiki indexing and retrieval.
+ */
+
+/**
+ * Resolve the database location, defaulting to the canonical vault path.
+ *
+ * @param {{ db: string | null }} args
+ * @param {string} vaultRoot
+ * @returns {string}
+ */
 function parseDbPath(args, vaultRoot) {
   if (args.db) {
     return resolveWithinRoot(vaultRoot, args.db);

@@ -1,0 +1,186 @@
+{
+  "name": "KB - Ingest Raw Blueprint",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerOn": "folder",
+        "path": "/data/vault/raw",
+        "events": [
+          "add",
+          "change"
+        ],
+        "options": {
+          "ignored": "**/.obsidian/**"
+        }
+      },
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -80
+      ],
+      "id": "5a6e83fa-f7d8-40d7-b465-36c3b8ab5bcc",
+      "name": "Local File Trigger",
+      "notesInFlow": true,
+      "notes": "Extend the ignore patterns after import. Keep the watch path on raw/** only."
+    },
+    {
+      "parameters": {},
+      "id": "d3cfe4f5-f938-421a-a204-3e2812d4dffc",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst detectedPath = input.path || input.filePath || input.filename || 'raw/inbox/example.md';\nconst normalized = {\n  raw_path: detectedPath,\n  trigger_source: input.path ? 'local-file-trigger' : 'manual',\n  source_kind: detectedPath.includes('/voice/') ? 'voice' : detectedPath.includes('/bookmarks/') ? 'bookmark' : detectedPath.includes('/web/') ? 'web' : 'note'\n};\nreturn [{ json: normalized }];"
+      },
+      "id": "16635cb1-fc84-42dc-ba91-f5f5f996e0f3",
+      "name": "Normalize Raw Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    plan_input_path: '/data/vault/state/tmp/ingest-plan.json',\n    commit_input_path: '/data/vault/state/tmp/ingest-commit.json',\n    note: 'Replace this node with ingest-source.mjs plus your LLM planner. Downstream nodes assume a valid Mutation Plan JSON file exists at plan_input_path.'\n  }\n}];"
+      },
+      "id": "593c4c7c-23b5-4577-a117-81b6bfa9517d",
+      "name": "TODO Planner Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "Blueprint only. Replace with your real ingest-source + planner step before activating."
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node /app/tools/apply-update.mjs --vault /data/vault --input \" + $json.plan_input_path }}",
+        "executeOnce": true
+      },
+      "id": "779d37d9-3079-4e75-99dc-092929af9df7",
+      "name": "Run apply-update.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        120,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "command": "node /app/tools/reindex.mjs --vault /data/vault",
+        "executeOnce": true
+      },
+      "id": "1f8f0d2f-6193-4687-b8cc-1fc6eea2b7f4",
+      "name": "Run reindex.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        400,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node /app/tools/commit.mjs --vault /data/vault --input \" + $json.commit_input_path }}",
+        "executeOnce": true
+      },
+      "id": "db6f28cf-7ded-420b-8a4c-78ddd9129115",
+      "name": "Run commit.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        680,
+        16
+      ]
+    }
+  ],
+  "connections": {
+    "Local File Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Raw Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Raw Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Raw Event": {
+      "main": [
+        [
+          {
+            "node": "TODO Planner Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TODO Planner Output": {
+      "main": [
+        [
+          {
+            "node": "Run apply-update.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run apply-update.mjs": {
+      "main": [
+        [
+          {
+            "node": "Run reindex.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run reindex.mjs": {
+      "main": [
+        [
+          {
+            "node": "Run commit.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

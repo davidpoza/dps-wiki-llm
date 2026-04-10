@@ -1,42 +1,59 @@
 <div align="center">
   <img src="docs/assets/logo.svg" alt="dps-wiki-llm logo" width="132">
   <h1>dps-wiki-llm</h1>
-  <p><strong>Deterministic Node.js tooling for maintaining a persistent markdown-based wiki.</strong></p>
-  <p><code>raw/</code> for events, <code>wiki/</code> for derived knowledge, <code>state/</code> for indexes, and <code>outputs/</code> for artifacts.</p>
+  <p><strong>Deterministic Node.js tooling for a persistent markdown-based knowledge system.</strong></p>
+  <p><code>raw/</code> for events, <code>wiki/</code> for curated state, <code>state/</code> for indexes and logs, and <code>outputs/</code> for artifacts.</p>
 </div>
 
 ## Overview
 
-`dps-wiki-llm` implements the operational core of a persistent knowledge system built around the model `raw -> wiki -> state -> outputs`. The goal is not to behave like a chat system with improvised memory, but to maintain reusable, traceable notes that evolve through explicit rules.
+`dps-wiki-llm` is the local, deterministic tooling layer of a persistent knowledge workflow built around `raw -> wiki -> state -> outputs`.
 
-The current repository contains the base tooling for applying mutation plans and recording auditable feedback. The vault itself lives outside this repo, or is mounted locally; this repo hosts the scripts that operate on that vault.
+The repository is responsible for:
 
-## Principles
+- applying controlled markdown updates to a vault
+- indexing `wiki/**/*.md` into SQLite FTS
+- querying the index for retrieval
+- generating maintenance reports
+- recording feedback and git-backed change logs
 
-- Strict separation between `raw/` and `wiki/`.
-- Reactive ingestion only on `raw/**`.
-- Small, deterministic, idempotent mutations.
-- JSON as the canonical contract between orchestration and scripts.
-- Markdown as the durable state layer and SQLite FTS as the retrieval layer.
-- Propagation from generated outputs is conditional and always auditable.
+The repository is not the orchestration layer. `n8n`, LLM planning, and answer synthesis are expected to sit around these scripts, not inside them.
 
-## Current Status
+## Architecture Boundaries
 
-Scripts currently available:
+- `raw/` is the reactive event stream.
+- `wiki/` is stable derived state.
+- Only trigger automation on `raw/**`.
+- Never trigger automation on `wiki/**`.
+- Generated answers do not update the wiki directly.
+- Feedback evaluation is mandatory; propagation is conditional.
 
-- `tools/apply-update.mjs`: consumes a Mutation Plan JSON object, creates or updates markdown notes, and records idempotency keys in `state/runtime/idempotency-keys.json`.
-- `tools/feedback-record.mjs`: normalizes a Feedback Record, writes artifacts into `state/feedback/`, and can derive a mutation plan when the decision is `propagate`.
-- `tools/lib/*.mjs`: internal utilities for CLI handling, filesystem access, frontmatter parsing, and markdown composition.
+Breaking the `raw/` versus `wiki/` boundary creates loops, noisy state, and non-deterministic behavior.
 
-Components described by the architecture but not yet implemented here:
+## Implemented Tooling
 
-- `init-db.mjs`
-- `ingest-source.mjs`
-- `reindex.mjs`
-- `search.mjs`
-- `lint.mjs`
-- `health-check.mjs`
-- `commit.mjs`
+The repo now includes the full local toolchain except for raw-event normalization and the external LLM orchestration steps.
+
+| Script | Purpose | Main outputs |
+|---|---|---|
+| `init-db.mjs` | Creates the SQLite schema and FTS tables. | `state/kb.db` |
+| `apply-update.mjs` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
+| `feedback-record.mjs` | Writes feedback records and can derive a follow-up mutation plan. | `state/feedback/**` |
+| `reindex.mjs` | Rebuilds the `docs` table and FTS index from `wiki/**/*.md`. | `state/kb.db` |
+| `search.mjs` | Runs FTS queries and returns ranked results as JSON. | stdout JSON |
+| `lint.mjs` | Performs structural wiki checks. | `state/maintenance/*-lint.{json,md}` |
+| `health-check.mjs` | Performs deeper semantic and traceability checks. | `state/maintenance/*-health-check.{json,md}` |
+| `commit.mjs` | Stages material paths, writes a structured change log, and creates a git commit. | `state/change-log/**`, git commit |
+
+Main gaps relative to the target architecture:
+
+- `ingest-source.mjs` is not present yet
+- `n8n` workflows are out of repo scope
+- LLM planner and answer-synthesis steps are external to this codebase
+
+## Code Documentation
+
+Detailed English documentation for every script and shared library module lives in [`docs/code-reference.md`](docs/code-reference.md).
 
 ## Repository Structure
 
@@ -45,18 +62,25 @@ Components described by the architecture but not yet implemented here:
 ├── README.md
 ├── package.json
 ├── docs/
+│   ├── code-reference.md
 │   ├── assets/
 │   │   └── logo.svg
 │   └── diagrams/
 │       ├── workflow.puml
 │       └── workflow.svg
 └── tools/
+    ├── init-db.mjs
     ├── apply-update.mjs
     ├── feedback-record.mjs
+    ├── reindex.mjs
+    ├── search.mjs
+    ├── lint.mjs
+    ├── health-check.mjs
+    ├── commit.mjs
     └── lib/
 ```
 
-Vault layout expected by the architecture:
+Expected vault layout:
 
 ```text
 vault/
@@ -66,9 +90,9 @@ vault/
 └── outputs/
 ```
 
-## Target Workflow
+## Workflow
 
-The following diagram summarizes the intended system workflow. Green nodes are scripts already present in this repo; yellow nodes are planned architecture components that are still pending.
+The diagram below summarizes the intended workflow. Green nodes are scripts already present in this repo; yellow nodes are planned or external components.
 
 Rendered using the official PlantUML web service:
 
@@ -77,43 +101,71 @@ Rendered using the official PlantUML web service:
 Canonical source: [`docs/diagrams/workflow.puml`](docs/diagrams/workflow.puml)  
 Versioned render: [`docs/diagrams/workflow.svg`](docs/diagrams/workflow.svg)
 
-## Quick Start
+## Typical Usage
 
 Requirements:
 
-- Node.js 20 or newer
+- a recent Node.js release with built-in `node:sqlite` support
+- Git configured with `user.name` and `user.email` if you plan to use `commit.mjs`
 
-Run a mutation plan:
+Initialize the database:
+
+```bash
+npm run init-db -- --vault /path/to/vault
+```
+
+Apply a mutation plan:
 
 ```bash
 npm run apply-update -- --vault /path/to/vault --input ./plan.json
 ```
 
-Record a feedback decision:
+Rebuild the search index:
+
+```bash
+npm run reindex -- --vault /path/to/vault
+```
+
+Run a search query:
+
+```bash
+npm run search -- --vault /path/to/vault "model context protocol" --limit 5
+```
+
+Record feedback:
 
 ```bash
 npm run feedback-record -- --vault /path/to/vault --input ./feedback.json
 ```
 
-Both scripts:
+Run maintenance checks without writing reports:
 
-- accept JSON via `--input` or `stdin`
-- return machine-readable JSON
-- resolve paths inside the vault root to prevent writes outside the vault
-
-## Operational Contracts
-
-- `apply-update.mjs` expects the `Mutation Plan` contract.
-- `feedback-record.mjs` expects the `Feedback Record` contract.
-- If the decision is `propagate`, `feedback-record.mjs` generates a mutation plan that can be reused by `apply-update.mjs`.
-
-## Critical Rule
-
-Never trigger automations on `wiki/**`. The correct boundary is:
-
-```text
-raw/  = reactive event stream
-wiki/ = stable derived state
+```bash
+npm run lint -- --vault /path/to/vault --no-write
+npm run health-check -- --vault /path/to/vault --no-write
 ```
 
-Breaking that separation introduces loops, noise, and non-deterministic updates.
+Create a structured commit:
+
+```bash
+npm run commit -- --vault /path/to/vault --input ./commit.json
+```
+
+## CLI Conventions
+
+- `--vault` is the root of the target vault and defaults to the current working directory.
+- `--input` is used by JSON-driven scripts such as `apply-update.mjs`, `feedback-record.mjs`, and `commit.mjs`.
+- `--db` can override the database path for `init-db.mjs`, `reindex.mjs`, and `search.mjs`.
+- `--limit` controls result count in `search.mjs`.
+- `--no-write` is supported by `feedback-record.mjs`, `lint.mjs`, and `health-check.mjs`.
+- Scripts emit machine-readable JSON on success.
+
+## Operational Notes
+
+- `apply-update.mjs` enforces `create`, `update`, and `noop` actions and tracks idempotency keys in `state/runtime/idempotency-keys.json`.
+- `reindex.mjs` indexes markdown derived from `wiki/`, not `raw/`.
+- `search.mjs` queries the FTS index and returns ranked results with `path`, `title`, `doc_type`, and `score`.
+- `lint.mjs` focuses on structure and maintainability.
+- `health-check.mjs` focuses on unsupported claims, stale low-confidence notes, and missing pages.
+- `commit.mjs` writes a change log to `state/change-log/` before creating the git commit.
+- `docs/code-reference.md` is the file-level reference for the entire codebase.

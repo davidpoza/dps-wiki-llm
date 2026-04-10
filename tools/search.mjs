@@ -4,6 +4,15 @@ import { parseArgs, writeJsonStdout } from "./lib/cli.mjs";
 import { resolveVaultRoot, resolveWithinRoot, relativeVaultPath } from "./lib/fs-utils.mjs";
 import { ensureSchema, openDatabase } from "./lib/db.mjs";
 
+/**
+ * Search the SQLite FTS index built from wiki markdown documents.
+ */
+
+/**
+ * Parse shared CLI flags plus the first positional search query.
+ *
+ * @returns {{ _: string[], vault: string, input: string | null, db: string | null, limit: number, write: boolean, pretty: boolean, query: string }}
+ */
 function parseSearchArgs() {
   const args = parseArgs();
   let limit = Number.isFinite(args.limit) && args.limit > 0 ? args.limit : 8;

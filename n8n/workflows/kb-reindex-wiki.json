@@ -1,0 +1,103 @@
+{
+  "name": "KB - Reindex Wiki",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "7dca73e6-7b7e-4e06-8c66-d687af1d9f8b",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "command": "node /app/tools/init-db.mjs --vault /data/vault",
+        "executeOnce": true
+      },
+      "id": "7e906d18-cd31-4ab3-bf55-89d6ca01e078",
+      "name": "Run init-db.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        120
+      ],
+      "notesInFlow": true,
+      "notes": "Adjust /app and /data/vault if your container mount points differ."
+    },
+    {
+      "parameters": {
+        "command": "node /app/tools/reindex.mjs --vault /data/vault",
+        "executeOnce": true
+      },
+      "id": "4d39400c-c46f-4f69-8b0e-eebf68be0f02",
+      "name": "Run reindex.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        20,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('reindex.mjs returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "9320f7fc-2211-41d3-b26f-80687d8df6ae",
+      "name": "Parse Reindex Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Run init-db.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run init-db.mjs": {
+      "main": [
+        [
+          {
+            "node": "Run reindex.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run reindex.mjs": {
+      "main": [
+        [
+          {
+            "node": "Parse Reindex Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

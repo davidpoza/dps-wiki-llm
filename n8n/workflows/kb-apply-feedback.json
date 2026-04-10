@@ -1,0 +1,376 @@
+{
+  "name": "KB - Apply Feedback",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "kb-feedback",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -900,
+        -80
+      ],
+      "id": "c8805200-0d64-43c9-a86d-f4a19af1b7e2",
+      "name": "Webhook",
+      "webhookId": "kb-feedback"
+    },
+    {
+      "parameters": {},
+      "id": "da75ec67-57ea-4c1d-a345-1cb3b7c8f767",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst feedback = body.feedback ?? body;\nif (!feedback.output_id) {\n  feedback.output_id = `out-${new Date().toISOString().slice(0, 10)}-manual-feedback`;\n}\nif (!feedback.decision) {\n  feedback.decision = 'output_only';\n}\nif (!Array.isArray(feedback.candidate_items)) {\n  feedback.candidate_items = [];\n}\nreturn [{\n  json: {\n    feedback,\n    payload_b64: Buffer.from(JSON.stringify(feedback), 'utf8').toString('base64')\n  }\n}];"
+      },
+      "id": "b448c3d3-9d3d-4636-8b77-2fb8856db7de",
+      "name": "Prepare Feedback Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "Accepts either the Feedback Record directly or a top-level field named feedback."
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/tools/feedback-record.mjs --vault /data/vault\" }}",
+        "executeOnce": true
+      },
+      "id": "26d3e5da-76bd-48d8-b131-b0a205ad7ca0",
+      "name": "Run feedback-record.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('feedback-record.mjs returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "64b59243-8557-407b-9749-e7e34f3477c2",
+      "name": "Parse Feedback Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.record.decision }}",
+              "value2": "propagate"
+            }
+          ]
+        }
+      },
+      "id": "928ec239-877d-4d15-86cd-26a01f314460",
+      "name": "Should Propagate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        360,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node /app/tools/apply-update.mjs --vault /data/vault --input /data/vault/\" + $node[\"Parse Feedback Result\"].json[\"mutation_plan_path\"] }}",
+        "executeOnce": true
+      },
+      "id": "6f0eb6f6-07d2-4f3e-9314-f25c72689685",
+      "name": "Run apply-update.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('apply-update.mjs returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "8f2e7d4c-0878-4a7c-bd84-ed1fe6fc79bd",
+      "name": "Parse Mutation Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "command": "node /app/tools/reindex.mjs --vault /data/vault",
+        "executeOnce": true
+      },
+      "id": "4f764871-487a-431f-b99f-6c30bca5250e",
+      "name": "Run reindex.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('reindex.mjs returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "e8fccdd9-08b7-4b29-a255-d31934be61f3",
+      "name": "Parse Reindex Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const feedback = $node[\"Parse Feedback Result\"].json;\nconst mutation = $node[\"Parse Mutation Result\"].json;\nconst payload = {\n  operation: 'feedback',\n  summary: `Propagate feedback for ${feedback.record.output_id}`,\n  source_refs: feedback.record.source_refs ?? [],\n  affected_notes: feedback.record.affected_notes ?? [],\n  paths_to_stage: [\n    feedback.record_path,\n    feedback.summary_path,\n    ...(feedback.mutation_plan_path ? [feedback.mutation_plan_path] : []),\n    ...mutation.created,\n    ...mutation.updated,\n    'state/runtime/idempotency-keys.json'\n  ],\n  feedback_record_ref: feedback.record_path,\n  commit_message: `feedback: ${feedback.record.output_id}`\n};\nreturn [{\n  json: {\n    payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
+      },
+      "id": "8ed5395a-6207-403a-a72e-3e2ba16f3f1a",
+      "name": "Build Commit Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/tools/commit.mjs --vault /data/vault\" }}",
+        "executeOnce": true
+      },
+      "id": "1aa7ee27-d4db-49f5-b0f6-85b0aee8e235",
+      "name": "Run commit.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1940,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('commit.mjs returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "1be66d7c-d5d9-41fe-9210-916f5c99c9c8",
+      "name": "Parse Commit Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    status: 'feedback_recorded',\n    decision: $node[\"Parse Feedback Result\"].json.record.decision,\n    feedback_record: $node[\"Parse Feedback Result\"].json.record,\n    feedback_record_path: $node[\"Parse Feedback Result\"].json.record_path,\n    summary_path: $node[\"Parse Feedback Result\"].json.summary_path,\n    mutation_plan_path: $node[\"Parse Feedback Result\"].json.mutation_plan_path\n  }\n}];"
+      },
+      "id": "6a3a9600-3122-47c9-9be1-a3468c00aee1",
+      "name": "Build No-Propagation Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    status: 'feedback_propagated',\n    feedback_record: $node[\"Parse Feedback Result\"].json.record,\n    feedback_record_path: $node[\"Parse Feedback Result\"].json.record_path,\n    mutation_plan_path: $node[\"Parse Feedback Result\"].json.mutation_plan_path,\n    mutation_result: $node[\"Parse Mutation Result\"].json,\n    reindex_result: $node[\"Parse Reindex Result\"].json,\n    commit_result: $node[\"Parse Commit Result\"].json\n  }\n}];"
+      },
+      "id": "7c0382ba-846a-4870-9d59-38cd6e569bb3",
+      "name": "Build Propagation Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2460,
+        -112
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Feedback Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Feedback Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Feedback Payload": {
+      "main": [
+        [
+          {
+            "node": "Run feedback-record.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run feedback-record.mjs": {
+      "main": [
+        [
+          {
+            "node": "Parse Feedback Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Feedback Result": {
+      "main": [
+        [
+          {
+            "node": "Should Propagate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Propagate?": {
+      "main": [
+        [
+          {
+            "node": "Run apply-update.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build No-Propagation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run apply-update.mjs": {
+      "main": [
+        [
+          {
+            "node": "Parse Mutation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Mutation Result": {
+      "main": [
+        [
+          {
+            "node": "Run reindex.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run reindex.mjs": {
+      "main": [
+        [
+          {
+            "node": "Parse Reindex Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reindex Result": {
+      "main": [
+        [
+          {
+            "node": "Build Commit Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Commit Payload": {
+      "main": [
+        [
+          {
+            "node": "Run commit.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run commit.mjs": {
+      "main": [
+        [
+          {
+            "node": "Parse Commit Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Commit Result": {
+      "main": [
+        [
+          {
+            "node": "Build Propagation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

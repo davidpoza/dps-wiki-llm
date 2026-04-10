@@ -2,6 +2,16 @@ import { ensureParentDirectory } from "./fs-utils.mjs";
 
 let databaseSyncPromise = null;
 
+/**
+ * SQLite access helpers shared by indexing and retrieval scripts.
+ */
+
+/**
+ * Lazily import the synchronous SQLite constructor while suppressing the
+ * experimental warning emitted by Node's built-in module.
+ *
+ * @returns {Promise<any>}
+ */
 async function getDatabaseSync() {
   if (!databaseSyncPromise) {
     const originalEmitWarning = process.emitWarning.bind(process);
@@ -20,6 +30,12 @@ async function getDatabaseSync() {
   return databaseSyncPromise;
 }
 
+/**
+ * Open the SQLite database file with repository-specific pragmas applied.
+ *
+ * @param {string} dbPath
+ * @returns {Promise<any>}
+ */
 export async function openDatabase(dbPath) {
   await ensureParentDirectory(dbPath);
   const DatabaseSync = await getDatabaseSync();
@@ -31,6 +47,11 @@ export async function openDatabase(dbPath) {
   return db;
 }
 
+/**
+ * Ensure the relational docs table and the FTS shadow table exist.
+ *
+ * @param {any} db
+ */
 export function ensureSchema(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS docs (
@@ -53,6 +74,11 @@ export function ensureSchema(db) {
   `);
 }
 
+/**
+ * Rebuild the FTS table from the current contents of the docs table.
+ *
+ * @param {any} db
+ */
 export function rebuildFts(db) {
   db.exec(`INSERT INTO docs_fts(docs_fts) VALUES('rebuild');`);
 }

@@ -13,10 +13,31 @@ import {
 } from "./lib/fs-utils.mjs";
 import { analyzeWikiGraph, loadWikiDocs } from "./lib/wiki-inspect.mjs";
 
+/**
+ * Run structural wiki linting and optionally persist the report artifacts.
+ */
+
+/**
+ * Create a filesystem-safe timestamp used in report filenames.
+ *
+ * @returns {string}
+ */
 function nowStamp() {
   return new Date().toISOString().replaceAll(":", "-");
 }
 
+/**
+ * Normalize a lint finding into the shared maintenance result shape.
+ *
+ * @param {"critical" | "warning" | "suggestion"} severity
+ * @param {string} targetPath
+ * @param {string} issueType
+ * @param {string} description
+ * @param {string} recommendedAction
+ * @param {boolean} [autoFixable=false]
+ * @param {Record<string, any>} [extra={}]
+ * @returns {Record<string, any>}
+ */
 function buildFinding(severity, targetPath, issueType, description, recommendedAction, autoFixable = false, extra = {}) {
   return {
     severity,
@@ -29,6 +50,12 @@ function buildFinding(severity, targetPath, issueType, description, recommendedA
   };
 }
 
+/**
+ * Sort findings by severity before path-level tie breaking.
+ *
+ * @param {string} severity
+ * @returns {number}
+ */
 function severityRank(severity) {
   if (severity === "critical") {
     return 0;
@@ -41,11 +68,23 @@ function severityRank(severity) {
   return 2;
 }
 
+/**
+ * Enforce lowercase kebab-case names for stable linking and maintenance.
+ *
+ * @param {string} relativePath
+ * @returns {boolean}
+ */
 function isKebabCaseName(relativePath) {
   const stem = path.posix.basename(relativePath, ".md");
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(stem);
 }
 
+/**
+ * Report required frontmatter keys that are missing or empty.
+ *
+ * @param {{ frontmatter: Record<string, any> }} doc
+ * @returns {string[]}
+ */
 function hasRequiredFrontmatter(doc) {
   const keys = ["type", "title", "updated"];
   return keys.filter((key) => {
@@ -54,6 +93,12 @@ function hasRequiredFrontmatter(doc) {
   });
 }
 
+/**
+ * Find basename collisions that can make wiki link resolution ambiguous.
+ *
+ * @param {{ relativePath: string }[]} docs
+ * @returns {Array<[string, string[]]>}
+ */
 function buildAliasCollisions(docs) {
   const basenameMap = new Map();
 
@@ -67,6 +112,12 @@ function buildAliasCollisions(docs) {
   return Array.from(basenameMap.entries()).filter(([, matches]) => matches.length > 1);
 }
 
+/**
+ * Render a short markdown summary that mirrors the JSON lint result.
+ *
+ * @param {{ run_id: string, kind: string, findings: Record<string, any>[], stats: { docs: number } }} result
+ * @returns {string}
+ */
 function renderSummary(result) {
   const lines = [
     `# Lint Report: ${result.run_id}`,

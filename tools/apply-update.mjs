@@ -17,6 +17,10 @@ import { renderMarkdown } from "./lib/markdown.mjs";
 
 const VALID_ACTIONS = new Set(["create", "update", "noop"]);
 
+/**
+ * Apply a canonical mutation plan to wiki markdown files and index pages.
+ */
+
 async function main() {
   const args = parseArgs();
   const vaultRoot = resolveVaultRoot(args.vault);
@@ -60,6 +64,11 @@ async function main() {
   writeJsonStdout(result, args.pretty);
 }
 
+/**
+ * Validate the minimum structure required by the mutation plan contract.
+ *
+ * @param {unknown} plan
+ */
 function validatePlan(plan) {
   if (!plan || typeof plan !== "object") {
     throw new Error("Mutation plan must be a JSON object");
@@ -78,20 +87,47 @@ function validatePlan(plan) {
   }
 }
 
+/**
+ * Ensure a page action uses a supported coarse-grained verb.
+ *
+ * @param {{ action?: string, path?: string }} action
+ */
 function assertValidAction(action) {
   if (!VALID_ACTIONS.has(action.action)) {
     throw new Error(`Unsupported action "${action.action}" for path ${action.path}`);
   }
 }
 
+/**
+ * Create a stable ledger hash for an applied or skipped render result.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
 function ledgerHash(value) {
   return crypto.createHash("sha1").update(value).digest("hex");
 }
 
+/**
+ * Return the current UTC date in YYYY-MM-DD format for note metadata.
+ *
+ * @returns {string}
+ */
 function currentDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Apply one page action from the mutation plan with idempotency protection.
+ *
+ * @param {{
+ *   vaultRoot: string,
+ *   plan: { plan_id: string },
+ *   action: Record<string, any>,
+ *   ledger: Record<string, any>,
+ *   result: { created: string[], updated: string[], skipped: string[], idempotent_hits: string[] }
+ * }} context
+ */
 async function applyPageAction({ vaultRoot, plan, action, ledger, result }) {
   if (!action || typeof action !== "object") {
     throw new Error("page_actions[] entries must be objects");
@@ -172,6 +208,16 @@ async function applyPageAction({ vaultRoot, plan, action, ledger, result }) {
   }
 }
 
+/**
+ * Apply an index-page update through the same markdown rendering path used for notes.
+ *
+ * @param {{
+ *   vaultRoot: string,
+ *   plan: { plan_id: string },
+ *   update: Record<string, any>,
+ *   result: { created: string[], updated: string[], skipped: string[] }
+ * }} context
+ */
 async function applyIndexUpdate({ vaultRoot, plan, update, result }) {
   if (!update || typeof update !== "object") {
     throw new Error("index_updates[] entries must be objects");

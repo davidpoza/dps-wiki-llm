@@ -1,0 +1,109 @@
+{
+  "name": "KB - Monthly Health Check",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 1 * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -620,
+        -80
+      ],
+      "id": "04b71e88-d16f-4c9c-a4b4-6bb65f8555f0",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {},
+      "id": "122aecb4-b267-4418-a7de-5a5ee4bef275",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -620,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "command": "node /app/tools/health-check.mjs --vault /data/vault",
+        "executeOnce": true
+      },
+      "id": "e82002d2-ed1f-4b3f-9556-7619caf12f31",
+      "name": "Run health-check.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "By default health-check.mjs writes JSON and Markdown reports into state/maintenance/."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('health-check.mjs returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "048c44dd-1442-40ef-a3bd-c2b0ebd506e1",
+      "name": "Parse Health Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        16
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Run health-check.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Run health-check.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run health-check.mjs": {
+      "main": [
+        [
+          {
+            "node": "Parse Health Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

@@ -8,6 +8,18 @@ import { ensureDirectory, resolveVaultRoot, resolveWithinRoot, writeTextFile } f
 
 const execFile = promisify(execFileCallback);
 
+/**
+ * Stage related vault files, write a change-log entry, and create a Git commit.
+ */
+
+/**
+ * Run a Git command inside the repository root and return trimmed stdout.
+ *
+ * @param {string[]} args
+ * @param {string} workdir
+ * @param {boolean} [allowFailure=false]
+ * @returns {Promise<string>}
+ */
 async function git(args, workdir, allowFailure = false) {
   try {
     const { stdout } = await execFile("git", args, { cwd: workdir });
@@ -22,10 +34,21 @@ async function git(args, workdir, allowFailure = false) {
   }
 }
 
+/**
+ * Create a filesystem-safe timestamp used in change-log filenames.
+ *
+ * @returns {string}
+ */
 function nowStamp() {
   return new Date().toISOString().replaceAll(":", "-");
 }
 
+/**
+ * Produce a compact slug for change-log filenames.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
 function slugify(value) {
   return value
     .toLowerCase()
@@ -34,6 +57,12 @@ function slugify(value) {
     .slice(0, 60);
 }
 
+/**
+ * Validate and normalize the commit input contract.
+ *
+ * @param {unknown} input
+ * @returns {Record<string, any>}
+ */
 function normalizeCommitInput(input) {
   if (!input || typeof input !== "object") {
     throw new Error("Commit input must be a JSON object");
@@ -64,6 +93,13 @@ function normalizeCommitInput(input) {
   };
 }
 
+/**
+ * Render the structured markdown change log stored under state/change-log/.
+ *
+ * @param {ReturnType<typeof normalizeCommitInput>} input
+ * @param {string} changeLogPath
+ * @returns {string}
+ */
 function renderChangeLog(input, changeLogPath) {
   const lines = [
     "---",
@@ -107,10 +143,22 @@ function renderChangeLog(input, changeLogPath) {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+/**
+ * Deduplicate and compact a list of repository-relative paths.
+ *
+ * @param {Array<string | null>} paths
+ * @returns {string[]}
+ */
 function uniquePaths(paths) {
   return [...new Set(paths.filter(Boolean))];
 }
 
+/**
+ * Ensure git identity is configured before attempting to create a commit.
+ *
+ * @param {string} repoRoot
+ * @returns {Promise<void>}
+ */
 async function ensureGitIdentity(repoRoot) {
   const userName = await git(["config", "user.name"], repoRoot, true);
   const userEmail = await git(["config", "user.email"], repoRoot, true);

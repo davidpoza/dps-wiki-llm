@@ -8,6 +8,10 @@ import { ensureDirectory, resolveVaultRoot, resolveWithinRoot, writeJsonFile, wr
 const VALID_DECISIONS = new Set(["none", "output_only", "propagate"]);
 const VALID_OUTCOMES = new Set(["applied", "rejected", "deferred"]);
 
+/**
+ * Normalize feedback decisions and optionally derive a follow-up mutation plan.
+ */
+
 async function main() {
   const args = parseArgs();
   const vaultRoot = resolveVaultRoot(args.vault);
@@ -45,10 +49,21 @@ async function main() {
   );
 }
 
+/**
+ * Create a filesystem-safe timestamp used in artifact names.
+ *
+ * @returns {string}
+ */
 function nowStamp() {
   return new Date().toISOString().replaceAll(":", "-");
 }
 
+/**
+ * Produce a compact slug for artifact and plan identifiers.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
 function slugify(value) {
   return value
     .toLowerCase()
@@ -57,10 +72,23 @@ function slugify(value) {
     .slice(0, 80);
 }
 
+/**
+ * Produce a short stable hash for item groupings and idempotency keys.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
 function stableHash(value) {
   return crypto.createHash("sha1").update(value).digest("hex").slice(0, 10);
 }
 
+/**
+ * Validate and normalize a single feedback candidate item.
+ *
+ * @param {unknown} item
+ * @param {number} index
+ * @returns {Record<string, any>}
+ */
 function normalizeCandidateItem(item, index) {
   if (!item || typeof item !== "object") {
     throw new Error(`candidate_items[${index}] must be an object`);
@@ -98,6 +126,12 @@ function normalizeCandidateItem(item, index) {
   };
 }
 
+/**
+ * Validate the feedback record contract and infer derived fields.
+ *
+ * @param {unknown} input
+ * @returns {Record<string, any>}
+ */
 function normalizeFeedbackRecord(input) {
   if (!input || typeof input !== "object") {
     throw new Error("Feedback input must be a JSON object");
@@ -137,6 +171,12 @@ function normalizeFeedbackRecord(input) {
   };
 }
 
+/**
+ * Map a change type to the default markdown section used for propagation.
+ *
+ * @param {string} changeType
+ * @returns {string}
+ */
 function inferSectionForChangeType(changeType) {
   switch (changeType) {
     case "net_new_fact":
@@ -156,6 +196,17 @@ function inferSectionForChangeType(changeType) {
   }
 }
 
+/**
+ * Derive a Mutation Plan from the applied feedback items.
+ *
+ * @param {{
+ *   output_id: string,
+ *   reason: string,
+ *   source_refs: string[],
+ *   candidate_items: Record<string, any>[]
+ * }} record
+ * @returns {Record<string, any>}
+ */
 function buildMutationPlan(record) {
   const appliedItems = record.candidate_items.filter((item) => item.outcome === "applied");
   const grouped = new Map();
@@ -220,6 +271,12 @@ function buildMutationPlan(record) {
   };
 }
 
+/**
+ * Infer the document type from the target wiki path.
+ *
+ * @param {string} targetNote
+ * @returns {string}
+ */
 function inferDocType(targetNote) {
   if (targetNote.includes("/concepts/")) {
     return "concept";
@@ -244,18 +301,45 @@ function inferDocType(targetNote) {
   return "unknown";
 }
 
+/**
+ * Build the canonical feedback-record artifact path.
+ *
+ * @param {{ output_id: string }} record
+ * @param {string} stamp
+ * @returns {string}
+ */
 function buildFeedbackRecordPath(record, stamp) {
   return `state/feedback/${stamp}-${slugify(record.output_id)}-feedback.json`;
 }
 
+/**
+ * Build the human-readable feedback summary path.
+ *
+ * @param {{ output_id: string }} record
+ * @param {string} stamp
+ * @returns {string}
+ */
 function buildFeedbackSummaryPath(record, stamp) {
   return `state/feedback/${stamp}-${slugify(record.output_id)}-feedback-summary.md`;
 }
 
+/**
+ * Build the derived mutation-plan path for propagate decisions.
+ *
+ * @param {{ output_id: string }} record
+ * @param {string} stamp
+ * @returns {string}
+ */
 function buildMutationPlanPath(record, stamp) {
   return `state/feedback/${stamp}-${slugify(record.output_id)}-mutation-plan.json`;
 }
 
+/**
+ * Render a compact markdown summary for human review.
+ *
+ * @param {{ output_id: string, decision: string, reason: string, candidate_items: Record<string, any>[] }} record
+ * @returns {string}
+ */
 function renderSummary(record) {
   const lines = [
     `# Feedback Summary: ${record.output_id}`,
