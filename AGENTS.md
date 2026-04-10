@@ -564,6 +564,13 @@ LIMIT k;
 - should output structured findings with severity and recommended actions
 - should be suitable for scheduled monthly review runs
 
+### `feedback-record.mjs`
+
+- produces the canonical machine-readable feedback record for significant answers and analyses
+- may emit a derived mutation plan when the decision is `propagate`
+- should also generate a compact human-readable review summary
+- must separate feedback evaluation from actual wiki mutation
+
 ### `commit.mjs`
 
 - stages intended changes
@@ -583,6 +590,7 @@ The minimum serious script set is:
 - `apply-update.mjs`
 - `lint.mjs`
 - `health-check.mjs`
+- `feedback-record.mjs`
 - `commit.mjs`
 
 These scripts should:

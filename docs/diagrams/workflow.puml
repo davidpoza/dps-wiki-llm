@@ -1,0 +1,73 @@
+@startuml
+title dps-wiki-llm workflow
+left to right direction
+
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam defaultFontName Monospace
+skinparam ArrowColor #35485A
+skinparam packageStyle rectangle
+skinparam rectangle {
+  BorderColor #2E4053
+  RoundCorner 16
+}
+skinparam note {
+  BackgroundColor #FFF9DB
+  BorderColor #C9A227
+}
+
+legend left
+|= Color |= Meaning |
+|<#DFF3E4>| Script available in this repo |
+|<#FFF3BF>| Planned workflow component |
+|<#E7F5FF>| Data or storage layer |
+endlegend
+
+actor "Raw event" as rawEvent
+actor "User query" as userQuery
+
+rectangle "raw/**\nEvent stream" as raw #E7F5FF
+rectangle "n8n trigger\n(raw/** only)" as n8n #FFF3BF
+rectangle "ingest-source.mjs\nnormalized source payload" as ingest #FFF3BF
+rectangle "LLM planner\nMutation Plan JSON" as planner #FFF3BF
+rectangle "apply-update.mjs\nidempotent file updates" as apply #DFF3E4
+rectangle "reindex.mjs\nSQLite FTS rebuild" as reindex #FFF3BF
+rectangle "commit.mjs\nchange log + git commit" as commit #FFF3BF
+
+database "state/kb.db\nFTS index" as db #E7F5FF
+folder "wiki/\ncurated knowledge" as wiki #E7F5FF
+folder "outputs/\nanswer artifacts" as outputs #E7F5FF
+
+rectangle "search.mjs\nretrieve top-k docs" as search #FFF3BF
+rectangle "LLM answer synthesis" as answer #FFF3BF
+rectangle "feedback-record.mjs\nfeedback decision + optional plan" as feedback #DFF3E4
+
+rawEvent --> raw
+raw --> n8n : file event
+n8n --> ingest
+ingest --> planner
+planner --> apply : Mutation Plan
+apply --> wiki : create or update notes
+apply --> reindex
+reindex --> db
+reindex --> commit
+
+userQuery --> search
+search --> db : FTS query
+search --> answer : markdown context
+answer --> outputs : Answer Record
+outputs --> feedback : significant output
+feedback --> apply : propagate only if grounded
+feedback --> commit : auditable feedback record
+
+note right of n8n
+ONLY trigger on raw/**
+NEVER trigger on wiki/**
+end note
+
+note bottom of apply
+Consumes the canonical Mutation Plan JSON
+and preserves idempotency keys in state/runtime.
+end note
+
+@enduml
