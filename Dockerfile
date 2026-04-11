@@ -2,6 +2,9 @@
 
 ARG N8N_IMAGE=n8nio/n8n:latest
 ARG NODE_BUILD_IMAGE=node:24-alpine
+ARG ALPINE_TOOLS_IMAGE=alpine:3.23
+
+FROM ${ALPINE_TOOLS_IMAGE} AS alpine-tools
 
 FROM ${NODE_BUILD_IMAGE} AS kb-build
 
@@ -16,8 +19,20 @@ FROM ${N8N_IMAGE} AS runtime
 
 USER root
 
+COPY --from=alpine-tools /sbin/apk /sbin/apk
+COPY --from=alpine-tools /etc/apk/keys /etc/apk/keys
+COPY --from=alpine-tools /usr/lib/libapk.so* /usr/lib/
+
 RUN set -eux; \
-  if command -v apk >/dev/null 2>&1; then \
+  if [ -f /etc/alpine-release ]; then \
+    mkdir -p /etc/apk /lib/apk/db; \
+    if [ ! -s /etc/apk/repositories ]; then \
+      alpine_version="$(cut -d. -f1,2 /etc/alpine-release)"; \
+      printf '%s\n' \
+        "https://dl-cdn.alpinelinux.org/alpine/v${alpine_version}/main" \
+        "https://dl-cdn.alpinelinux.org/alpine/v${alpine_version}/community" \
+        > /etc/apk/repositories; \
+    fi; \
     apk add --no-cache git openssh-client; \
   elif command -v apt-get >/dev/null 2>&1; then \
     apt-get update; \
