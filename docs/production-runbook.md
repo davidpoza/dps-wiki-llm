@@ -37,7 +37,7 @@ The workflow command nodes already call `node /app/dist/tools/<tool>.js ...`, so
 
 The image intentionally uses `node:22-alpine` and installs `n8n` from npm instead of extending `n8nio/n8n:latest`, because recent official n8n images do not expose a supported package manager for adding OS tools. This keeps `git` available for `commit.ts`.
 
-The GitHub Actions workflow at `.github/workflows/docker-publish.yml` publishes the same image to GitHub Container Registry as `ghcr.io/<owner>/<repo>`. It runs only on `main`, version tags like `v1.0.0`, and manual dispatch; pull requests do not build or publish the image.
+The GitHub Actions workflow at `.github/workflows/docker-publish.yml` publishes the n8n image to GitHub Container Registry as `ghcr.io/<owner>/<repo>` and the runner image as `ghcr.io/<owner>/<repo>-runner`. It runs only on `main`, version tags like `v1.0.0`, and manual dispatch; pull requests do not build or publish the images.
 
 ## OpenRouter Configuration
 
@@ -54,6 +54,36 @@ OPENROUTER_ANSWER_TEMPERATURE=0.2
 `OPENROUTER_MODEL` is optional so the model can be changed outside the workflow. If it is not set, OpenRouter account defaults apply.
 
 Add the same OpenRouter variables to the `n8n` service environment. If your Code nodes run in the external `n8n-runner` service, also pass `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, and `OPENROUTER_ANSWER_TEMPERATURE` there so Code nodes see the same runtime configuration.
+
+## External Runner Image
+
+If you run n8n with an external task runner, build the runner from `Dockerfile.runner` so the runner has the same local tooling available under `/app/dist/tools` and the JavaScript Code node packages allowed by this deployment.
+
+Use a pinned n8n version for both images:
+
+```yaml
+services:
+  n8n-runner:
+    build:
+      context: /path/to/dps-wiki-llm
+      dockerfile: Dockerfile.runner
+      args:
+        N8N_RUNNERS_IMAGE: n8nio/runners:${N8N_VERSION}
+    image: dps-wiki-llm-n8n-runner:${N8N_VERSION}
+    environment:
+      - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
+      - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
+      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL}
+      - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
+      - OPENROUTER_ANSWER_TEMPERATURE=0.2
+    volumes:
+      - ${DPS_WIKI_VAULT_PATH}:/data/vault
+```
+
+The runner image installs `axios` and `qs` for JavaScript Code nodes, installs `git` and OpenSSH client when the base image exposes a supported package manager, and copies the compiled scripts to `/app/dist/tools`.
+
+If an `Execute Command` node still runs in the main n8n service or in a queue worker, that service also needs the repository `Dockerfile` image and the same vault mount.
 
 ## Initial Bootstrap
 
