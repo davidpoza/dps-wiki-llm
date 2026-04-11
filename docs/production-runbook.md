@@ -7,7 +7,7 @@ This runbook describes the first production cut: manual operation from self-host
 - Build the n8n service from this repository's `Dockerfile`; it installs the compiled scripts under `/app`.
 - Mount the target vault at `/data/vault`.
 - Let the Dockerfile build `dist/`; do not mount over `/app` at runtime.
-- Configure Git identity in the environment where `commit.ts` runs.
+- Configure Git identity in the environment where `commit.ts` runs, and make sure that runtime provides `git` if you keep commit steps enabled.
 - Keep imported workflows inactive for V1; use manual n8n executions while validating behavior.
 
 For the compose file you shared, replace the `n8n` service image line with a local build and add the vault mount:
@@ -34,6 +34,8 @@ services:
 ```
 
 The workflow command nodes already call `npm --silent --prefix /app run ...`, so they will use the scripts baked into this image.
+
+The image intentionally does not install extra OS packages into `n8nio/n8n:latest`, because recent n8n images do not expose a supported package manager. If `commit.ts` fails because `git` is unavailable in the n8n image, either disable commit nodes for the first production run or switch to a custom runtime image that installs n8n from npm on a base image where `git` can be installed.
 
 The GitHub Actions workflow at `.github/workflows/docker-publish.yml` publishes the same image to GitHub Container Registry as `ghcr.io/<owner>/<repo>`. It runs only on `main`, version tags like `v1.0.0`, and manual dispatch; pull requests do not build or publish the image.
 
