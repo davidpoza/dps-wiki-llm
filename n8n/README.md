@@ -5,7 +5,7 @@ This directory contains importable n8n workflow JSON files aligned with the scri
 ## Assumptions
 
 - repository scripts available inside the n8n container at `/app`
-- for Docker Compose, build the `n8n` service from the repository `Dockerfile`; the image builds `dist/` during `docker compose build`
+- for Docker Compose, build the `n8n` service from the repository `Dockerfile`; the image installs n8n from npm, installs `git`, and builds `dist/` during `docker compose build`
 - Obsidian vault mounted inside the n8n container at `/data/vault`
 - `Execute Command` enabled in self-hosted n8n
 - `Local File Trigger` enabled in self-hosted n8n if you want reactive ingestion from `raw/`
@@ -16,7 +16,7 @@ If your paths differ, update the command strings and watched paths after importi
 
 The workflow command nodes use `npm --silent --prefix /app run ...` so stdout remains parseable JSON.
 
-For Docker Compose deployments, build the `n8n` service from the repository `Dockerfile`. The image bakes the compiled scripts into `/app`, so the workflows can find them without a bind mount over `/app`.
+For Docker Compose deployments, build the `n8n` service from the repository `Dockerfile`. The image installs n8n plus the compiled scripts into `/app`, so the workflows can find them without a bind mount over `/app`.
 
 The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/production-runbook.md).
 

@@ -4,10 +4,10 @@ This runbook describes the first production cut: manual operation from self-host
 
 ## Runtime
 
-- Build the n8n service from this repository's `Dockerfile`; it installs the compiled scripts under `/app`.
+- Build the n8n service from this repository's `Dockerfile`; it installs n8n from npm, installs `git`/SSH tooling, and copies the compiled scripts under `/app`.
 - Mount the target vault at `/data/vault`.
 - Let the Dockerfile build `dist/`; do not mount over `/app` at runtime.
-- Configure Git identity in the environment where `commit.ts` runs, and make sure that runtime provides `git` if you keep commit steps enabled.
+- Configure Git identity in the environment where `commit.ts` runs.
 - Keep imported workflows inactive for V1; use manual n8n executions while validating behavior.
 
 For the compose file you shared, replace the `n8n` service image line with a local build and add the vault mount:
@@ -19,7 +19,7 @@ services:
       context: /path/to/dps-wiki-llm
       dockerfile: Dockerfile
       args:
-        N8N_IMAGE: n8nio/n8n:latest
+        N8N_VERSION: latest
     image: dps-wiki-llm-n8n:local
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
@@ -35,7 +35,7 @@ services:
 
 The workflow command nodes already call `npm --silent --prefix /app run ...`, so they will use the scripts baked into this image.
 
-The image intentionally does not install extra OS packages into `n8nio/n8n:latest`, because recent n8n images do not expose a supported package manager. If `commit.ts` fails because `git` is unavailable in the n8n image, either disable commit nodes for the first production run or switch to a custom runtime image that installs n8n from npm on a base image where `git` can be installed.
+The image intentionally uses `node:22-alpine` and installs `n8n` from npm instead of extending `n8nio/n8n:latest`, because recent official n8n images do not expose a supported package manager for adding OS tools. This keeps `git` available for `commit.ts`.
 
 The GitHub Actions workflow at `.github/workflows/docker-publish.yml` publishes the same image to GitHub Container Registry as `ghcr.io/<owner>/<repo>`. It runs only on `main`, version tags like `v1.0.0`, and manual dispatch; pull requests do not build or publish the image.
 

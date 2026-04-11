@@ -61,7 +61,7 @@ Detailed English documentation for every script and shared library module lives 
 
 The production V1 runbook lives in [`docs/production-runbook.md`](docs/production-runbook.md).
 
-Docker Compose deployments can build the n8n runtime from [`Dockerfile`](Dockerfile), which bakes the compiled local scripts into `/app` for the workflow command nodes.
+Docker Compose deployments can build the n8n runtime from [`Dockerfile`](Dockerfile), which installs n8n, includes `git`, and bakes the compiled local scripts into `/app` for the workflow command nodes.
 
 ## Repository Structure
 

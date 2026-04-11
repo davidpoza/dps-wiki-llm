@@ -14,7 +14,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  N8N_IMAGE: n8nio/n8n:latest
+  N8N_VERSION: latest
 
 jobs:
   docker:
@@ -58,7 +58,7 @@ jobs:
           file: ./Dockerfile
           push: true
           build-args: |
-            N8N_IMAGE=${{ env.N8N_IMAGE }}
+            N8N_VERSION=${{ env.N8N_VERSION }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

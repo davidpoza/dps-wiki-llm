@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
-ARG N8N_IMAGE=n8nio/n8n:latest
-ARG NODE_BUILD_IMAGE=node:24-alpine
+ARG NODE_IMAGE=node:22-alpine
+ARG N8N_VERSION=latest
 
-FROM ${NODE_BUILD_IMAGE} AS kb-build
+FROM ${NODE_IMAGE} AS kb-build
 
 WORKDIR /app
 
@@ -12,7 +12,18 @@ COPY tools ./tools
 
 RUN npm ci && npm run build
 
-FROM ${N8N_IMAGE} AS runtime
+FROM ${NODE_IMAGE} AS runtime
+
+ARG N8N_VERSION=latest
+
+USER root
+
+RUN set -eux; \
+  apk add --no-cache ca-certificates git openssh-client tini su-exec; \
+  apk add --no-cache --virtual .build-deps python3 make g++; \
+  npm install -g "n8n@${N8N_VERSION}"; \
+  apk del .build-deps; \
+  npm cache clean --force
 
 WORKDIR /app
 
@@ -23,7 +34,13 @@ COPY --from=kb-build --chown=node:node /app/dist ./dist
 RUN set -eux; \
   node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major < 22 || (major === 22 && minor < 5)) { throw new Error('dps-wiki-llm requires Node.js >=22.5.0; base image has ' + process.versions.node); }"; \
   node -e "require('node:sqlite')"; \
-  test -f /app/dist/tools/search.js
+  test -f /app/dist/tools/search.js; \
+  git --version; \
+  n8n --version
 
 USER node
+ENV N8N_USER_FOLDER=/home/node/.n8n
 WORKDIR /home/node
+
+ENTRYPOINT ["tini", "--"]
+CMD ["n8n"]
