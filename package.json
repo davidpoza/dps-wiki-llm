@@ -8,6 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test",
+    "test:coverage": "npm run build && node --test --experimental-test-coverage",
     "init-db": "node dist/tools/init-db.js",
     "apply-update": "node dist/tools/apply-update.js",
     "feedback-record": "node dist/tools/feedback-record.js",

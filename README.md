@@ -118,6 +118,13 @@ Check the TypeScript build:
 npm run typecheck
 ```
 
+Run the test suite:
+
+```bash
+npm test
+npm run test:coverage
+```
+
 Initialize the database:
 
 ```bash

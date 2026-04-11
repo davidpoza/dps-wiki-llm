@@ -123,9 +123,9 @@ function normalizeLinkTarget(target: string): string {
   return toPosixPath(target.trim())
     .replace(/^\//, "")
     .replace(new RegExp(`^${SYSTEM_CONFIG.wiki.wikiPathPrefix}`), "")
-    .replace(new RegExp(`${escapeRegExp(SYSTEM_CONFIG.wiki.markdownExtension)}$`, "i"), "")
     .split("|")[0]
     .split("#")[0]
+    .replace(new RegExp(`${escapeRegExp(SYSTEM_CONFIG.wiki.markdownExtension)}$`, "i"), "")
     .trim();
 }
 

@@ -190,6 +190,15 @@ Scripts that work with SQLite additionally accept `--db <path>`, and `search.ts`
 
 Use `npm run --silent <script> -- ...` when stdout is consumed by n8n or another JSON parser. The scripts themselves emit JSON, while non-silent npm output can add command banners.
 
+## Tests
+
+The test suite uses Node's built-in `node:test` runner and executes the compiled JavaScript under `dist/`.
+
+- `npm test` builds the TypeScript source and runs all tests.
+- `npm run test:coverage` builds the source, runs the tests, and prints Node's coverage report.
+
+The suite covers shared libraries directly and exercises every CLI entrypoint through temporary vaults and local git repositories.
+
 ## Design Notes
 
 - The code always treats `wiki/` as derived state, not as a trigger source.
