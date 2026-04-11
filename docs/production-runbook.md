@@ -33,7 +33,7 @@ services:
       - ${DPS_WIKI_VAULT_PATH}:/data/vault
 ```
 
-The workflow command nodes already call `npm --silent --prefix /app run ...`, so they will use the scripts baked into this image.
+The workflow command nodes already call `node /app/dist/tools/<tool>.js ...`, so they will use the scripts baked into this image.
 
 The image intentionally uses `node:22-alpine` and installs `n8n` from npm instead of extending `n8nio/n8n:latest`, because recent official n8n images do not expose a supported package manager for adding OS tools. This keeps `git` available for `commit.ts`.
 

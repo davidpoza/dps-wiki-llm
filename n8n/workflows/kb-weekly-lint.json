@@ -34,7 +34,7 @@
     },
     {
       "parameters": {
-        "command": "npm --silent --prefix /app run lint -- --vault /data/vault",
+        "command": "node /app/dist/tools/lint.js --vault /data/vault",
         "executeOnce": true
       },
       "id": "7d5231fa-d1ef-449c-b8b9-15dc99a23c9b",

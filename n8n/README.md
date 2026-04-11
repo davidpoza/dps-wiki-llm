@@ -14,7 +14,7 @@ This directory contains importable n8n workflow JSON files aligned with the scri
 
 If your paths differ, update the command strings and watched paths after importing.
 
-The workflow command nodes use `npm --silent --prefix /app run ...` so stdout remains parseable JSON.
+The workflow command nodes use `node /app/dist/tools/<tool>.js ...` so stdout remains parseable JSON.
 
 For Docker Compose deployments, build the `n8n` service from the repository `Dockerfile`. The image installs n8n plus the compiled scripts into `/app`, so the workflows can find them without a bind mount over `/app`.
 

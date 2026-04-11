@@ -48,7 +48,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"npm --silent --prefix /app run search -- --vault /data/vault --limit \" + $json.limit + \" \" + JSON.stringify($json.question) }}",
+        "command": "={{ \"node /app/dist/tools/search.js --vault /data/vault --limit \" + $json.limit + \" \" + JSON.stringify($json.question) }}",
         "executeOnce": true
       },
       "id": "531c1047-7162-4cac-8177-eb1fa83139ad",
@@ -88,7 +88,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | npm --silent --prefix /app run answer-context -- --vault /data/vault\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/answer-context.js --vault /data/vault\" }}",
         "executeOnce": true
       },
       "id": "3d221ee4-2cf9-4125-a2f2-c85562433903",
@@ -196,7 +196,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.answer_record_payload_b64) + \" | npm --silent --prefix /app run answer-record -- --vault /data/vault\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.answer_record_payload_b64) + \" | node /app/dist/tools/answer-record.js --vault /data/vault\" }}",
         "executeOnce": true
       },
       "id": "3599503b-c7c4-46d7-8536-bbb3475f08e9",
@@ -291,7 +291,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.proposed_feedback_payload_b64) + \" | npm --silent --prefix /app run feedback-record -- --vault /data/vault --no-write\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.proposed_feedback_payload_b64) + \" | node /app/dist/tools/feedback-record.js --vault /data/vault --no-write\" }}",
         "executeOnce": true
       },
       "id": "e17953a6-0f44-4956-aeb3-f130dbf91218",

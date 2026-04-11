@@ -63,7 +63,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | npm --silent --prefix /app run ingest-source -- --vault /data/vault\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/ingest-source.js --vault /data/vault\" }}",
         "executeOnce": true
       },
       "id": "cf7714bb-0496-44f8-a0ce-93d25fdac957",
@@ -90,7 +90,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | npm --silent --prefix /app run plan-source-note -- --vault /data/vault\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/plan-source-note.js --vault /data/vault\" }}",
         "executeOnce": true
       },
       "id": "df743684-4018-4c72-9eb2-94bc267ad44a",
@@ -119,7 +119,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.plan_b64) + \" | npm --silent --prefix /app run apply-update -- --vault /data/vault\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.plan_b64) + \" | node /app/dist/tools/apply-update.js --vault /data/vault\" }}",
         "executeOnce": true
       },
       "id": "779d37d9-3079-4e75-99dc-092929af9df7",
@@ -146,7 +146,7 @@
     },
     {
       "parameters": {
-        "command": "npm --silent --prefix /app run reindex -- --vault /data/vault",
+        "command": "node /app/dist/tools/reindex.js --vault /data/vault",
         "executeOnce": true
       },
       "id": "1f8f0d2f-6193-4687-b8cc-1fc6eea2b7f4",
@@ -173,7 +173,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($node[\"Parse Source Note Plan\"].json.commit_b64) + \" | npm --silent --prefix /app run commit -- --vault /data/vault\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($node[\"Parse Source Note Plan\"].json.commit_b64) + \" | node /app/dist/tools/commit.js --vault /data/vault\" }}",
         "executeOnce": true
       },
       "id": "db6f28cf-7ded-420b-8a4c-78ddd9129115",
@@ -268,7 +268,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return [{\n  json: {\n    status: 'baseline_ingest_applied_llm_plan_proposed',\n    source_payload: $json.source_payload,\n    baseline_mutation_plan: $json.baseline_mutation_plan,\n    baseline_mutation_result: $json.baseline_mutation_result,\n    baseline_reindex_result: $json.baseline_reindex_result,\n    baseline_commit_result: $json.baseline_commit_result,\n    llm_mutation_plan: $json.llm_mutation_plan,\n    llm_plan_approval_required: $json.llm_plan_approval_required,\n    apply_plan_command: 'npm --silent --prefix /app run apply-update -- --vault /data/vault --input <approved-plan.json>',\n    openrouter_ingest_meta: $json.openrouter_ingest_meta\n  }\n}];"
+        "jsCode": "return [{\n  json: {\n    status: 'baseline_ingest_applied_llm_plan_proposed',\n    source_payload: $json.source_payload,\n    baseline_mutation_plan: $json.baseline_mutation_plan,\n    baseline_mutation_result: $json.baseline_mutation_result,\n    baseline_reindex_result: $json.baseline_reindex_result,\n    baseline_commit_result: $json.baseline_commit_result,\n    llm_mutation_plan: $json.llm_mutation_plan,\n    llm_plan_approval_required: $json.llm_plan_approval_required,\n    apply_plan_command: 'node /app/dist/tools/apply-update.js --vault /data/vault --input <approved-plan.json>',\n    openrouter_ingest_meta: $json.openrouter_ingest_meta\n  }\n}];"
       },
       "id": "fc739fd6-07f2-41f4-919b-137ed8860fdb",
       "name": "Build Ingest Response",
