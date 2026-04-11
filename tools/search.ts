@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { parseArgs, writeJsonStdout } from "./lib/cli.mjs";
-import { resolveVaultRoot, resolveWithinRoot, relativeVaultPath } from "./lib/fs-utils.mjs";
-import { ensureSchema, openDatabase } from "./lib/db.mjs";
+import { parseArgs, writeJsonStdout } from "./lib/cli.js";
+import { resolveVaultRoot, resolveWithinRoot, relativeVaultPath } from "./lib/fs-utils.js";
+import { ensureSchema, openDatabase } from "./lib/db.js";
+import { SYSTEM_CONFIG } from "./config.js";
 
 /**
  * Search the SQLite FTS index built from wiki markdown documents.
@@ -15,8 +16,11 @@ import { ensureSchema, openDatabase } from "./lib/db.mjs";
  */
 function parseSearchArgs() {
   const args = parseArgs();
-  let limit = Number.isFinite(args.limit) && args.limit > 0 ? args.limit : 8;
-  let query = null;
+  const limit =
+    typeof args.limit === "number" && Number.isFinite(args.limit) && args.limit > 0
+      ? args.limit
+      : SYSTEM_CONFIG.cli.defaultSearchLimit;
+  let query: string | null = null;
   let skipNext = false;
 
   for (const token of process.argv.slice(2)) {
@@ -54,13 +58,13 @@ function parseSearchArgs() {
   };
 }
 
-async function main() {
+async function main(): Promise<void> {
   const args = parseSearchArgs();
   const vaultRoot = resolveVaultRoot(args.vault);
-  const dbPath = args.db ? resolveWithinRoot(vaultRoot, args.db) : resolveWithinRoot(vaultRoot, "state/kb.db");
+  const dbPath = args.db ? resolveWithinRoot(vaultRoot, args.db) : resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.dbPath);
   const db = await openDatabase(dbPath);
 
-  let rows;
+  let rows: Array<{ path: string; title: string; doc_type: string; score: number }>;
   try {
     ensureSchema(db);
     const statement = db.prepare(`
@@ -72,7 +76,7 @@ async function main() {
       LIMIT ?;
     `);
 
-    rows = statement.all(args.query, args.limit);
+    rows = statement.all(args.query, args.limit) as Array<{ path: string; title: string; doc_type: string; score: number }>;
   } finally {
     db.close();
   }

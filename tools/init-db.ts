@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
-import { parseArgs, writeJsonStdout } from "./lib/cli.mjs";
-import { relativeVaultPath, resolveVaultRoot, resolveWithinRoot } from "./lib/fs-utils.mjs";
-import { ensureSchema, openDatabase } from "./lib/db.mjs";
+import { parseArgs, writeJsonStdout } from "./lib/cli.js";
+import { relativeVaultPath, resolveVaultRoot, resolveWithinRoot } from "./lib/fs-utils.js";
+import { ensureSchema, openDatabase } from "./lib/db.js";
+import { SYSTEM_CONFIG } from "./config.js";
+import type { CliArgs } from "./lib/contracts.js";
 
 /**
  * Initialize the SQLite database used for wiki indexing and retrieval.
@@ -15,15 +17,15 @@ import { ensureSchema, openDatabase } from "./lib/db.mjs";
  * @param {string} vaultRoot
  * @returns {string}
  */
-function parseDbPath(args, vaultRoot) {
+function parseDbPath(args: Pick<CliArgs, "db">, vaultRoot: string): string {
   if (args.db) {
     return resolveWithinRoot(vaultRoot, args.db);
   }
 
-  return resolveWithinRoot(vaultRoot, "state/kb.db");
+  return resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.dbPath);
 }
 
-async function main() {
+async function main(): Promise<void> {
   const args = parseArgs();
   const vaultRoot = resolveVaultRoot(args.vault);
   const dbPath = parseDbPath(args, vaultRoot);

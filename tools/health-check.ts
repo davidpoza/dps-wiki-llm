@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 
-import { parseArgs, writeJsonStdout } from "./lib/cli.mjs";
+import { parseArgs, writeJsonStdout } from "./lib/cli.js";
 import {
   ensureDirectory,
   resolveVaultRoot,
   resolveWithinRoot,
   writeJsonFile,
   writeTextFile
-} from "./lib/fs-utils.mjs";
-import { analyzeWikiGraph, loadWikiDocs } from "./lib/wiki-inspect.mjs";
-
-const DAY_IN_MS = 24 * 60 * 60 * 1000;
+} from "./lib/fs-utils.js";
+import { analyzeWikiGraph, loadWikiDocs } from "./lib/wiki-inspect.js";
+import { SYSTEM_CONFIG } from "./config.js";
+import type { MaintenanceFinding, MaintenanceResult, MissingPage, Severity, WikiDoc, WikiGraph } from "./lib/contracts.js";
 
 /**
  * Run deeper semantic and traceability validation over the wiki graph.
@@ -21,7 +21,7 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000;
  *
  * @returns {string}
  */
-function nowStamp() {
+function nowStamp(): string {
   return new Date().toISOString().replaceAll(":", "-");
 }
 
@@ -37,7 +37,15 @@ function nowStamp() {
  * @param {Record<string, any>} [extra={}]
  * @returns {Record<string, any>}
  */
-function buildFinding(severity, targetPath, issueType, description, recommendedAction, autoFixable = false, extra = {}) {
+function buildFinding(
+  severity: Severity,
+  targetPath: string,
+  issueType: string,
+  description: string,
+  recommendedAction: string,
+  autoFixable = false,
+  extra: Record<string, unknown> = {}
+): MaintenanceFinding {
   return {
     severity,
     path: targetPath,
@@ -55,16 +63,8 @@ function buildFinding(severity, targetPath, issueType, description, recommendedA
  * @param {string} severity
  * @returns {number}
  */
-function severityRank(severity) {
-  if (severity === "critical") {
-    return 0;
-  }
-
-  if (severity === "warning") {
-    return 1;
-  }
-
-  return 2;
+function severityRank(severity: Severity): number {
+  return SYSTEM_CONFIG.maintenance.severityOrder[severity];
 }
 
 /**
@@ -73,13 +73,13 @@ function severityRank(severity) {
  * @param {string} updatedAt
  * @returns {number | null}
  */
-function ageInDays(updatedAt) {
+function ageInDays(updatedAt: string): number | null {
   const date = new Date(updatedAt);
   if (Number.isNaN(date.getTime())) {
     return null;
   }
 
-  return Math.floor((Date.now() - date.getTime()) / DAY_IN_MS);
+  return Math.floor((Date.now() - date.getTime()) / SYSTEM_CONFIG.health.dayInMs);
 }
 
 /**
@@ -89,7 +89,7 @@ function ageInDays(updatedAt) {
  * @param {string} sectionName
  * @returns {boolean}
  */
-function sectionHasContent(doc, sectionName) {
+function sectionHasContent(doc: WikiDoc, sectionName: string): boolean {
   const section = doc.sectionMap.get(sectionName.toLowerCase());
   return Boolean(section && section.content.trim());
 }
@@ -101,7 +101,7 @@ function sectionHasContent(doc, sectionName) {
  * @param {string} key
  * @returns {any[]}
  */
-function frontmatterArray(doc, key) {
+function frontmatterArray(doc: WikiDoc, key: string): unknown[] {
   const value = doc.frontmatter[key];
   return Array.isArray(value) ? value.filter(Boolean) : [];
 }
@@ -116,9 +116,10 @@ function frontmatterArray(doc, key) {
  * @param {Map<string, { docType: string }>} docsByPath
  * @returns {boolean}
  */
-function hasSourceSupport(doc, graph, docsByPath) {
-  const explicitSourceIds = frontmatterArray(doc, "source_ids");
-  const explicitSourceRefs = frontmatterArray(doc, "source_refs");
+function hasSourceSupport(doc: WikiDoc, graph: WikiGraph, docsByPath: Map<string, WikiDoc>): boolean {
+  const [sourceIdsKey, sourceRefsKey] = SYSTEM_CONFIG.health.sourceSupportFrontmatterKeys;
+  const explicitSourceIds = frontmatterArray(doc, sourceIdsKey);
+  const explicitSourceRefs = frontmatterArray(doc, sourceRefsKey);
   const hasSourcesSection = sectionHasContent(doc, "Sources");
   const resolvedTargets = graph.resolvedLinks.get(doc.relativePath) || [];
   const linkedSourceDocs = resolvedTargets
@@ -139,8 +140,8 @@ function hasSourceSupport(doc, graph, docsByPath) {
  * @param {{ brokenLinks: Map<string, { normalized: string }[]> }} graph
  * @returns {Array<{ target: string, referenced_from: string[] }>}
  */
-function collectMissingPages(graph) {
-  const missing = new Map();
+function collectMissingPages(graph: WikiGraph): MissingPage[] {
+  const missing = new Map<string, MissingPage>();
 
   for (const [sourcePath, brokenLinks] of graph.brokenLinks.entries()) {
     for (const broken of brokenLinks) {
@@ -168,7 +169,7 @@ function collectMissingPages(graph) {
  * }} result
  * @returns {string}
  */
-function renderSummary(result) {
+function renderSummary(result: MaintenanceResult & { missing_pages: MissingPage[] }): string {
   const lines = [
     `# Health Check Report: ${result.run_id}`,
     "",
@@ -202,13 +203,13 @@ function renderSummary(result) {
   return `${lines.join("\n")}\n`;
 }
 
-async function main() {
+async function main(): Promise<void> {
   const args = parseArgs();
   const vaultRoot = resolveVaultRoot(args.vault);
   const docs = await loadWikiDocs(vaultRoot);
   const graph = analyzeWikiGraph(docs);
   const docsByPath = new Map(docs.map((doc) => [doc.relativePath, doc]));
-  const findings = [];
+  const findings: MaintenanceFinding[] = [];
 
   for (const doc of docs) {
     if (doc.docType === "unknown") {
@@ -223,9 +224,10 @@ async function main() {
       );
     }
 
-    if (["concept", "entity", "topic", "analysis"].includes(doc.docType)) {
-      const hasEvidenceLikeSection =
-        sectionHasContent(doc, "Facts") || sectionHasContent(doc, "Evidence") || sectionHasContent(doc, "Extracted Claims");
+    if (SYSTEM_CONFIG.wiki.typedDocTypes.includes(doc.docType)) {
+      const hasEvidenceLikeSection = SYSTEM_CONFIG.health.evidenceLikeSections.some((sectionName) =>
+        sectionHasContent(doc, sectionName)
+      );
 
       if (hasEvidenceLikeSection && !hasSourceSupport(doc, graph, docsByPath)) {
         findings.push(
@@ -253,7 +255,10 @@ async function main() {
     }
 
     if (doc.docType === "source") {
-      if (typeof doc.frontmatter.source_ref !== "string" || !doc.frontmatter.source_ref.trim()) {
+      const sourceRefKey = SYSTEM_CONFIG.health.requiredSourceFrontmatter.sourceRef;
+      const capturedAtKey = SYSTEM_CONFIG.health.requiredSourceFrontmatter.capturedAt;
+
+      if (typeof doc.frontmatter[sourceRefKey] !== "string" || !doc.frontmatter[sourceRefKey].trim()) {
         findings.push(
           buildFinding(
             "warning",
@@ -265,7 +270,7 @@ async function main() {
         );
       }
 
-      if (typeof doc.frontmatter.captured_at !== "string" || !doc.frontmatter.captured_at.trim()) {
+      if (typeof doc.frontmatter[capturedAtKey] !== "string" || !doc.frontmatter[capturedAtKey].trim()) {
         findings.push(
           buildFinding(
             "suggestion",
@@ -278,9 +283,12 @@ async function main() {
       }
     }
 
-    if (typeof doc.frontmatter.confidence === "string" && doc.frontmatter.confidence.trim().toLowerCase() === "low") {
+    if (
+      typeof doc.frontmatter.confidence === "string" &&
+      doc.frontmatter.confidence.trim().toLowerCase() === SYSTEM_CONFIG.health.lowConfidenceValue
+    ) {
       const age = ageInDays(doc.updatedAt);
-      if (age !== null && age > 90) {
+      if (age !== null && age > SYSTEM_CONFIG.health.staleLowConfidenceCriticalDays) {
         findings.push(
           buildFinding(
             "critical",
@@ -290,7 +298,7 @@ async function main() {
             "Review the note, improve evidence, or archive it."
           )
         );
-      } else if (age !== null && age > 30) {
+      } else if (age !== null && age > SYSTEM_CONFIG.health.staleLowConfidenceWarningDays) {
         findings.push(
           buildFinding(
             "warning",
@@ -340,7 +348,7 @@ async function main() {
     return `${left.path}:${left.issue_type}`.localeCompare(`${right.path}:${right.issue_type}`);
   });
 
-  const result = {
+  const result: MaintenanceResult & { missing_pages: MissingPage[] } = {
     run_id: `health-check-${new Date().toISOString().slice(0, 10)}`,
     kind: "health-check",
     stats: {
@@ -356,14 +364,14 @@ async function main() {
 
   if (args.write) {
     const stamp = nowStamp();
-    const reportDir = resolveWithinRoot(vaultRoot, "state/maintenance");
-    const reportPath = resolveWithinRoot(vaultRoot, `state/maintenance/${stamp}-health-check.json`);
-    const summaryPath = resolveWithinRoot(vaultRoot, `state/maintenance/${stamp}-health-check.md`);
+    const reportDir = resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.maintenanceDir);
+    const reportPath = resolveWithinRoot(vaultRoot, `${SYSTEM_CONFIG.paths.maintenanceDir}/${stamp}-health-check.json`);
+    const summaryPath = resolveWithinRoot(vaultRoot, `${SYSTEM_CONFIG.paths.maintenanceDir}/${stamp}-health-check.md`);
     await ensureDirectory(reportDir);
     await writeJsonFile(reportPath, result);
     await writeTextFile(summaryPath, renderSummary(result));
-    result.report_path = "state/maintenance/" + `${stamp}-health-check.json`;
-    result.summary_path = "state/maintenance/" + `${stamp}-health-check.md`;
+    result.report_path = `${SYSTEM_CONFIG.paths.maintenanceDir}/${stamp}-health-check.json`;
+    result.summary_path = `${SYSTEM_CONFIG.paths.maintenanceDir}/${stamp}-health-check.md`;
   }
 
   writeJsonStdout(result, args.pretty);

@@ -36,19 +36,18 @@ The repo now includes the full local toolchain except for raw-event normalizatio
 
 | Script | Purpose | Main outputs |
 |---|---|---|
-| `init-db.mjs` | Creates the SQLite schema and FTS tables. | `state/kb.db` |
-| `apply-update.mjs` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
-| `feedback-record.mjs` | Writes feedback records and can derive a follow-up mutation plan. | `state/feedback/**` |
-| `reindex.mjs` | Rebuilds the `docs` table and FTS index from `wiki/**/*.md`. | `state/kb.db` |
-| `search.mjs` | Runs FTS queries and returns ranked results as JSON. | stdout JSON |
-| `lint.mjs` | Performs structural wiki checks. | `state/maintenance/*-lint.{json,md}` |
-| `health-check.mjs` | Performs deeper semantic and traceability checks. | `state/maintenance/*-health-check.{json,md}` |
-| `commit.mjs` | Stages material paths, writes a structured change log, and creates a git commit. | `state/change-log/**`, git commit |
+| `init-db.ts` | Creates the SQLite schema and FTS tables. | `state/kb.db` |
+| `apply-update.ts` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
+| `feedback-record.ts` | Writes feedback records and can derive a follow-up mutation plan. | `state/feedback/**` |
+| `reindex.ts` | Rebuilds the `docs` table and FTS index from `wiki/**/*.md`. | `state/kb.db` |
+| `search.ts` | Runs FTS queries and returns ranked results as JSON. | stdout JSON |
+| `lint.ts` | Performs structural wiki checks. | `state/maintenance/*-lint.{json,md}` |
+| `health-check.ts` | Performs deeper semantic and traceability checks. | `state/maintenance/*-health-check.{json,md}` |
+| `commit.ts` | Stages material paths, writes a structured change log, and creates a git commit. | `state/change-log/**`, git commit |
 
 Main gaps relative to the target architecture:
 
-- `ingest-source.mjs` is not present yet
-- `n8n` workflows are out of repo scope
+- `ingest-source.ts` is not present yet
 - LLM planner and answer-synthesis steps are external to this codebase
 
 ## Code Documentation
@@ -61,6 +60,7 @@ Detailed English documentation for every script and shared library module lives 
 .
 ├── README.md
 ├── package.json
+├── tsconfig.json
 ├── docs/
 │   ├── code-reference.md
 │   ├── assets/
@@ -69,14 +69,15 @@ Detailed English documentation for every script and shared library module lives 
 │       ├── workflow.puml
 │       └── workflow.svg
 └── tools/
-    ├── init-db.mjs
-    ├── apply-update.mjs
-    ├── feedback-record.mjs
-    ├── reindex.mjs
-    ├── search.mjs
-    ├── lint.mjs
-    ├── health-check.mjs
-    ├── commit.mjs
+    ├── init-db.ts
+    ├── apply-update.ts
+    ├── feedback-record.ts
+    ├── reindex.ts
+    ├── search.ts
+    ├── lint.ts
+    ├── health-check.ts
+    ├── commit.ts
+    ├── config.ts
     └── lib/
 ```
 
@@ -105,67 +106,82 @@ Versioned render: [`docs/diagrams/workflow.svg`](docs/diagrams/workflow.svg)
 
 Requirements:
 
-- a recent Node.js release with built-in `node:sqlite` support
-- Git configured with `user.name` and `user.email` if you plan to use `commit.mjs`
+- Node.js `>=22.5.0`, for built-in `node:sqlite` support
+- dependencies installed with `npm install`
+- Git configured with `user.name` and `user.email` if you plan to use `commit.ts`
+
+The tools are TypeScript source files compiled to `dist/` and executed from the generated JavaScript in the package scripts. `npm install` runs the build through `prepare`; run `npm run build` again after changing source. Use `--silent` when command output must remain parseable JSON for automation.
+
+Check the TypeScript build:
+
+```bash
+npm run typecheck
+```
 
 Initialize the database:
 
 ```bash
-npm run init-db -- --vault /path/to/vault
+npm run --silent init-db -- --vault /path/to/vault
 ```
 
 Apply a mutation plan:
 
 ```bash
-npm run apply-update -- --vault /path/to/vault --input ./plan.json
+npm run --silent apply-update -- --vault /path/to/vault --input ./plan.json
 ```
 
 Rebuild the search index:
 
 ```bash
-npm run reindex -- --vault /path/to/vault
+npm run --silent reindex -- --vault /path/to/vault
 ```
 
 Run a search query:
 
 ```bash
-npm run search -- --vault /path/to/vault "model context protocol" --limit 5
+npm run --silent search -- --vault /path/to/vault "model context protocol" --limit 5
 ```
 
 Record feedback:
 
 ```bash
-npm run feedback-record -- --vault /path/to/vault --input ./feedback.json
+npm run --silent feedback-record -- --vault /path/to/vault --input ./feedback.json
 ```
 
 Run maintenance checks without writing reports:
 
 ```bash
-npm run lint -- --vault /path/to/vault --no-write
-npm run health-check -- --vault /path/to/vault --no-write
+npm run --silent lint -- --vault /path/to/vault --no-write
+npm run --silent health-check -- --vault /path/to/vault --no-write
 ```
 
 Create a structured commit:
 
 ```bash
-npm run commit -- --vault /path/to/vault --input ./commit.json
+npm run --silent commit -- --vault /path/to/vault --input ./commit.json
 ```
 
 ## CLI Conventions
 
 - `--vault` is the root of the target vault and defaults to the current working directory.
-- `--input` is used by JSON-driven scripts such as `apply-update.mjs`, `feedback-record.mjs`, and `commit.mjs`.
-- `--db` can override the database path for `init-db.mjs`, `reindex.mjs`, and `search.mjs`.
-- `--limit` controls result count in `search.mjs`.
-- `--no-write` is supported by `feedback-record.mjs`, `lint.mjs`, and `health-check.mjs`.
+- `--input` is used by JSON-driven scripts such as `apply-update.ts`, `feedback-record.ts`, and `commit.ts`.
+- `--db` can override the database path for `init-db.ts`, `reindex.ts`, and `search.ts`.
+- `--limit` controls result count in `search.ts`.
+- `--no-write` is supported by `feedback-record.ts`, `lint.ts`, and `health-check.ts`.
 - Scripts emit machine-readable JSON on success.
+
+## Configuration
+
+`tools/config.ts` is the central behavior configuration for the toolchain. It defines vault paths, default search limits, SQLite schema and pragmas, valid mutation and feedback values, note lint thresholds, health-check thresholds, markdown section behavior, and report directories.
+
+The canonical JSON payload contracts from `AGENTS.md` are represented as TypeScript interfaces in `tools/lib/contracts.ts`.
 
 ## Operational Notes
 
-- `apply-update.mjs` enforces `create`, `update`, and `noop` actions and tracks idempotency keys in `state/runtime/idempotency-keys.json`.
-- `reindex.mjs` indexes markdown derived from `wiki/`, not `raw/`.
-- `search.mjs` queries the FTS index and returns ranked results with `path`, `title`, `doc_type`, and `score`.
-- `lint.mjs` focuses on structure and maintainability.
-- `health-check.mjs` focuses on unsupported claims, stale low-confidence notes, and missing pages.
-- `commit.mjs` writes a change log to `state/change-log/` before creating the git commit.
+- `apply-update.ts` enforces `create`, `update`, and `noop` actions and tracks idempotency keys in `state/runtime/idempotency-keys.json`.
+- `reindex.ts` indexes markdown derived from `wiki/`, not `raw/`.
+- `search.ts` queries the FTS index and returns ranked results with `path`, `title`, `doc_type`, and `score`.
+- `lint.ts` focuses on structure and maintainability.
+- `health-check.ts` focuses on unsupported claims, stale low-confidence notes, and missing pages.
+- `commit.ts` writes a change log to `state/change-log/` before creating the git commit.
 - `docs/code-reference.md` is the file-level reference for the entire codebase.

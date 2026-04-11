@@ -78,7 +78,7 @@ wiki/ -> durable knowledge graph in markdown form
 SQLite FTS in state/kb.db
 
 [QUERY]
-search.mjs -> retrieve docs -> LLM answer synthesis
+search.ts -> retrieve docs -> LLM answer synthesis
 ```
 
 ---
@@ -143,13 +143,13 @@ Pipeline:
 
 ```text
 raw event
--> ingest-source.mjs
+-> ingest-source.ts
 -> idempotency / duplicate check
 -> LLM ingestion prompt
 -> structured JSON plan
--> apply-update.mjs
--> reindex.mjs
--> commit.mjs
+-> apply-update.ts
+-> reindex.ts
+-> commit.ts
 ```
 
 Expected plan shape:
@@ -169,7 +169,7 @@ If the same raw event is seen multiple times because of sync noise, retries, or 
 
 ```text
 user query
--> search.mjs
+-> search.ts
 -> top-k candidate documents
 -> markdown read
 -> LLM answer synthesis
@@ -188,9 +188,9 @@ significant answer or output
 -> compare against current wiki state
 -> classify each candidate
 -> persistence decision
--> if approved: apply-update.mjs
--> reindex.mjs
--> commit.mjs
+-> if approved: apply-update.ts
+-> reindex.ts
+-> commit.ts
 ```
 
 Core rule:
@@ -221,11 +221,11 @@ Pipeline:
 
 ```text
 scheduled or manual maintenance
--> lint.mjs or health-check.mjs
+-> lint.ts or health-check.ts
 -> structured findings
--> optional apply-update.mjs
--> reindex.mjs
--> commit.mjs
+-> optional apply-update.ts
+-> reindex.ts
+-> commit.ts
 ```
 
 Maintenance checks:
@@ -514,12 +514,12 @@ LIMIT k;
 
 ## Script Contracts
 
-### `init-db.mjs`
+### `init-db.ts`
 
 - creates base tables
 - initializes FTS
 
-### `ingest-source.mjs`
+### `ingest-source.ts`
 
 - normalizes incoming raw input
 - converts heterogeneous inputs into a stable internal shape
@@ -527,20 +527,20 @@ LIMIT k;
 - prepares source material before any LLM planning step
 - should be the only script that turns a raw event into a normalized ingestion payload
 
-### `reindex.mjs`
+### `reindex.ts`
 
 - walks `wiki/`
 - parses markdown and frontmatter
 - updates SQLite rows
 - rebuilds the FTS index
 
-### `search.mjs`
+### `search.ts`
 
 - input: query string
 - output: top-k documents as JSON
 - should search `wiki/`-derived state first, not `raw/`
 
-### `apply-update.mjs`
+### `apply-update.ts`
 
 - input: structured JSON mutation plan
 - allowed actions:
@@ -550,28 +550,28 @@ LIMIT k;
 - avoid broad rewrites
 - preserve note identity when possible
 
-### `lint.mjs`
+### `lint.ts`
 
 - performs structural linting of the markdown knowledge base
 - detects maintainability issues such as oversize pages, inconsistent naming, incomplete frontmatter, orphan pages, and stale indexes
 - should output structured findings, not free-form prose
 - should focus on structure and maintainability, not semantic truth
 
-### `health-check.mjs`
+### `health-check.ts`
 
 - performs a deeper semantic and traceability review of the knowledge base
 - detects contradictions, unsupported claims, concept gaps, stale low-confidence notes, and other long-term quality issues
 - should output structured findings with severity and recommended actions
 - should be suitable for scheduled monthly review runs
 
-### `feedback-record.mjs`
+### `feedback-record.ts`
 
 - produces the canonical machine-readable feedback record for significant answers and analyses
 - may emit a derived mutation plan when the decision is `propagate`
 - should also generate a compact human-readable review summary
 - must separate feedback evaluation from actual wiki mutation
 
-### `commit.mjs`
+### `commit.ts`
 
 - stages intended changes
 - writes consistent git commit messages
@@ -583,15 +583,15 @@ LIMIT k;
 
 The minimum serious script set is:
 
-- `init-db.mjs`
-- `ingest-source.mjs`
-- `reindex.mjs`
-- `search.mjs`
-- `apply-update.mjs`
-- `lint.mjs`
-- `health-check.mjs`
-- `feedback-record.mjs`
-- `commit.mjs`
+- `init-db.ts`
+- `ingest-source.ts`
+- `reindex.ts`
+- `search.ts`
+- `apply-update.ts`
+- `lint.ts`
+- `health-check.ts`
+- `feedback-record.ts`
+- `commit.ts`
 
 These scripts should:
 
@@ -617,7 +617,7 @@ This is simpler and more robust than inventing many micro-actions.
 
 ### 1. Normalized Source Payload
 
-Produced by `ingest-source.mjs`.
+Produced by `ingest-source.ts`.
 Consumed by the ingestion prompt and downstream planners.
 
 ```json
@@ -644,7 +644,7 @@ Consumed by the ingestion prompt and downstream planners.
 ### 2. Mutation Plan
 
 This is the canonical write contract.
-`apply-update.mjs` should consume this shape for ingestion, feedback propagation, lint autofixes, and health-check fixes.
+`apply-update.ts` should consume this shape for ingestion, feedback propagation, lint autofixes, and health-check fixes.
 
 ```json
 {
@@ -733,8 +733,8 @@ Mutation plan rules:
 
 ### 3. Mutation Result
 
-Produced by `apply-update.mjs`.
-Used by `n8n`, `reindex.mjs`, and `commit.mjs`.
+Produced by `apply-update.ts`.
+Used by `n8n`, `reindex.ts`, and `commit.ts`.
 
 ```json
 {
@@ -756,7 +756,7 @@ Used by `n8n`, `reindex.mjs`, and `commit.mjs`.
 
 ### 4. Search Result
 
-Produced by `search.mjs`.
+Produced by `search.ts`.
 Consumed by the answer workflow.
 
 ```json
@@ -846,8 +846,8 @@ Feedback record rules:
 
 ### 7. Maintenance Result
 
-Produced by `lint.mjs` and `health-check.mjs`.
-Consumed by humans first, and by `apply-update.mjs` only when autofix is explicitly approved.
+Produced by `lint.ts` and `health-check.ts`.
+Consumed by humans first, and by `apply-update.ts` only when autofix is explicitly approved.
 
 ```json
 {
@@ -868,7 +868,7 @@ Consumed by humans first, and by `apply-update.mjs` only when autofix is explici
 
 ### 8. Commit Result
 
-Produced by `commit.mjs`.
+Produced by `commit.ts`.
 Used by `n8n` for logging and traceability.
 
 ```json
@@ -882,14 +882,14 @@ Used by `n8n` for logging and traceability.
 
 ### Contract Mapping
 
-- `ingest-source.mjs` -> normalized source payload
+- `ingest-source.ts` -> normalized source payload
 - ingestion prompt -> mutation plan
-- `apply-update.mjs` -> mutation plan in, mutation result out
-- `search.mjs` -> search result
+- `apply-update.ts` -> mutation plan in, mutation result out
+- `search.ts` -> search result
 - answer workflow -> answer record
 - feedback evaluation -> feedback record and optional mutation plan
-- `lint.mjs` / `health-check.mjs` -> maintenance result
-- `commit.mjs` -> commit result
+- `lint.ts` / `health-check.ts` -> maintenance result
+- `commit.ts` -> commit result
 
 ---
 

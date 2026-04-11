@@ -46,11 +46,11 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node /app/tools/search.mjs --vault /data/vault --limit \" + $json.limit + \" \" + JSON.stringify($json.question) }}",
+        "command": "={{ \"npm --silent --prefix /app run search -- --vault /data/vault --limit \" + $json.limit + \" \" + JSON.stringify($json.question) }}",
         "executeOnce": true
       },
       "id": "531c1047-7162-4cac-8177-eb1fa83139ad",
-      "name": "Run search.mjs",
+      "name": "Run search.ts",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
@@ -60,7 +60,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('search.mjs returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('search.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
       },
       "id": "af188e0a-55a2-42f8-a4d5-0a1c21f8e4c5",
       "name": "Parse Search Result",
@@ -114,14 +114,14 @@
       "main": [
         [
           {
-            "node": "Run search.mjs",
+            "node": "Run search.ts",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Run search.mjs": {
+    "Run search.ts": {
       "main": [
         [
           {

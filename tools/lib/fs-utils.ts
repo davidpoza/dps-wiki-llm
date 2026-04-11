@@ -1,9 +1,15 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { SYSTEM_CONFIG } from "../config.js";
+
 /**
  * Filesystem helpers that enforce all reads and writes stay inside the vault.
  */
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
 
 /**
  * Resolve the canonical absolute path of the target vault root.
@@ -11,7 +17,7 @@ import path from "node:path";
  * @param {string} [vaultPath=process.cwd()]
  * @returns {string}
  */
-export function resolveVaultRoot(vaultPath = process.cwd()) {
+export function resolveVaultRoot(vaultPath = SYSTEM_CONFIG.cli.defaultVault()): string {
   return path.resolve(vaultPath);
 }
 
@@ -22,7 +28,7 @@ export function resolveVaultRoot(vaultPath = process.cwd()) {
  * @param {string} relativePath
  * @returns {string}
  */
-export function resolveWithinRoot(rootPath, relativePath) {
+export function resolveWithinRoot(rootPath: string, relativePath: string): string {
   const root = path.resolve(rootPath);
   const target = path.resolve(root, relativePath);
 
@@ -39,7 +45,7 @@ export function resolveWithinRoot(rootPath, relativePath) {
  * @param {string} dirPath
  * @returns {Promise<void>}
  */
-export async function ensureDirectory(dirPath) {
+export async function ensureDirectory(dirPath: string): Promise<void> {
   await fs.mkdir(dirPath, { recursive: true });
 }
 
@@ -49,7 +55,7 @@ export async function ensureDirectory(dirPath) {
  * @param {string} filePath
  * @returns {Promise<void>}
  */
-export async function ensureParentDirectory(filePath) {
+export async function ensureParentDirectory(filePath: string): Promise<void> {
   await ensureDirectory(path.dirname(filePath));
 }
 
@@ -59,11 +65,11 @@ export async function ensureParentDirectory(filePath) {
  * @param {string} filePath
  * @returns {Promise<string | null>}
  */
-export async function readTextIfExists(filePath) {
+export async function readTextIfExists(filePath: string): Promise<string | null> {
   try {
     return await fs.readFile(filePath, "utf8");
   } catch (error) {
-    if (error && error.code === "ENOENT") {
+    if (isNodeError(error) && error.code === "ENOENT") {
       return null;
     }
 
@@ -77,12 +83,12 @@ export async function readTextIfExists(filePath) {
  * @param {string} filePath
  * @returns {Promise<boolean>}
  */
-export async function pathExists(filePath) {
+export async function pathExists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
     return true;
   } catch (error) {
-    if (error && error.code === "ENOENT") {
+    if (isNodeError(error) && error.code === "ENOENT") {
       return false;
     }
 
@@ -97,14 +103,14 @@ export async function pathExists(filePath) {
  * @param {any} fallbackValue
  * @returns {Promise<any>}
  */
-export async function loadJsonFile(filePath, fallbackValue) {
+export async function loadJsonFile<T>(filePath: string, fallbackValue: T): Promise<T> {
   const raw = await readTextIfExists(filePath);
 
   if (raw === null) {
     return fallbackValue;
   }
 
-  return JSON.parse(raw);
+  return JSON.parse(raw) as T;
 }
 
 /**
@@ -114,7 +120,7 @@ export async function loadJsonFile(filePath, fallbackValue) {
  * @param {string} text
  * @returns {Promise<void>}
  */
-export async function writeTextFile(filePath, text) {
+export async function writeTextFile(filePath: string, text: string): Promise<void> {
   await ensureParentDirectory(filePath);
   await fs.writeFile(filePath, text, "utf8");
 }
@@ -126,7 +132,7 @@ export async function writeTextFile(filePath, text) {
  * @param {unknown} value
  * @returns {Promise<void>}
  */
-export async function writeJsonFile(filePath, value) {
+export async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
   await writeTextFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
@@ -136,7 +142,7 @@ export async function writeJsonFile(filePath, value) {
  * @param {string} inputPath
  * @returns {string}
  */
-export function toPosixPath(inputPath) {
+export function toPosixPath(inputPath: string): string {
   return inputPath.split(path.sep).join("/");
 }
 
@@ -147,6 +153,6 @@ export function toPosixPath(inputPath) {
  * @param {string} absolutePath
  * @returns {string}
  */
-export function relativeVaultPath(rootPath, absolutePath) {
+export function relativeVaultPath(rootPath: string, absolutePath: string): string {
   return toPosixPath(path.relative(rootPath, absolutePath));
 }

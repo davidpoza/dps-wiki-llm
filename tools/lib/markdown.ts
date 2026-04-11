@@ -1,20 +1,10 @@
 import path from "node:path";
 
-import { mergeFrontmatter, splitFrontmatter, stringifyFrontmatter } from "./frontmatter.mjs";
+import { mergeFrontmatter, splitFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
+import { SYSTEM_CONFIG } from "../config.js";
+import type { MarkdownPayload, MarkdownSection, ParsedMarkdown, RenderRuntime } from "./contracts.js";
 
-const BULLET_SECTIONS = new Set([
-  "facts",
-  "related",
-  "sources",
-  "open questions",
-  "extracted claims",
-  "linked notes",
-  "key concepts",
-  "key entities",
-  "relationships",
-  "gaps",
-  "evidence"
-]);
+const BULLET_SECTIONS = new Set<string>(SYSTEM_CONFIG.markdown.bulletSections);
 
 /**
  * Markdown parsing and rendering helpers for deterministic note updates.
@@ -26,7 +16,7 @@ const BULLET_SECTIONS = new Set([
  * @param {string} value
  * @returns {string}
  */
-function normalizeLine(value) {
+function normalizeLine(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
@@ -36,7 +26,7 @@ function normalizeLine(value) {
  * @param {string} value
  * @returns {string}
  */
-function normalizeItem(value) {
+function normalizeItem(value: string): string {
   return normalizeLine(value.replace(/^- /, ""));
 }
 
@@ -46,7 +36,7 @@ function normalizeItem(value) {
  * @param {string} relativePath
  * @returns {string}
  */
-function titleFromPath(relativePath) {
+function titleFromPath(relativePath: string): string {
   const fileName = path.basename(relativePath, path.extname(relativePath));
   return fileName
     .split(/[-_]/g)
@@ -63,7 +53,7 @@ function titleFromPath(relativePath) {
  * @param {string[]} items
  * @returns {"bullet" | "paragraph"}
  */
-function sectionMode(sectionName, existingContent, items) {
+function sectionMode(sectionName: string, existingContent: string, items: string[]): "bullet" | "paragraph" {
   if (BULLET_SECTIONS.has(sectionName.trim().toLowerCase())) {
     return "bullet";
   }
@@ -90,7 +80,7 @@ function sectionMode(sectionName, existingContent, items) {
  * @param {string} content
  * @returns {string[]}
  */
-function splitParagraphs(content) {
+function splitParagraphs(content: string): string[] {
   return content
     .trim()
     .split(/\n\s*\n/g)
@@ -105,7 +95,7 @@ function splitParagraphs(content) {
  * @param {string[]} items
  * @returns {string}
  */
-function mergeBulletContent(existingContent, items) {
+function mergeBulletContent(existingContent: string, items: string[]): string {
   const existingLines = existingContent
     .split("\n")
     .map((line) => line.trim())
@@ -134,7 +124,7 @@ function mergeBulletContent(existingContent, items) {
  * @param {string[]} items
  * @returns {string}
  */
-function mergeParagraphContent(existingContent, items) {
+function mergeParagraphContent(existingContent: string, items: string[]): string {
   const paragraphs = splitParagraphs(existingContent);
   const seen = new Set(paragraphs.map(normalizeLine));
   const merged = [...paragraphs];
@@ -159,7 +149,7 @@ function mergeParagraphContent(existingContent, items) {
  * @param {string} body
  * @returns {{ title: string, preamble: string, sections: Array<{ name: string, content: string }> }}
  */
-export function parseSections(body) {
+export function parseSections(body: string): ParsedMarkdown {
   const lines = body.split("\n");
   let title = "";
   let index = 0;
@@ -175,10 +165,10 @@ export function parseSections(body) {
     index += 1;
   }
 
-  const preamble = [];
-  const sections = [];
-  let currentSection = null;
-  let buffer = [];
+  const preamble: string[] = [];
+  const sections: MarkdownSection[] = [];
+  let currentSection: string | null = null;
+  let buffer: string[] = [];
 
   const flush = () => {
     if (!currentSection) {
@@ -225,7 +215,7 @@ export function parseSections(body) {
  * @param {{ title: string, preamble: string, sections: Array<{ name: string, content: string }> }} param0
  * @returns {string}
  */
-function stringifySections({ title, preamble, sections }) {
+function stringifySections({ title, preamble, sections }: ParsedMarkdown): string {
   const chunks = [`# ${title}`];
 
   if (preamble) {
@@ -245,7 +235,7 @@ function stringifySections({ title, preamble, sections }) {
  * @param {string[] | string | unknown} items
  * @returns {string[]}
  */
-function normalizeItems(items) {
+function normalizeItems(items: string[] | string | unknown): string[] {
   if (!Array.isArray(items)) {
     return typeof items === "string" ? [items] : [];
   }
@@ -260,7 +250,7 @@ function normalizeItems(items) {
  * @param {string} sectionName
  * @param {string[] | string} items
  */
-function upsertSection(sectionEntries, sectionName, items) {
+function upsertSection(sectionEntries: MarkdownSection[], sectionName: string, items: string[] | string | unknown): void {
   const incomingItems = normalizeItems(items);
   if (incomingItems.length === 0) {
     return;
@@ -293,10 +283,15 @@ function upsertSection(sectionEntries, sectionName, items) {
  * @param {{ updatedDate?: string, updatedBy?: string }} [runtime={}]
  * @returns {string}
  */
-export function renderMarkdown(relativePath, existingText, payload = {}, runtime = {}) {
+export function renderMarkdown(
+  relativePath: string,
+  existingText: string | null,
+  payload: MarkdownPayload = {},
+  runtime: RenderRuntime = {}
+): string {
   const base = existingText ? splitFrontmatter(existingText) : { frontmatter: {}, body: "" };
   const parsedBody = parseSections(base.body || "");
-  const mergedFrontmatter = mergeFrontmatter(base.frontmatter || {}, payload.frontmatter || {});
+  const mergedFrontmatter = mergeFrontmatter(base.frontmatter || {}, payload.frontmatter || {}) as Record<string, unknown>;
   const sections = parsedBody.sections.map((section) => ({ ...section }));
   const title = payload.title || parsedBody.title || titleFromPath(relativePath);
 

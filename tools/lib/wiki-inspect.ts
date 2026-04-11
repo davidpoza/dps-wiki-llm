@@ -1,13 +1,19 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { splitFrontmatter } from "./frontmatter.mjs";
-import { parseSections } from "./markdown.mjs";
-import { relativeVaultPath, resolveWithinRoot, toPosixPath } from "./fs-utils.mjs";
+import { splitFrontmatter } from "./frontmatter.js";
+import { parseSections } from "./markdown.js";
+import { relativeVaultPath, resolveWithinRoot, toPosixPath } from "./fs-utils.js";
+import { SYSTEM_CONFIG } from "../config.js";
+import type { WikiDoc, WikiGraph, WikiLink } from "./contracts.js";
 
 /**
  * Wiki loading and graph-analysis helpers shared by indexing and maintenance.
  */
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 /**
  * Recursively collect markdown files below a directory in sorted order.
@@ -15,9 +21,9 @@ import { relativeVaultPath, resolveWithinRoot, toPosixPath } from "./fs-utils.mj
  * @param {string} dirPath
  * @returns {Promise<string[]>}
  */
-async function walkMarkdownFiles(dirPath) {
+async function walkMarkdownFiles(dirPath: string): Promise<string[]> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
-  const files = [];
+  const files: string[] = [];
 
   for (const entry of entries) {
     const absolutePath = path.join(dirPath, entry.name);
@@ -42,34 +48,16 @@ async function walkMarkdownFiles(dirPath) {
  * @param {Record<string, any>} frontmatter
  * @returns {string}
  */
-export function inferDocType(relativePath, frontmatter) {
+export function inferDocType(relativePath: string, frontmatter: Record<string, unknown>): string {
   if (typeof frontmatter.type === "string" && frontmatter.type.trim()) {
     return frontmatter.type.trim();
   }
 
   const parts = toPosixPath(relativePath).split("/");
-  if (parts.includes("concepts")) {
-    return "concept";
-  }
-
-  if (parts.includes("entities")) {
-    return "entity";
-  }
-
-  if (parts.includes("topics")) {
-    return "topic";
-  }
-
-  if (parts.includes("sources")) {
-    return "source";
-  }
-
-  if (parts.includes("analyses")) {
-    return "analysis";
-  }
-
-  if (parts.includes("indexes")) {
-    return "index";
+  for (const [folder, docType] of Object.entries(SYSTEM_CONFIG.wiki.docTypeFolders)) {
+    if (parts.includes(folder)) {
+      return docType;
+    }
   }
 
   return "unknown";
@@ -83,7 +71,7 @@ export function inferDocType(relativePath, frontmatter) {
  * @param {string} body
  * @returns {string}
  */
-export function extractTitle(relativePath, frontmatter, body) {
+export function extractTitle(relativePath: string, frontmatter: Record<string, unknown>, body: string): string {
   if (typeof frontmatter.title === "string" && frontmatter.title.trim()) {
     return frontmatter.title.trim();
   }
@@ -103,7 +91,7 @@ export function extractTitle(relativePath, frontmatter, body) {
  * @param {{ mtime: Date }} stats
  * @returns {string}
  */
-export function extractUpdatedAt(frontmatter, stats) {
+export function extractUpdatedAt(frontmatter: Record<string, unknown>, stats: { mtime: Date }): string {
   if (typeof frontmatter.updated === "string" && frontmatter.updated.trim()) {
     return frontmatter.updated.trim();
   }
@@ -121,8 +109,8 @@ export function extractUpdatedAt(frontmatter, stats) {
  * @param {string} relativePath
  * @returns {string}
  */
-function fileStem(relativePath) {
-  return toPosixPath(relativePath).replace(/\.md$/i, "");
+function fileStem(relativePath: string): string {
+  return toPosixPath(relativePath).replace(new RegExp(`${escapeRegExp(SYSTEM_CONFIG.wiki.markdownExtension)}$`, "i"), "");
 }
 
 /**
@@ -131,11 +119,11 @@ function fileStem(relativePath) {
  * @param {string} target
  * @returns {string}
  */
-function normalizeLinkTarget(target) {
+function normalizeLinkTarget(target: string): string {
   return toPosixPath(target.trim())
     .replace(/^\//, "")
-    .replace(/^wiki\//, "")
-    .replace(/\.md$/i, "")
+    .replace(new RegExp(`^${SYSTEM_CONFIG.wiki.wikiPathPrefix}`), "")
+    .replace(new RegExp(`${escapeRegExp(SYSTEM_CONFIG.wiki.markdownExtension)}$`, "i"), "")
     .split("|")[0]
     .split("#")[0]
     .trim();
@@ -148,9 +136,9 @@ function normalizeLinkTarget(target) {
  * @param {string} title
  * @returns {Set<string>}
  */
-function buildAliases(relativePath, title) {
+function buildAliases(relativePath: string, title: string): Set<string> {
   const stem = fileStem(relativePath);
-  const relativeToWiki = stem.replace(/^wiki\//, "");
+  const relativeToWiki = stem.replace(new RegExp(`^${SYSTEM_CONFIG.wiki.wikiPathPrefix}`), "");
   const base = path.posix.basename(stem);
 
   return new Set([stem, relativeToWiki, base, title].filter(Boolean).map((entry) => normalizeLinkTarget(entry)));
@@ -162,8 +150,8 @@ function buildAliases(relativePath, title) {
  * @param {string} body
  * @returns {Array<{ raw: string, normalized: string }>}
  */
-export function extractWikiLinks(body) {
-  const results = [];
+export function extractWikiLinks(body: string): WikiLink[] {
+  const results: WikiLink[] = [];
   const regex = /\[\[([^\]]+)\]\]/g;
 
   for (const match of body.matchAll(regex)) {
@@ -188,8 +176,8 @@ export function extractWikiLinks(body) {
  * @param {string} vaultRoot
  * @returns {Promise<Array<Record<string, any>>>}
  */
-export async function loadWikiDocs(vaultRoot) {
-  const wikiRoot = resolveWithinRoot(vaultRoot, "wiki");
+export async function loadWikiDocs(vaultRoot: string): Promise<WikiDoc[]> {
+  const wikiRoot = resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.wikiDir);
   const files = await walkMarkdownFiles(wikiRoot).catch((error) => {
     if (error && error.code === "ENOENT") {
       return [];
@@ -198,7 +186,7 @@ export async function loadWikiDocs(vaultRoot) {
     throw error;
   });
 
-  const docs = [];
+  const docs: WikiDoc[] = [];
 
   for (const absolutePath of files) {
     const relativePath = relativeVaultPath(vaultRoot, absolutePath);
@@ -250,9 +238,9 @@ export async function loadWikiDocs(vaultRoot) {
  *   ambiguousTargets: Map<string, Array<{ raw: string, normalized: string, matches: string[] }>>
  * }}
  */
-export function analyzeWikiGraph(docs) {
-  const aliasMap = new Map();
-  const pathMap = new Map();
+export function analyzeWikiGraph(docs: WikiDoc[]): WikiGraph {
+  const aliasMap = new Map<string, string[]>();
+  const pathMap = new Map<string, WikiDoc>();
 
   for (const doc of docs) {
     pathMap.set(doc.relativePath, doc);
@@ -264,15 +252,15 @@ export function analyzeWikiGraph(docs) {
     }
   }
 
-  const inboundCounts = new Map();
-  const resolvedLinks = new Map();
-  const brokenLinks = new Map();
-  const ambiguousTargets = new Map();
+  const inboundCounts = new Map<string, number>();
+  const resolvedLinks = new Map<string, string[]>();
+  const brokenLinks = new Map<string, WikiLink[]>();
+  const ambiguousTargets = new Map<string, Array<WikiLink & { matches: string[] }>>();
 
   for (const doc of docs) {
-    const resolved = [];
-    const broken = [];
-    const ambiguous = [];
+    const resolved: string[] = [];
+    const broken: WikiLink[] = [];
+    const ambiguous: Array<WikiLink & { matches: string[] }> = [];
 
     for (const link of doc.wikiLinks) {
       const matches = aliasMap.get(link.normalized) || [];

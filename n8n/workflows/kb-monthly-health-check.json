@@ -34,11 +34,11 @@
     },
     {
       "parameters": {
-        "command": "node /app/tools/health-check.mjs --vault /data/vault",
+        "command": "npm --silent --prefix /app run health-check -- --vault /data/vault",
         "executeOnce": true
       },
       "id": "e82002d2-ed1f-4b3f-9556-7619caf12f31",
-      "name": "Run health-check.mjs",
+      "name": "Run health-check.ts",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
@@ -46,11 +46,11 @@
         16
       ],
       "notesInFlow": true,
-      "notes": "By default health-check.mjs writes JSON and Markdown reports into state/maintenance/."
+      "notes": "By default health-check.ts writes JSON and Markdown reports into state/maintenance/."
     },
     {
       "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('health-check.mjs returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('health-check.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
       },
       "id": "048c44dd-1442-40ef-a3bd-c2b0ebd506e1",
       "name": "Parse Health Result",
@@ -67,7 +67,7 @@
       "main": [
         [
           {
-            "node": "Run health-check.mjs",
+            "node": "Run health-check.ts",
             "type": "main",
             "index": 0
           }
@@ -78,14 +78,14 @@
       "main": [
         [
           {
-            "node": "Run health-check.mjs",
+            "node": "Run health-check.ts",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Run health-check.mjs": {
+    "Run health-check.ts": {
       "main": [
         [
           {

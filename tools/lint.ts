@@ -2,7 +2,7 @@
 
 import path from "node:path";
 
-import { parseArgs, writeJsonStdout } from "./lib/cli.mjs";
+import { parseArgs, writeJsonStdout } from "./lib/cli.js";
 import {
   ensureDirectory,
   pathExists,
@@ -10,8 +10,10 @@ import {
   resolveWithinRoot,
   writeJsonFile,
   writeTextFile
-} from "./lib/fs-utils.mjs";
-import { analyzeWikiGraph, loadWikiDocs } from "./lib/wiki-inspect.mjs";
+} from "./lib/fs-utils.js";
+import { analyzeWikiGraph, loadWikiDocs } from "./lib/wiki-inspect.js";
+import { SYSTEM_CONFIG } from "./config.js";
+import type { MaintenanceFinding, MaintenanceResult, Severity, WikiDoc } from "./lib/contracts.js";
 
 /**
  * Run structural wiki linting and optionally persist the report artifacts.
@@ -22,7 +24,7 @@ import { analyzeWikiGraph, loadWikiDocs } from "./lib/wiki-inspect.mjs";
  *
  * @returns {string}
  */
-function nowStamp() {
+function nowStamp(): string {
   return new Date().toISOString().replaceAll(":", "-");
 }
 
@@ -38,7 +40,15 @@ function nowStamp() {
  * @param {Record<string, any>} [extra={}]
  * @returns {Record<string, any>}
  */
-function buildFinding(severity, targetPath, issueType, description, recommendedAction, autoFixable = false, extra = {}) {
+function buildFinding(
+  severity: Severity,
+  targetPath: string,
+  issueType: string,
+  description: string,
+  recommendedAction: string,
+  autoFixable = false,
+  extra: Record<string, unknown> = {}
+): MaintenanceFinding {
   return {
     severity,
     path: targetPath,
@@ -56,16 +66,8 @@ function buildFinding(severity, targetPath, issueType, description, recommendedA
  * @param {string} severity
  * @returns {number}
  */
-function severityRank(severity) {
-  if (severity === "critical") {
-    return 0;
-  }
-
-  if (severity === "warning") {
-    return 1;
-  }
-
-  return 2;
+function severityRank(severity: Severity): number {
+  return SYSTEM_CONFIG.maintenance.severityOrder[severity];
 }
 
 /**
@@ -74,9 +76,9 @@ function severityRank(severity) {
  * @param {string} relativePath
  * @returns {boolean}
  */
-function isKebabCaseName(relativePath) {
-  const stem = path.posix.basename(relativePath, ".md");
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(stem);
+function isKebabCaseName(relativePath: string): boolean {
+  const stem = path.posix.basename(relativePath, SYSTEM_CONFIG.wiki.markdownExtension);
+  return SYSTEM_CONFIG.lint.kebabCasePattern.test(stem);
 }
 
 /**
@@ -85,9 +87,8 @@ function isKebabCaseName(relativePath) {
  * @param {{ frontmatter: Record<string, any> }} doc
  * @returns {string[]}
  */
-function hasRequiredFrontmatter(doc) {
-  const keys = ["type", "title", "updated"];
-  return keys.filter((key) => {
+function missingRequiredFrontmatter(doc: WikiDoc): string[] {
+  return SYSTEM_CONFIG.wiki.requiredFrontmatterKeys.filter((key) => {
     const value = doc.frontmatter[key];
     return typeof value !== "string" || !value.trim();
   });
@@ -99,8 +100,8 @@ function hasRequiredFrontmatter(doc) {
  * @param {{ relativePath: string }[]} docs
  * @returns {Array<[string, string[]]>}
  */
-function buildAliasCollisions(docs) {
-  const basenameMap = new Map();
+function buildAliasCollisions(docs: WikiDoc[]): Array<[string, string[]]> {
+  const basenameMap = new Map<string, string[]>();
 
   for (const doc of docs) {
     const base = path.posix.basename(doc.relativePath, ".md");
@@ -118,7 +119,7 @@ function buildAliasCollisions(docs) {
  * @param {{ run_id: string, kind: string, findings: Record<string, any>[], stats: { docs: number } }} result
  * @returns {string}
  */
-function renderSummary(result) {
+function renderSummary(result: MaintenanceResult): string {
   const lines = [
     `# Lint Report: ${result.run_id}`,
     "",
@@ -145,15 +146,15 @@ function renderSummary(result) {
   return `${lines.join("\n")}\n`;
 }
 
-async function main() {
+async function main(): Promise<void> {
   const args = parseArgs();
   const vaultRoot = resolveVaultRoot(args.vault);
   const docs = await loadWikiDocs(vaultRoot);
   const graph = analyzeWikiGraph(docs);
-  const findings = [];
+  const findings: MaintenanceFinding[] = [];
 
   for (const doc of docs) {
-    if (doc.lineCount > 500) {
+    if (doc.lineCount > SYSTEM_CONFIG.lint.lineCriticalThreshold) {
       findings.push(
         buildFinding(
           "critical",
@@ -163,7 +164,7 @@ async function main() {
           "Split the page into smaller notes and leave the original as a hub."
         )
       );
-    } else if (doc.lineCount > 300) {
+    } else if (doc.lineCount > SYSTEM_CONFIG.lint.lineWarningThreshold) {
       findings.push(
         buildFinding(
           "warning",
@@ -175,7 +176,7 @@ async function main() {
       );
     }
 
-    if (doc.sectionCount > 12) {
+    if (doc.sectionCount > SYSTEM_CONFIG.lint.sectionWarningThreshold) {
       findings.push(
         buildFinding(
           "warning",
@@ -187,7 +188,7 @@ async function main() {
       );
     }
 
-    const missingKeys = hasRequiredFrontmatter(doc);
+    const missingKeys = missingRequiredFrontmatter(doc);
     if (missingKeys.length > 0 && doc.docType !== "index") {
       findings.push(
         buildFinding(
@@ -245,7 +246,7 @@ async function main() {
     }
 
     const inboundCount = graph.inboundCounts.get(doc.relativePath) || 0;
-    if (["concept", "entity", "topic", "analysis"].includes(doc.docType) && inboundCount === 0) {
+    if (SYSTEM_CONFIG.wiki.typedDocTypes.includes(doc.docType) && inboundCount === 0) {
       findings.push(
         buildFinding(
           "warning",
@@ -285,11 +286,11 @@ async function main() {
     );
   }
 
-  if (!(await pathExists(resolveWithinRoot(vaultRoot, "INDEX.md")))) {
+  if (!(await pathExists(resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.rootIndexPath)))) {
     findings.push(
       buildFinding(
         "warning",
-        "INDEX.md",
+        SYSTEM_CONFIG.paths.rootIndexPath,
         "missing_root_index",
         "The root INDEX.md file is missing.",
         "Create and maintain a root index page for navigation."
@@ -306,7 +307,7 @@ async function main() {
     return `${left.path}:${left.issue_type}`.localeCompare(`${right.path}:${right.issue_type}`);
   });
 
-  const result = {
+  const result: MaintenanceResult = {
     run_id: `lint-${new Date().toISOString().slice(0, 10)}`,
     kind: "lint",
     stats: {
@@ -321,14 +322,14 @@ async function main() {
 
   if (args.write) {
     const stamp = nowStamp();
-    const reportDir = resolveWithinRoot(vaultRoot, "state/maintenance");
-    const reportPath = resolveWithinRoot(vaultRoot, `state/maintenance/${stamp}-lint.json`);
-    const summaryPath = resolveWithinRoot(vaultRoot, `state/maintenance/${stamp}-lint.md`);
+    const reportDir = resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.maintenanceDir);
+    const reportPath = resolveWithinRoot(vaultRoot, `${SYSTEM_CONFIG.paths.maintenanceDir}/${stamp}-lint.json`);
+    const summaryPath = resolveWithinRoot(vaultRoot, `${SYSTEM_CONFIG.paths.maintenanceDir}/${stamp}-lint.md`);
     await ensureDirectory(reportDir);
     await writeJsonFile(reportPath, result);
     await writeTextFile(summaryPath, renderSummary(result));
-    result.report_path = "state/maintenance/" + `${stamp}-lint.json`;
-    result.summary_path = "state/maintenance/" + `${stamp}-lint.md`;
+    result.report_path = `${SYSTEM_CONFIG.paths.maintenanceDir}/${stamp}-lint.json`;
+    result.summary_path = `${SYSTEM_CONFIG.paths.maintenanceDir}/${stamp}-lint.md`;
   }
 
   writeJsonStdout(result, args.pretty);

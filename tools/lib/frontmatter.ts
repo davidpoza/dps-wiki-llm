@@ -2,13 +2,25 @@
  * Minimal frontmatter parsing and serialization for deterministic note updates.
  */
 
+type FrontmatterScalar = string | number | boolean | null;
+type FrontmatterValue = FrontmatterScalar | FrontmatterObject | FrontmatterArray;
+interface FrontmatterObject {
+  [key: string]: FrontmatterValue;
+}
+interface FrontmatterArray extends Array<FrontmatterValue> {}
+
+interface ParseResult<T = FrontmatterValue> {
+  value: T;
+  nextIndex: number;
+}
+
 /**
  * Count leading spaces so nested frontmatter blocks can be parsed by indentation.
  *
  * @param {string} line
  * @returns {number}
  */
-function countIndent(line) {
+function countIndent(line: string): number {
   let indent = 0;
 
   while (indent < line.length && line[indent] === " ") {
@@ -24,7 +36,7 @@ function countIndent(line) {
  * @param {string} line
  * @returns {boolean}
  */
-function isMeaningful(line) {
+function isMeaningful(line: string): boolean {
   const trimmed = line.trim();
   return trimmed !== "" && !trimmed.startsWith("#");
 }
@@ -36,7 +48,7 @@ function isMeaningful(line) {
  * @param {number} startIndex
  * @returns {number}
  */
-function nextMeaningfulIndex(lines, startIndex) {
+function nextMeaningfulIndex(lines: string[], startIndex: number): number {
   for (let index = startIndex; index < lines.length; index += 1) {
     if (isMeaningful(lines[index])) {
       return index;
@@ -52,7 +64,7 @@ function nextMeaningfulIndex(lines, startIndex) {
  * @param {string} rawValue
  * @returns {any}
  */
-function parseScalar(rawValue) {
+function parseScalar(rawValue: string): FrontmatterValue {
   const value = rawValue.trim();
 
   if (value === "") {
@@ -95,7 +107,7 @@ function parseScalar(rawValue) {
  * @param {number} indent
  * @returns {{ value: any, nextIndex: number }}
  */
-function parseBlock(lines, startIndex, indent) {
+function parseBlock(lines: string[], startIndex: number, indent: number): ParseResult {
   const meaningfulIndex = nextMeaningfulIndex(lines, startIndex);
 
   if (meaningfulIndex === -1) {
@@ -124,8 +136,8 @@ function parseBlock(lines, startIndex, indent) {
  * @param {number} indent
  * @returns {{ value: Record<string, any>, nextIndex: number }}
  */
-function parseMapping(lines, startIndex, indent) {
-  const output = {};
+function parseMapping(lines: string[], startIndex: number, indent: number): ParseResult<FrontmatterObject> {
+  const output: FrontmatterObject = {};
   let index = startIndex;
 
   while (index < lines.length) {
@@ -188,8 +200,8 @@ function parseMapping(lines, startIndex, indent) {
  * @param {number} indent
  * @returns {{ value: any[], nextIndex: number }}
  */
-function parseSequence(lines, startIndex, indent) {
-  const output = [];
+function parseSequence(lines: string[], startIndex: number, indent: number): ParseResult<FrontmatterValue[]> {
+  const output: FrontmatterValue[] = [];
   let index = startIndex;
 
   while (index < lines.length) {
@@ -244,7 +256,7 @@ function parseSequence(lines, startIndex, indent) {
  * @param {any} value
  * @returns {string}
  */
-function formatScalar(value) {
+function formatScalar(value: FrontmatterValue): string {
   if (value === null) {
     return "null";
   }
@@ -266,7 +278,7 @@ function formatScalar(value) {
  * @param {unknown} value
  * @returns {boolean}
  */
-function isPlainObject(value) {
+function isPlainObject(value: unknown): value is FrontmatterObject {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
@@ -277,7 +289,7 @@ function isPlainObject(value) {
  * @param {number} [indent=0]
  * @returns {string}
  */
-function stringifyNode(value, indent = 0) {
+function stringifyNode(value: FrontmatterValue, indent = 0): string {
   if (Array.isArray(value)) {
     return value
       .map((item) => {
@@ -313,7 +325,7 @@ function stringifyNode(value, indent = 0) {
  * @param {string} text
  * @returns {{ frontmatter: Record<string, any>, body: string }}
  */
-export function splitFrontmatter(text) {
+export function splitFrontmatter(text: string): { frontmatter: FrontmatterObject; body: string } {
   const normalized = text.replaceAll("\r\n", "\n");
 
   if (!normalized.startsWith("---\n")) {
@@ -329,8 +341,9 @@ export function splitFrontmatter(text) {
   const body = normalized.slice(endMarker + 5).trimStart();
   const lines = rawFrontmatter.split("\n");
   const parsed = parseBlock(lines, 0, 0);
+  const frontmatter = isPlainObject(parsed.value) ? parsed.value : {};
 
-  return { frontmatter: parsed.value, body };
+  return { frontmatter, body };
 }
 
 /**
@@ -339,12 +352,12 @@ export function splitFrontmatter(text) {
  * @param {Record<string, any>} frontmatter
  * @returns {string}
  */
-export function stringifyFrontmatter(frontmatter) {
+export function stringifyFrontmatter(frontmatter: Record<string, unknown>): string {
   if (!frontmatter || Object.keys(frontmatter).length === 0) {
     return "";
   }
 
-  return `---\n${stringifyNode(frontmatter)}\n---\n\n`;
+  return `---\n${stringifyNode(frontmatter as FrontmatterObject)}\n---\n\n`;
 }
 
 /**
@@ -354,10 +367,10 @@ export function stringifyFrontmatter(frontmatter) {
  * @param {any} [nextValue={}]
  * @returns {any}
  */
-export function mergeFrontmatter(baseValue = {}, nextValue = {}) {
+export function mergeFrontmatter(baseValue: unknown = {}, nextValue: unknown = {}): unknown {
   if (Array.isArray(baseValue) && Array.isArray(nextValue)) {
     const seen = new Set();
-    const merged = [];
+    const merged: unknown[] = [];
 
     for (const item of [...baseValue, ...nextValue]) {
       const key = JSON.stringify(item);
@@ -375,7 +388,7 @@ export function mergeFrontmatter(baseValue = {}, nextValue = {}) {
 
     for (const [key, value] of Object.entries(nextValue)) {
       if (key in merged) {
-        merged[key] = mergeFrontmatter(merged[key], value);
+        merged[key] = mergeFrontmatter(merged[key], value) as FrontmatterValue;
       } else {
         merged[key] = value;
       }

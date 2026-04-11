@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
 import crypto from "node:crypto";
-import path from "node:path";
 
-import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.mjs";
+import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
 import {
   ensureDirectory,
   loadJsonFile,
@@ -12,27 +11,38 @@ import {
   resolveWithinRoot,
   writeJsonFile,
   writeTextFile
-} from "./lib/fs-utils.mjs";
-import { renderMarkdown } from "./lib/markdown.mjs";
+} from "./lib/fs-utils.js";
+import { renderMarkdown } from "./lib/markdown.js";
+import { configuredSet, SYSTEM_CONFIG } from "./config.js";
+import type { MutationIndexUpdate, MutationPageAction, MutationPlan, MutationResult } from "./lib/contracts.js";
 
-const VALID_ACTIONS = new Set(["create", "update", "noop"]);
+interface IdempotencyLedgerRecord {
+  path: string;
+  plan_id: string;
+  hash: string;
+  applied_at: string;
+}
+
+type IdempotencyLedger = Record<string, IdempotencyLedgerRecord>;
+
+const VALID_ACTIONS = configuredSet(SYSTEM_CONFIG.mutation.validActions);
 
 /**
  * Apply a canonical mutation plan to wiki markdown files and index pages.
  */
 
-async function main() {
+async function main(): Promise<void> {
   const args = parseArgs();
   const vaultRoot = resolveVaultRoot(args.vault);
   const plan = await readJsonInput(args.input);
   validatePlan(plan);
 
-  const runtimeDir = resolveWithinRoot(vaultRoot, "state/runtime");
-  const ledgerPath = path.join(runtimeDir, "idempotency-keys.json");
+  const runtimeDir = resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.runtimeDir);
+  const ledgerPath = resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.idempotencyLedgerPath);
   await ensureDirectory(runtimeDir);
-  const ledger = await loadJsonFile(ledgerPath, {});
+  const ledger = await loadJsonFile<IdempotencyLedger>(ledgerPath, {});
 
-  const result = {
+  const result: MutationResult = {
     plan_id: plan.plan_id,
     status: "applied",
     created: [],
@@ -69,8 +79,12 @@ async function main() {
  *
  * @param {unknown} plan
  */
-function validatePlan(plan) {
-  if (!plan || typeof plan !== "object") {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function validatePlan(plan: unknown): asserts plan is MutationPlan {
+  if (!isRecord(plan)) {
     throw new Error("Mutation plan must be a JSON object");
   }
 
@@ -92,7 +106,7 @@ function validatePlan(plan) {
  *
  * @param {{ action?: string, path?: string }} action
  */
-function assertValidAction(action) {
+function assertValidAction(action: Pick<MutationPageAction, "action" | "path">): void {
   if (!VALID_ACTIONS.has(action.action)) {
     throw new Error(`Unsupported action "${action.action}" for path ${action.path}`);
   }
@@ -104,7 +118,7 @@ function assertValidAction(action) {
  * @param {string} value
  * @returns {string}
  */
-function ledgerHash(value) {
+function ledgerHash(value: string): string {
   return crypto.createHash("sha1").update(value).digest("hex");
 }
 
@@ -113,7 +127,7 @@ function ledgerHash(value) {
  *
  * @returns {string}
  */
-function currentDate() {
+function currentDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
@@ -128,7 +142,19 @@ function currentDate() {
  *   result: { created: string[], updated: string[], skipped: string[], idempotent_hits: string[] }
  * }} context
  */
-async function applyPageAction({ vaultRoot, plan, action, ledger, result }) {
+async function applyPageAction({
+  vaultRoot,
+  plan,
+  action,
+  ledger,
+  result
+}: {
+  vaultRoot: string;
+  plan: MutationPlan;
+  action: MutationPageAction;
+  ledger: IdempotencyLedger;
+  result: MutationResult;
+}): Promise<void> {
   if (!action || typeof action !== "object") {
     throw new Error("page_actions[] entries must be objects");
   }
@@ -173,7 +199,7 @@ async function applyPageAction({ vaultRoot, plan, action, ledger, result }) {
 
   const rendered = renderMarkdown(action.path, existingText, action.payload || {}, {
     updatedDate: currentDate(),
-    updatedBy: "apply-update.mjs"
+    updatedBy: SYSTEM_CONFIG.mutation.applyUpdateActor
   });
 
   if (existingText !== null && rendered === existingText) {
@@ -218,7 +244,17 @@ async function applyPageAction({ vaultRoot, plan, action, ledger, result }) {
  *   result: { created: string[], updated: string[], skipped: string[] }
  * }} context
  */
-async function applyIndexUpdate({ vaultRoot, plan, update, result }) {
+async function applyIndexUpdate({
+  vaultRoot,
+  plan,
+  update,
+  result
+}: {
+  vaultRoot: string;
+  plan: MutationPlan;
+  update: MutationIndexUpdate;
+  result: MutationResult;
+}): Promise<void> {
   if (!update || typeof update !== "object") {
     throw new Error("index_updates[] entries must be objects");
   }
@@ -230,18 +266,21 @@ async function applyIndexUpdate({ vaultRoot, plan, update, result }) {
   const absolutePath = resolveWithinRoot(vaultRoot, update.path);
   const existingText = await readTextIfExists(absolutePath);
   const exists = existingText !== null;
-  const sectionName = typeof update.section === "string" && update.section.trim() ? update.section.trim() : "Entries";
+  const sectionName =
+    typeof update.section === "string" && update.section.trim()
+      ? update.section.trim()
+      : SYSTEM_CONFIG.mutation.defaultIndexSection;
   const entries = Array.isArray(update.entries_to_add) ? update.entries_to_add.filter(Boolean) : [];
 
   const rendered = renderMarkdown(update.path, existingText, {
-    title: exists ? undefined : "Index",
+    title: exists ? undefined : SYSTEM_CONFIG.mutation.defaultIndexTitle,
     change_reason: `Index update from ${plan.plan_id}`,
     sections: {
       [sectionName]: entries
     }
   }, {
     updatedDate: currentDate(),
-    updatedBy: "apply-update.mjs"
+    updatedBy: SYSTEM_CONFIG.mutation.applyUpdateActor
   });
 
   if (existingText !== null && rendered === existingText) {

@@ -5,16 +5,23 @@
   "description": "Deterministic Node.js tooling for a persistent wiki knowledge system.",
   "type": "module",
   "scripts": {
-    "init-db": "node tools/init-db.mjs",
-    "apply-update": "node tools/apply-update.mjs",
-    "feedback-record": "node tools/feedback-record.mjs",
-    "reindex": "node tools/reindex.mjs",
-    "search": "node tools/search.mjs",
-    "lint": "node tools/lint.mjs",
-    "health-check": "node tools/health-check.mjs",
-    "commit": "node tools/commit.mjs"
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "init-db": "node dist/tools/init-db.js",
+    "apply-update": "node dist/tools/apply-update.js",
+    "feedback-record": "node dist/tools/feedback-record.js",
+    "reindex": "node dist/tools/reindex.js",
+    "search": "node dist/tools/search.js",
+    "lint": "node dist/tools/lint.js",
+    "health-check": "node dist/tools/health-check.js",
+    "commit": "node dist/tools/commit.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
   }
 }

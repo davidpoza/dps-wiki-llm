@@ -5,11 +5,14 @@ This directory contains importable n8n workflow JSON files aligned with the scri
 ## Assumptions
 
 - repository mounted inside the n8n container at `/app`
+- repository dependencies installed under `/app` with `npm install`, which builds `dist/`
 - Obsidian vault mounted inside the n8n container at `/data/vault`
 - `Execute Command` enabled in self-hosted n8n
 - `Local File Trigger` enabled in self-hosted n8n if you want reactive ingestion from `raw/`
 
 If your paths differ, update the command strings and watched paths after importing.
+
+The workflow command nodes use `npm --silent --prefix /app run ...` so stdout remains parseable JSON.
 
 ## Included Workflows
 
@@ -20,16 +23,16 @@ If your paths differ, update the command strings and watched paths after importi
 - `workflows/kb-answer-blueprint.json`
   - blueprint
   - webhook or manual trigger
-  - runs `search.mjs`, returns top-k wiki context, and prepares the packet that your LLM node should consume
+  - runs `search.ts`, returns top-k wiki context, and prepares the packet that your LLM node should consume
   - keeps answer generation separate from feedback propagation
 
 - `workflows/kb-weekly-lint.json`
   - runnable
-  - schedule plus manual trigger for `lint.mjs`
+  - schedule plus manual trigger for `lint.ts`
 
 - `workflows/kb-monthly-health-check.json`
   - runnable
-  - schedule plus manual trigger for `health-check.mjs`
+  - schedule plus manual trigger for `health-check.ts`
 
 - `workflows/kb-apply-feedback.json`
   - runnable

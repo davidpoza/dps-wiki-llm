@@ -28,19 +28,19 @@ actor "User query" as userQuery
 
 rectangle "raw/**\nEvent stream" as raw #E7F5FF
 rectangle "n8n trigger\n(raw/** only)" as n8n #FFF3BF
-rectangle "ingest-source.mjs\nnormalized source payload" as ingest #FFF3BF
+rectangle "ingest-source.ts\nnormalized source payload" as ingest #FFF3BF
 rectangle "LLM planner\nMutation Plan JSON" as planner #FFF3BF
-rectangle "apply-update.mjs\nidempotent file updates" as apply #DFF3E4
-rectangle "reindex.mjs\nSQLite FTS rebuild" as reindex #FFF3BF
-rectangle "commit.mjs\nchange log + git commit" as commit #FFF3BF
+rectangle "apply-update.ts\nidempotent file updates" as apply #DFF3E4
+rectangle "reindex.ts\nSQLite FTS rebuild" as reindex #FFF3BF
+rectangle "commit.ts\nchange log + git commit" as commit #FFF3BF
 
 database "state/kb.db\nFTS index" as db #E7F5FF
 folder "wiki/\ncurated knowledge" as wiki #E7F5FF
 folder "outputs/\nanswer artifacts" as outputs #E7F5FF
 
-rectangle "search.mjs\nretrieve top-k docs" as search #FFF3BF
+rectangle "search.ts\nretrieve top-k docs" as search #FFF3BF
 rectangle "LLM answer synthesis" as answer #FFF3BF
-rectangle "feedback-record.mjs\nfeedback decision + optional plan" as feedback #DFF3E4
+rectangle "feedback-record.ts\nfeedback decision + optional plan" as feedback #DFF3E4
 
 rawEvent --> raw
 raw --> n8n : file event

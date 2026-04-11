@@ -50,7 +50,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return [{\n  json: {\n    plan_input_path: '/data/vault/state/tmp/ingest-plan.json',\n    commit_input_path: '/data/vault/state/tmp/ingest-commit.json',\n    note: 'Replace this node with ingest-source.mjs plus your LLM planner. Downstream nodes assume a valid Mutation Plan JSON file exists at plan_input_path.'\n  }\n}];"
+        "jsCode": "return [{\n  json: {\n    plan_input_path: '/data/vault/state/tmp/ingest-plan.json',\n    commit_input_path: '/data/vault/state/tmp/ingest-commit.json',\n    note: 'Replace this node with ingest-source.ts plus your LLM planner. Downstream nodes assume a valid Mutation Plan JSON file exists at plan_input_path.'\n  }\n}];"
       },
       "id": "593c4c7c-23b5-4577-a117-81b6bfa9517d",
       "name": "TODO Planner Output",
@@ -65,11 +65,11 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node /app/tools/apply-update.mjs --vault /data/vault --input \" + $json.plan_input_path }}",
+        "command": "={{ \"npm --silent --prefix /app run apply-update -- --vault /data/vault --input \" + $json.plan_input_path }}",
         "executeOnce": true
       },
       "id": "779d37d9-3079-4e75-99dc-092929af9df7",
-      "name": "Run apply-update.mjs",
+      "name": "Run apply-update.ts",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
@@ -79,11 +79,11 @@
     },
     {
       "parameters": {
-        "command": "node /app/tools/reindex.mjs --vault /data/vault",
+        "command": "npm --silent --prefix /app run reindex -- --vault /data/vault",
         "executeOnce": true
       },
       "id": "1f8f0d2f-6193-4687-b8cc-1fc6eea2b7f4",
-      "name": "Run reindex.mjs",
+      "name": "Run reindex.ts",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
@@ -93,11 +93,11 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node /app/tools/commit.mjs --vault /data/vault --input \" + $json.commit_input_path }}",
+        "command": "={{ \"npm --silent --prefix /app run commit -- --vault /data/vault --input \" + $json.commit_input_path }}",
         "executeOnce": true
       },
       "id": "db6f28cf-7ded-420b-8a4c-78ddd9129115",
-      "name": "Run commit.mjs",
+      "name": "Run commit.ts",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
@@ -144,29 +144,29 @@
       "main": [
         [
           {
-            "node": "Run apply-update.mjs",
+            "node": "Run apply-update.ts",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Run apply-update.mjs": {
+    "Run apply-update.ts": {
       "main": [
         [
           {
-            "node": "Run reindex.mjs",
+            "node": "Run reindex.ts",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Run reindex.mjs": {
+    "Run reindex.ts": {
       "main": [
         [
           {
-            "node": "Run commit.mjs",
+            "node": "Run commit.ts",
             "type": "main",
             "index": 0
           }

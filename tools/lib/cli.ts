@@ -1,5 +1,8 @@
 import fs from "node:fs/promises";
 
+import { SYSTEM_CONFIG } from "../config.js";
+import type { CliArgs } from "./contracts.js";
+
 /**
  * Shared CLI helpers for the repository's JSON-first Node.js scripts.
  */
@@ -18,10 +21,10 @@ import fs from "node:fs/promises";
  *   pretty: boolean
  * }}
  */
-export function parseArgs(argv = process.argv.slice(2)) {
-  const args = {
+export function parseArgs(argv: string[] = process.argv.slice(2)): CliArgs {
+  const args: CliArgs = {
     _: [],
-    vault: process.cwd(),
+    vault: SYSTEM_CONFIG.cli.defaultVault(),
     input: null,
     db: null,
     limit: null,
@@ -87,15 +90,15 @@ export function parseArgs(argv = process.argv.slice(2)) {
  * @param {string | null} inputPath
  * @returns {Promise<any>}
  */
-export async function readJsonInput(inputPath) {
+export async function readJsonInput<T = unknown>(inputPath: string | null): Promise<T> {
   if (inputPath) {
-    return JSON.parse(await fs.readFile(inputPath, "utf8"));
+    return JSON.parse(await fs.readFile(inputPath, "utf8")) as T;
   }
 
   if (!process.stdin.isTTY) {
     const raw = await readStdin();
     if (raw.trim()) {
-      return JSON.parse(raw);
+      return JSON.parse(raw) as T;
     }
   }
 
@@ -108,7 +111,7 @@ export async function readJsonInput(inputPath) {
  * @param {unknown} value
  * @param {boolean} [pretty=true]
  */
-export function writeJsonStdout(value, pretty = true) {
+export function writeJsonStdout(value: unknown, pretty: boolean = SYSTEM_CONFIG.cli.prettyJson): void {
   const indent = pretty ? 2 : 0;
   process.stdout.write(`${JSON.stringify(value, null, indent)}\n`);
 }
@@ -118,8 +121,8 @@ export function writeJsonStdout(value, pretty = true) {
  *
  * @returns {Promise<string>}
  */
-async function readStdin() {
-  const chunks = [];
+async function readStdin(): Promise<string> {
+  const chunks: string[] = [];
 
   for await (const chunk of process.stdin) {
     chunks.push(typeof chunk === "string" ? chunk : chunk.toString("utf8"));

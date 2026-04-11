@@ -2,17 +2,41 @@
 
 import crypto from "node:crypto";
 
-import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.mjs";
-import { ensureDirectory, resolveVaultRoot, resolveWithinRoot, writeJsonFile, writeTextFile } from "./lib/fs-utils.mjs";
+import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { ensureDirectory, resolveVaultRoot, resolveWithinRoot, writeJsonFile, writeTextFile } from "./lib/fs-utils.js";
+import { configuredSet, SYSTEM_CONFIG } from "./config.js";
+import type {
+  FeedbackCandidateItem,
+  FeedbackDecision,
+  FeedbackOutcome,
+  FeedbackRecord,
+  MarkdownPayload,
+  MutationPlan,
+  PageActionKind
+} from "./lib/contracts.js";
 
-const VALID_DECISIONS = new Set(["none", "output_only", "propagate"]);
-const VALID_OUTCOMES = new Set(["applied", "rejected", "deferred"]);
+interface GroupedFeedbackEntry {
+  path: string;
+  action: PageActionKind;
+  doc_type: string;
+  change_types: Set<string>;
+  item_ids: string[];
+  payload: MarkdownPayload & {
+    sections: Record<string, string[]>;
+    related_links: string[];
+    frontmatter: Record<string, unknown>;
+    change_reason: string;
+  };
+}
+
+const VALID_DECISIONS = configuredSet(SYSTEM_CONFIG.feedback.validDecisions);
+const VALID_OUTCOMES = configuredSet(SYSTEM_CONFIG.feedback.validOutcomes);
 
 /**
  * Normalize feedback decisions and optionally derive a follow-up mutation plan.
  */
 
-async function main() {
+async function main(): Promise<void> {
   const args = parseArgs();
   const vaultRoot = resolveVaultRoot(args.vault);
   const input = await readJsonInput(args.input);
@@ -29,11 +53,11 @@ async function main() {
   const summaryPath = buildFeedbackSummaryPath(record, stamp);
 
   if (args.write) {
-    await ensureDirectory(resolveWithinRoot(vaultRoot, "state/feedback"));
+    await ensureDirectory(resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.feedbackDir));
     await writeJsonFile(resolveWithinRoot(vaultRoot, recordPath), record);
     await writeTextFile(resolveWithinRoot(vaultRoot, summaryPath), renderSummary(record));
 
-    if (mutationPlan) {
+    if (mutationPlan && record.mutation_plan_ref) {
       await writeJsonFile(resolveWithinRoot(vaultRoot, record.mutation_plan_ref), mutationPlan);
     }
   }
@@ -54,7 +78,7 @@ async function main() {
  *
  * @returns {string}
  */
-function nowStamp() {
+function nowStamp(): string {
   return new Date().toISOString().replaceAll(":", "-");
 }
 
@@ -64,12 +88,12 @@ function nowStamp() {
  * @param {string} value
  * @returns {string}
  */
-function slugify(value) {
+function slugify(value: string, maxLength = SYSTEM_CONFIG.feedback.artifactSlugMaxLength): string {
   return value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
+    .slice(0, maxLength);
 }
 
 /**
@@ -78,7 +102,7 @@ function slugify(value) {
  * @param {string} value
  * @returns {string}
  */
-function stableHash(value) {
+function stableHash(value: string): string {
   return crypto.createHash("sha1").update(value).digest("hex").slice(0, 10);
 }
 
@@ -89,8 +113,12 @@ function stableHash(value) {
  * @param {number} index
  * @returns {Record<string, any>}
  */
-function normalizeCandidateItem(item, index) {
-  if (!item || typeof item !== "object") {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function normalizeCandidateItem(item: unknown, index: number): FeedbackCandidateItem {
+  if (!isRecord(item)) {
     throw new Error(`candidate_items[${index}] must be an object`);
   }
 
@@ -106,22 +134,22 @@ function normalizeCandidateItem(item, index) {
     throw new Error(`candidate_items[${index}] requires novelty`);
   }
 
-  const outcome = item.outcome || "deferred";
+  const outcome = (typeof item.outcome === "string" && item.outcome ? item.outcome : "deferred") as FeedbackOutcome;
   if (!VALID_OUTCOMES.has(outcome)) {
     throw new Error(`candidate_items[${index}] has invalid outcome: ${outcome}`);
   }
 
   return {
-    item_id: item.item_id || `item-${String(index + 1).padStart(3, "0")}`,
-    target_note: item.target_note,
-    change_type: item.change_type,
-    novelty: item.novelty,
-    source_support: Array.isArray(item.source_support) ? item.source_support : [],
+    item_id: typeof item.item_id === "string" && item.item_id.trim() ? item.item_id : `item-${String(index + 1).padStart(3, "0")}`,
+    target_note: item.target_note as string,
+    change_type: item.change_type as string,
+    novelty: item.novelty as string,
+    source_support: Array.isArray(item.source_support) ? item.source_support.filter((value) => typeof value === "string") : [],
     proposed_content: typeof item.proposed_content === "string" ? item.proposed_content.trim() : "",
     section: typeof item.section === "string" ? item.section.trim() : "",
-    action: typeof item.action === "string" ? item.action : "update",
-    related_links: Array.isArray(item.related_links) ? item.related_links.filter(Boolean) : [],
-    frontmatter: item.frontmatter && typeof item.frontmatter === "object" ? item.frontmatter : {},
+    action: (typeof item.action === "string" ? item.action : SYSTEM_CONFIG.feedback.defaultCandidateAction) as PageActionKind,
+    related_links: Array.isArray(item.related_links) ? item.related_links.filter((value) => typeof value === "string") : [],
+    frontmatter: isRecord(item.frontmatter) ? item.frontmatter : {},
     outcome
   };
 }
@@ -132,8 +160,8 @@ function normalizeCandidateItem(item, index) {
  * @param {unknown} input
  * @returns {Record<string, any>}
  */
-function normalizeFeedbackRecord(input) {
-  if (!input || typeof input !== "object") {
+function normalizeFeedbackRecord(input: unknown): FeedbackRecord {
+  if (!isRecord(input)) {
     throw new Error("Feedback input must be a JSON object");
   }
 
@@ -141,7 +169,7 @@ function normalizeFeedbackRecord(input) {
     throw new Error("Feedback input requires output_id");
   }
 
-  if (!VALID_DECISIONS.has(input.decision)) {
+  if (!VALID_DECISIONS.has(input.decision as FeedbackDecision)) {
     throw new Error(`Feedback input requires decision in: ${Array.from(VALID_DECISIONS).join(", ")}`);
   }
 
@@ -160,13 +188,13 @@ function normalizeFeedbackRecord(input) {
   }
 
   return {
-    output_id: input.output_id,
-    decision: input.decision,
+    output_id: input.output_id as string,
+    decision: input.decision as FeedbackDecision,
     reason: typeof input.reason === "string" ? input.reason : "",
-    source_refs: Array.isArray(input.source_refs) ? input.source_refs : [],
+    source_refs: Array.isArray(input.source_refs) ? input.source_refs.filter((value) => typeof value === "string") : [],
     candidate_items: candidateItems,
     affected_notes: Array.isArray(input.affected_notes)
-      ? input.affected_notes
+      ? input.affected_notes.filter((value) => typeof value === "string")
       : candidateItems.filter((item) => item.outcome === "applied").map((item) => item.target_note)
   };
 }
@@ -177,23 +205,8 @@ function normalizeFeedbackRecord(input) {
  * @param {string} changeType
  * @returns {string}
  */
-function inferSectionForChangeType(changeType) {
-  switch (changeType) {
-    case "net_new_fact":
-    case "fact":
-    case "correction":
-      return "Facts";
-    case "better_wording":
-      return "Interpretation";
-    case "new_link":
-      return "Related";
-    case "open_question":
-      return "Open Questions";
-    case "split_suggestion":
-      return "Open Questions";
-    default:
-      return "Interpretation";
-  }
+function inferSectionForChangeType(changeType: string): string {
+  return SYSTEM_CONFIG.feedback.changeTypeSections[changeType] || SYSTEM_CONFIG.feedback.defaultSection;
 }
 
 /**
@@ -207,13 +220,13 @@ function inferSectionForChangeType(changeType) {
  * }} record
  * @returns {Record<string, any>}
  */
-function buildMutationPlan(record) {
+function buildMutationPlan(record: FeedbackRecord): MutationPlan {
   const appliedItems = record.candidate_items.filter((item) => item.outcome === "applied");
-  const grouped = new Map();
+  const grouped = new Map<string, GroupedFeedbackEntry>();
 
   for (const item of appliedItems) {
     const key = item.target_note;
-    const entry =
+    const entry: GroupedFeedbackEntry =
       grouped.get(key) ||
       {
         path: item.target_note,
@@ -277,25 +290,11 @@ function buildMutationPlan(record) {
  * @param {string} targetNote
  * @returns {string}
  */
-function inferDocType(targetNote) {
-  if (targetNote.includes("/concepts/")) {
-    return "concept";
-  }
-
-  if (targetNote.includes("/entities/")) {
-    return "entity";
-  }
-
-  if (targetNote.includes("/topics/")) {
-    return "topic";
-  }
-
-  if (targetNote.includes("/sources/")) {
-    return "source";
-  }
-
-  if (targetNote.includes("/analyses/")) {
-    return "analysis";
+function inferDocType(targetNote: string): string {
+  for (const [folder, docType] of Object.entries(SYSTEM_CONFIG.wiki.docTypeFolders)) {
+    if (targetNote.includes(`/${folder}/`)) {
+      return docType;
+    }
   }
 
   return "unknown";
@@ -308,8 +307,8 @@ function inferDocType(targetNote) {
  * @param {string} stamp
  * @returns {string}
  */
-function buildFeedbackRecordPath(record, stamp) {
-  return `state/feedback/${stamp}-${slugify(record.output_id)}-feedback.json`;
+function buildFeedbackRecordPath(record: Pick<FeedbackRecord, "output_id">, stamp: string): string {
+  return `${SYSTEM_CONFIG.paths.feedbackDir}/${stamp}-${slugify(record.output_id)}-feedback.json`;
 }
 
 /**
@@ -319,8 +318,8 @@ function buildFeedbackRecordPath(record, stamp) {
  * @param {string} stamp
  * @returns {string}
  */
-function buildFeedbackSummaryPath(record, stamp) {
-  return `state/feedback/${stamp}-${slugify(record.output_id)}-feedback-summary.md`;
+function buildFeedbackSummaryPath(record: Pick<FeedbackRecord, "output_id">, stamp: string): string {
+  return `${SYSTEM_CONFIG.paths.feedbackDir}/${stamp}-${slugify(record.output_id)}-feedback-summary.md`;
 }
 
 /**
@@ -330,8 +329,8 @@ function buildFeedbackSummaryPath(record, stamp) {
  * @param {string} stamp
  * @returns {string}
  */
-function buildMutationPlanPath(record, stamp) {
-  return `state/feedback/${stamp}-${slugify(record.output_id)}-mutation-plan.json`;
+function buildMutationPlanPath(record: Pick<FeedbackRecord, "output_id">, stamp: string): string {
+  return `${SYSTEM_CONFIG.paths.feedbackDir}/${stamp}-${slugify(record.output_id)}-mutation-plan.json`;
 }
 
 /**
@@ -340,7 +339,7 @@ function buildMutationPlanPath(record, stamp) {
  * @param {{ output_id: string, decision: string, reason: string, candidate_items: Record<string, any>[] }} record
  * @returns {string}
  */
-function renderSummary(record) {
+function renderSummary(record: FeedbackRecord): string {
   const lines = [
     `# Feedback Summary: ${record.output_id}`,
     "",
