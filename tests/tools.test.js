@@ -186,12 +186,45 @@ test("n8n workflow files remain valid JSON", async () => {
 
   assert.ok(files.length > 0);
 
+  const workflows = new Map();
+
   for (const file of files) {
     const workflow = JSON.parse(await readFile(path.join(workflowDir, file)));
+    workflows.set(file, workflow);
     assert.equal(typeof workflow.name, "string");
     assert.ok(Array.isArray(workflow.nodes));
     assert.ok(workflow.connections && typeof workflow.connections === "object");
+
+    for (const node of workflow.nodes) {
+      if (node.type === "n8n-nodes-base.code") {
+        assert.doesNotThrow(() => new Function(node.parameters.jsCode), `${file} :: ${node.name}`);
+      }
+    }
   }
+
+  const answer = workflows.get("kb-answer-blueprint.json");
+  assert.equal(answer.name, "KB - Answer OpenRouter Manual");
+  assert.ok(answer.nodes.some((node) => node.name === "Call OpenRouter Answer"));
+  assert.ok(answer.nodes.some((node) => node.name === "Call OpenRouter Feedback"));
+  assert.ok(answer.nodes.some((node) => node.name === "Validate feedback-record.ts"));
+  assert.match(
+    answer.nodes.find((node) => node.name === "Build OpenRouter Answer Request").parameters.jsCode,
+    /OPENROUTER_MODEL/
+  );
+
+  const ingest = workflows.get("kb-ingest-raw-blueprint.json");
+  assert.equal(ingest.name, "KB - Ingest Raw OpenRouter Manual");
+  assert.ok(ingest.nodes.some((node) => node.name === "Call OpenRouter Ingest Planner"));
+  assert.match(
+    ingest.nodes.find((node) => node.name === "Build Ingest Response").parameters.jsCode,
+    /llm_plan_approval_required/
+  );
+
+  const feedback = workflows.get("kb-apply-feedback.json");
+  assert.match(
+    feedback.nodes.find((node) => node.name === "Prepare Feedback Payload").parameters.jsCode,
+    /approved=true/
+  );
 });
 
 test("apply-update creates, updates, updates indexes, and records idempotency", async () => {

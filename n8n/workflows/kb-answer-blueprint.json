@@ -1,5 +1,5 @@
 {
-  "name": "KB - Answer Blueprint",
+  "name": "KB - Answer OpenRouter Manual",
   "nodes": [
     {
       "parameters": {
@@ -16,7 +16,9 @@
       ],
       "id": "6d5eb332-6ad7-4b8e-a5f0-8d8b66432667",
       "name": "Webhook",
-      "webhookId": "kb-answer"
+      "webhookId": "kb-answer",
+      "notesInFlow": true,
+      "notes": "Keep inactive for V1 if operating from the manual n8n UI only."
     },
     {
       "parameters": {},
@@ -113,10 +115,10 @@
     },
     {
       "parameters": {
-        "jsCode": "const packet = $input.first().json;\nconst answerRecordPayload = {\n  answer_record: packet.answer_record,\n  answer: '<replace with provider LLM answer text>'\n};\nreturn [{\n  json: {\n    status: 'needs_provider_llm_node',\n    question: packet.question,\n    context_docs: packet.context_docs,\n    retrieval: packet.retrieval,\n    answer_record: packet.answer_record,\n    llm_instructions: [\n      'Insert your provider-specific LLM node after Parse Answer Context.',\n      'Use context_docs[*].body as grounded markdown context.',\n      'Generate the answer first; do not update wiki directly here.',\n      'Then call answer-record.ts with { answer_record, answer }.',\n      'Finally produce a canonical Feedback Record and send it to KB - Apply Feedback.'\n    ],\n    answer_record_command: 'npm --silent --prefix /app run answer-record -- --vault /data/vault',\n    answer_record_payload_shape: answerRecordPayload,\n    next_workflow: 'KB - Apply Feedback'\n  }\n}];"
+        "jsCode": "const packet = $input.first().json;\nconst baseUrl = (process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/+$/, '');\nconst model = (process.env.OPENROUTER_MODEL || '').trim();\nconst temperature = Number.isFinite(Number(process.env.OPENROUTER_ANSWER_TEMPERATURE))\n  ? Number(process.env.OPENROUTER_ANSWER_TEMPERATURE)\n  : 0.2;\nconst contextDocs = Array.isArray(packet.context_docs) ? packet.context_docs : [];\nconst requestBody = {\n  ...(model ? { model } : {}),\n  stream: false,\n  temperature,\n  messages: [\n    {\n      role: 'system',\n      content: [\n        'You answer questions using only the provided markdown wiki context.',\n        'If the context is insufficient, say what is missing instead of inventing facts.',\n        'Do not mutate the wiki and do not claim to have updated files.',\n        'Return concise markdown suitable for an answer artifact.'\n      ].join(' ')\n    },\n    {\n      role: 'user',\n      content: JSON.stringify({\n        question: packet.question,\n        evidence_used: packet.answer_record?.evidence_used ?? [],\n        context_docs: contextDocs.map((doc) => ({\n          path: doc.path,\n          title: doc.title,\n          doc_type: doc.doc_type,\n          body: doc.body\n        }))\n      }, null, 2)\n    }\n  ]\n};\nreturn [{\n  json: {\n    ...packet,\n    openrouter_url: baseUrl + '/chat/completions',\n    openrouter_request: requestBody\n  }\n}];"
       },
-      "id": "ab13d918-54cb-4870-9563-f7bfb8de363b",
-      "name": "Build LLM Answer Request",
+      "id": "a2f6c7db-ef1b-4e08-aea8-f3d0f88211a1",
+      "name": "Build OpenRouter Answer Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -124,7 +126,210 @@
         16
       ],
       "notesInFlow": true,
-      "notes": "Provider-neutral blueprint: wire your AI node after Parse Answer Context. Keep answer generation separate from feedback propagation."
+      "notes": "Calls OpenRouter through an OpenAI-compatible chat completion request. Set OPENROUTER_API_KEY and optionally OPENROUTER_MODEL in n8n."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.openrouter_url }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.OPENROUTER_SITE_URL || 'https://localhost' }}"
+            },
+            {
+              "name": "X-OpenRouter-Title",
+              "value": "dps-wiki-llm"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
+        "options": {}
+      },
+      "id": "4031b912-0a1b-4e20-b96f-dbd60e47183f",
+      "name": "Call OpenRouter Answer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1380,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nconst choice = Array.isArray(response.choices) ? response.choices[0] : undefined;\nconst content = choice?.message?.content ?? choice?.text;\nconst answer = Array.isArray(content)\n  ? content.map((part) => typeof part === 'string' ? part : part?.text ?? '').join('').trim()\n  : typeof content === 'string'\n    ? content.trim()\n    : '';\nif (!answer) {\n  throw new Error('OpenRouter answer response did not include choices[0].message.content');\n}\nconst packet = $node['Build OpenRouter Answer Request'].json;\nreturn [{\n  json: {\n    ...packet,\n    answer,\n    openrouter_answer_meta: {\n      id: response.id ?? null,\n      model: response.model ?? null,\n      usage: response.usage ?? null,\n      finish_reason: choice?.finish_reason ?? null\n    }\n  }\n}];"
+      },
+      "id": "fa80dd97-7355-4cc3-9007-c240d5dcbec8",
+      "name": "Parse OpenRouter Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = {\n  answer_record: $json.answer_record,\n  answer: $json.answer\n};\nreturn [{\n  json: {\n    ...$json,\n    answer_record_payload: payload,\n    answer_record_payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
+      },
+      "id": "be2ba4b0-5bbf-4d5e-92d6-09c21ce4d38d",
+      "name": "Build Answer Record Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.answer_record_payload_b64) + \" | npm --silent --prefix /app run answer-record -- --vault /data/vault\" }}",
+        "executeOnce": true
+      },
+      "id": "3599503b-c7c4-46d7-8536-bbb3475f08e9",
+      "name": "Run answer-record.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2280,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('answer-record.ts returned empty stdout');\n}\nconst parsed = JSON.parse(stdout);\nreturn [{\n  json: {\n    ...$node['Build Answer Record Payload'].json,\n    answer_record_result: parsed,\n    answer_record: parsed.record\n  }\n}];"
+      },
+      "id": "a0a042e6-f9bd-49f4-a96e-b879667d5eb9",
+      "name": "Parse Answer Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2580,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const packet = $json;\nconst baseUrl = (process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/+$/, '');\nconst model = (process.env.OPENROUTER_MODEL || '').trim();\nconst contextDocs = Array.isArray(packet.context_docs) ? packet.context_docs : [];\nconst requestBody = {\n  ...(model ? { model } : {}),\n  stream: false,\n  temperature: 0,\n  messages: [\n    {\n      role: 'system',\n      content: [\n        'You produce only valid JSON matching the Feedback Record contract.',\n        'Valid decision values are none, output_only, and propagate.',\n        'Use propagate only for small reusable wiki changes grounded in the evidence_used paths.',\n        'Every candidate item must include item_id, target_note, change_type, novelty, source_support, proposed_content, and outcome.',\n        'Use outcome applied only for changes you recommend a human approve; otherwise use deferred or rejected.',\n        'Do not copy the whole answer into the wiki.'\n      ].join(' ')\n    },\n    {\n      role: 'user',\n      content: JSON.stringify({\n        output_id: packet.answer_record.output_id,\n        answer_record: packet.answer_record,\n        answer: packet.answer,\n        source_refs: packet.answer_record.evidence_used ?? [],\n        context_docs: contextDocs.map((doc) => ({\n          path: doc.path,\n          title: doc.title,\n          doc_type: doc.doc_type,\n          body: doc.body\n        })),\n        required_json_shape: {\n          output_id: packet.answer_record.output_id,\n          decision: 'none|output_only|propagate',\n          reason: 'short reason',\n          source_refs: packet.answer_record.evidence_used ?? [],\n          candidate_items: [],\n          affected_notes: []\n        }\n      }, null, 2)\n    }\n  ]\n};\nreturn [{\n  json: {\n    ...packet,\n    openrouter_url: baseUrl + '/chat/completions',\n    openrouter_request: requestBody\n  }\n}];"
+      },
+      "id": "d0157ec0-96ad-4083-a815-0fc3252eb053",
+      "name": "Build OpenRouter Feedback Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "Produces a proposed Feedback Record. The workflow validates it but does not apply wiki changes."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.openrouter_url }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.OPENROUTER_SITE_URL || 'https://localhost' }}"
+            },
+            {
+              "name": "X-OpenRouter-Title",
+              "value": "dps-wiki-llm"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
+        "options": {}
+      },
+      "id": "1aef9905-e1c9-4737-b8d5-53985dc98a59",
+      "name": "Call OpenRouter Feedback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3180,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function extractJson(text) {\n  const stripped = text.trim().replace(/^```(?:json)?\\s*/i, '').replace(/```$/i, '').trim();\n  try {\n    return JSON.parse(stripped);\n  } catch (error) {\n    const match = stripped.match(/\\{[\\s\\S]*\\}/);\n    if (!match) throw error;\n    return JSON.parse(match[0]);\n  }\n}\nconst raw = $input.first().json;\nconst response = raw.body ?? raw;\nconst choice = Array.isArray(response.choices) ? response.choices[0] : undefined;\nconst content = choice?.message?.content ?? choice?.text;\nconst text = Array.isArray(content)\n  ? content.map((part) => typeof part === 'string' ? part : part?.text ?? '').join('').trim()\n  : typeof content === 'string'\n    ? content.trim()\n    : '';\nif (!text) {\n  throw new Error('OpenRouter feedback response did not include JSON content');\n}\nconst proposedFeedback = extractJson(text);\nif (!proposedFeedback.output_id) {\n  proposedFeedback.output_id = $node['Parse Answer Record'].json.answer_record.output_id;\n}\nif (!Array.isArray(proposedFeedback.source_refs)) {\n  proposedFeedback.source_refs = $node['Parse Answer Record'].json.answer_record.evidence_used ?? [];\n}\nif (!Array.isArray(proposedFeedback.candidate_items)) {\n  proposedFeedback.candidate_items = [];\n}\nif (!Array.isArray(proposedFeedback.affected_notes)) {\n  proposedFeedback.affected_notes = proposedFeedback.candidate_items\n    .filter((item) => item.outcome === 'applied')\n    .map((item) => item.target_note)\n    .filter(Boolean);\n}\nconst packet = $node['Build OpenRouter Feedback Request'].json;\nreturn [{\n  json: {\n    ...packet,\n    proposed_feedback: proposedFeedback,\n    proposed_feedback_payload_b64: Buffer.from(JSON.stringify(proposedFeedback), 'utf8').toString('base64'),\n    openrouter_feedback_meta: {\n      id: response.id ?? null,\n      model: response.model ?? null,\n      usage: response.usage ?? null,\n      finish_reason: choice?.finish_reason ?? null\n    }\n  }\n}];"
+      },
+      "id": "48bfc6d5-6df4-4d97-95f2-af85f745967e",
+      "name": "Parse Proposed Feedback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3480,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.proposed_feedback_payload_b64) + \" | npm --silent --prefix /app run feedback-record -- --vault /data/vault --no-write\" }}",
+        "executeOnce": true
+      },
+      "id": "e17953a6-0f44-4956-aeb3-f130dbf91218",
+      "name": "Validate feedback-record.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        3780,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "Validates the proposed Feedback Record without writing state/feedback or mutating wiki."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('feedback-record.ts --no-write returned empty stdout');\n}\nconst validation = JSON.parse(stdout);\nreturn [{\n  json: {\n    ...$node['Parse Proposed Feedback'].json,\n    feedback_validation: validation\n  }\n}];"
+      },
+      "id": "1e3ec54d-42c9-4af0-9a75-34fca9787490",
+      "name": "Parse Feedback Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const feedback = $json.feedback_validation.record;\nreturn [{\n  json: {\n    status: 'answer_recorded_feedback_proposed',\n    question: $json.question,\n    answer: $json.answer,\n    answer_record: $json.answer_record,\n    output_path: $json.answer_record_result.output_path,\n    proposed_feedback: feedback,\n    approval_required: feedback.decision === 'propagate',\n    apply_feedback_workflow: 'KB - Apply Feedback',\n    approval_payload: {\n      approved: true,\n      feedback\n    },\n    openrouter_answer_meta: $json.openrouter_answer_meta,\n    openrouter_feedback_meta: $json.openrouter_feedback_meta\n  }\n}];"
+      },
+      "id": "e225f8ab-7f1e-45dd-b73f-1f34c0814f8e",
+      "name": "Build Answer Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4380,
+        16
+      ]
     }
   ],
   "connections": {
@@ -209,7 +414,128 @@
       "main": [
         [
           {
-            "node": "Build LLM Answer Request",
+            "node": "Build OpenRouter Answer Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build OpenRouter Answer Request": {
+      "main": [
+        [
+          {
+            "node": "Call OpenRouter Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenRouter Answer": {
+      "main": [
+        [
+          {
+            "node": "Parse OpenRouter Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse OpenRouter Answer": {
+      "main": [
+        [
+          {
+            "node": "Build Answer Record Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Answer Record Payload": {
+      "main": [
+        [
+          {
+            "node": "Run answer-record.ts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run answer-record.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Answer Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Answer Record": {
+      "main": [
+        [
+          {
+            "node": "Build OpenRouter Feedback Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build OpenRouter Feedback Request": {
+      "main": [
+        [
+          {
+            "node": "Call OpenRouter Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenRouter Feedback": {
+      "main": [
+        [
+          {
+            "node": "Parse Proposed Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Proposed Feedback": {
+      "main": [
+        [
+          {
+            "node": "Validate feedback-record.ts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate feedback-record.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Feedback Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Feedback Validation": {
+      "main": [
+        [
+          {
+            "node": "Build Answer Response",
             "type": "main",
             "index": 0
           }

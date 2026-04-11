@@ -31,7 +31,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst feedback = body.feedback ?? body;\nif (!feedback.output_id) {\n  feedback.output_id = `out-${new Date().toISOString().slice(0, 10)}-manual-feedback`;\n}\nif (!feedback.decision) {\n  feedback.decision = 'output_only';\n}\nif (!Array.isArray(feedback.candidate_items)) {\n  feedback.candidate_items = [];\n}\nreturn [{\n  json: {\n    feedback,\n    payload_b64: Buffer.from(JSON.stringify(feedback), 'utf8').toString('base64')\n  }\n}];"
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst feedback = body.feedback ?? body;\nif (!feedback.output_id) {\n  feedback.output_id = 'out-' + new Date().toISOString().slice(0, 10) + '-manual-feedback';\n}\nif (!feedback.decision) {\n  feedback.decision = 'output_only';\n}\nif (!Array.isArray(feedback.candidate_items)) {\n  feedback.candidate_items = [];\n}\nconst approved = body.approved === true || feedback.approved === true || body.approved === 'true' || feedback.approved === 'true';\nif (feedback.decision === 'propagate' && !approved) {\n  throw new Error('Human approval required: send approved=true with propagate feedback before applying wiki changes.');\n}\ndelete feedback.approved;\nreturn [{\n  json: {\n    approved,\n    feedback,\n    payload_b64: Buffer.from(JSON.stringify(feedback), 'utf8').toString('base64')\n  }\n}];"
       },
       "id": "b448c3d3-9d3d-4636-8b77-2fb8856db7de",
       "name": "Prepare Feedback Payload",
@@ -42,7 +42,7 @@
         16
       ],
       "notesInFlow": true,
-      "notes": "Accepts either the Feedback Record directly or a top-level field named feedback."
+      "notes": "Accepts either the Feedback Record directly or a top-level field named feedback. Propagation requires approved=true."
     },
     {
       "parameters": {

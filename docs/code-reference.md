@@ -69,9 +69,9 @@ This is the only local script that turns a raw event into a normalized ingestion
 - Accepts a Normalized Source Payload.
 - Builds a deterministic Mutation Plan that creates a `wiki/sources/` note and updates `INDEX.md`.
 - Includes idempotency keys, source references, and a matching Commit input payload.
-- Acts as a safe baseline planner when no provider-specific LLM planner is wired in.
+- Acts as the safe baseline planner for source-note creation.
 
-Replace this script in n8n when ingestion should also update concepts, entities, topics, or analyses from LLM planning.
+The production OpenRouter ingest workflow keeps this baseline and adds a separate LLM-proposed Mutation Plan for human review when ingestion should also update concepts, entities, topics, or analyses.
 
 ### `tools/reindex.ts`
 

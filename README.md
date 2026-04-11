@@ -17,7 +17,7 @@ The repository is responsible for:
 - generating maintenance reports
 - recording feedback and git-backed change logs
 
-The repository is not the orchestration layer. `n8n`, LLM planning, and answer synthesis are expected to sit around these scripts, not inside them.
+The repository is not the orchestration layer. `n8n`, LLM planning, and answer synthesis sit around these scripts, not inside them.
 
 ## Architecture Boundaries
 
@@ -32,7 +32,7 @@ Breaking the `raw/` versus `wiki/` boundary creates loops, noisy state, and non-
 
 ## Implemented Tooling
 
-The repo now includes the deterministic local toolchain. Provider-specific LLM planning and answer synthesis remain external orchestration steps.
+The repo now includes the deterministic local toolchain plus importable n8n workflows for a manual OpenRouter production cut. The scripts remain deterministic; OpenRouter calls live in n8n workflow nodes.
 
 | Script | Purpose | Main outputs |
 |---|---|---|
@@ -49,14 +49,19 @@ The repo now includes the deterministic local toolchain. Provider-specific LLM p
 | `health-check.ts` | Performs deeper semantic and traceability checks. | `state/maintenance/*-health-check.{json,md}` |
 | `commit.ts` | Stages material paths, writes a structured change log, and creates a git commit. | `state/change-log/**`, git commit |
 
-Main gaps relative to the target architecture:
+Production V1 gaps relative to the target architecture:
 
-- a richer LLM planner can replace `plan-source-note.ts` when ingestion should update concepts, entities, topics, or analyses
-- answer synthesis and feedback classification are provider-specific LLM steps outside this codebase
+- workflows should remain manually run until the VM, WebDAV behavior, and approval path are validated
+- the LLM ingest planner proposes richer wiki mutations, but human approval is still required before those changes are applied
+- scheduled maintenance and raw file watching are intentionally left inactive for the first production cut
 
 ## Code Documentation
 
 Detailed English documentation for every script and shared library module lives in [`docs/code-reference.md`](docs/code-reference.md).
+
+The production V1 runbook lives in [`docs/production-runbook.md`](docs/production-runbook.md).
+
+Docker Compose deployments can build the n8n runtime from [`Dockerfile`](Dockerfile), which bakes the compiled local scripts into `/app` for the workflow command nodes.
 
 ## Repository Structure
 
@@ -177,6 +182,15 @@ Record feedback:
 npm run --silent feedback-record -- --vault /path/to/vault --input ./feedback.json
 ```
 
+Run the production V1 n8n flow manually:
+
+1. Import the workflows from `n8n/workflows/`.
+2. Set `OPENROUTER_API_KEY` in the n8n runtime and optionally set `OPENROUTER_MODEL`.
+3. Run `KB - Reindex Wiki`.
+4. Run `KB - Answer OpenRouter Manual` or `KB - Ingest Raw OpenRouter Manual`.
+5. Review any proposed feedback or LLM mutation plan.
+6. Run `KB - Apply Feedback` with `approved=true` only after review.
+
 Run maintenance checks without writing reports:
 
 ```bash
@@ -209,10 +223,10 @@ The canonical JSON payload contracts from `AGENTS.md` are represented as TypeScr
 
 - `apply-update.ts` enforces `create`, `update`, and `noop` actions and tracks idempotency keys in `state/runtime/idempotency-keys.json`.
 - `ingest-source.ts` accepts only `raw/**` paths and emits a normalized source payload.
-- `plan-source-note.ts` is a deterministic baseline planner; use a provider-specific LLM planner for richer wiki propagation.
+- `plan-source-note.ts` is a deterministic baseline planner; the OpenRouter ingest workflow proposes richer wiki propagation separately for review.
 - `reindex.ts` indexes markdown derived from `wiki/`, not `raw/`.
 - `search.ts` queries the FTS index and returns ranked results with `path`, `title`, `doc_type`, and `score`.
-- `answer-context.ts` reads retrieved wiki markdown for LLM context; `answer-record.ts` stores the answer under `outputs/`.
+- `answer-context.ts` reads retrieved wiki markdown for LLM context; the OpenRouter answer workflow stores the answer under `outputs/` with `answer-record.ts` and returns feedback for review.
 - `lint.ts` focuses on structure and maintainability.
 - `health-check.ts` focuses on unsupported claims, stale low-confidence notes, and missing pages.
 - `commit.ts` writes a change log to `state/change-log/` before creating the git commit.
