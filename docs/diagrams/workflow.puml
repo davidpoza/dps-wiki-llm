@@ -19,7 +19,7 @@ skinparam note {
 legend left
 |= Color |= Meaning |
 |<#DFF3E4>| Script available in this repo |
-|<#FFF3BF>| Planned workflow component |
+|<#FFF3BF>| External orchestration / provider LLM |
 |<#E7F5FF>| Data or storage layer |
 endlegend
 
@@ -28,24 +28,29 @@ actor "User query" as userQuery
 
 rectangle "raw/**\nEvent stream" as raw #E7F5FF
 rectangle "n8n trigger\n(raw/** only)" as n8n #FFF3BF
-rectangle "ingest-source.ts\nnormalized source payload" as ingest #FFF3BF
-rectangle "LLM planner\nMutation Plan JSON" as planner #FFF3BF
+rectangle "ingest-source.ts\nnormalized source payload" as ingest #DFF3E4
+rectangle "plan-source-note.ts\nbaseline source note plan" as baselinePlanner #DFF3E4
+rectangle "LLM planner\noptional richer Mutation Plan" as planner #FFF3BF
 rectangle "apply-update.ts\nidempotent file updates" as apply #DFF3E4
-rectangle "reindex.ts\nSQLite FTS rebuild" as reindex #FFF3BF
-rectangle "commit.ts\nchange log + git commit" as commit #FFF3BF
+rectangle "reindex.ts\nSQLite FTS rebuild" as reindex #DFF3E4
+rectangle "commit.ts\nchange log + git commit" as commit #DFF3E4
 
 database "state/kb.db\nFTS index" as db #E7F5FF
 folder "wiki/\ncurated knowledge" as wiki #E7F5FF
 folder "outputs/\nanswer artifacts" as outputs #E7F5FF
 
-rectangle "search.ts\nretrieve top-k docs" as search #FFF3BF
+rectangle "search.ts\nretrieve top-k docs" as search #DFF3E4
+rectangle "answer-context.ts\nread wiki docs" as answerContext #DFF3E4
 rectangle "LLM answer synthesis" as answer #FFF3BF
+rectangle "answer-record.ts\nwrite output artifact" as answerRecord #DFF3E4
 rectangle "feedback-record.ts\nfeedback decision + optional plan" as feedback #DFF3E4
 
 rawEvent --> raw
 raw --> n8n : file event
 n8n --> ingest
-ingest --> planner
+ingest --> baselinePlanner
+ingest --> planner : optional richer plan
+baselinePlanner --> apply : Mutation Plan
 planner --> apply : Mutation Plan
 apply --> wiki : create or update notes
 apply --> reindex
@@ -54,8 +59,10 @@ reindex --> commit
 
 userQuery --> search
 search --> db : FTS query
-search --> answer : markdown context
-answer --> outputs : Answer Record
+search --> answerContext : Search Result
+answerContext --> answer : markdown context
+answer --> answerRecord : answer text
+answerRecord --> outputs : Answer Record
 outputs --> feedback : significant output
 feedback --> apply : propagate only if grounded
 feedback --> commit : auditable feedback record

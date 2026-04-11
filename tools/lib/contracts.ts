@@ -95,6 +95,26 @@ export interface AnswerRecord {
   should_review_for_feedback: boolean;
 }
 
+export interface AnswerContextDoc extends SearchResultItem {
+  body: string;
+}
+
+export interface AnswerContextPacket {
+  question: string;
+  retrieval: SearchResult;
+  context_docs: AnswerContextDoc[];
+  answer_record: AnswerRecord;
+}
+
+export interface AnswerRecordInput {
+  output_id?: string;
+  question: string;
+  answer: string;
+  output_path?: string;
+  evidence_used?: string[];
+  should_review_for_feedback?: boolean;
+}
+
 export interface FeedbackCandidateItem {
   item_id: string;
   target_note: string;

@@ -23,7 +23,8 @@ The workflow command nodes use `npm --silent --prefix /app run ...` so stdout re
 - `workflows/kb-answer-blueprint.json`
   - blueprint
   - webhook or manual trigger
-  - runs `search.ts`, returns top-k wiki context, and prepares the packet that your LLM node should consume
+  - runs `search.ts`, reads the top-k wiki markdown through `answer-context.ts`, and prepares the packet that your LLM node should consume
+  - after your LLM node, call `answer-record.ts` with `{ answer_record, answer }`
   - keeps answer generation separate from feedback propagation
 
 - `workflows/kb-weekly-lint.json`
@@ -42,7 +43,8 @@ The workflow command nodes use `npm --silent --prefix /app run ...` so stdout re
 - `workflows/kb-ingest-raw-blueprint.json`
   - blueprint
   - shows the orchestration for `raw/**` ingestion
-  - requires replacing the placeholder planner node with your real `ingest-source` plus LLM planning step
+  - runs `ingest-source.ts`, then uses `plan-source-note.ts` as a deterministic baseline planner for creating the source note
+  - replace `plan-source-note.ts` with your provider-specific LLM planner when ingestion should also update concepts, entities, topics, or analyses
 
 ## Recommended Topology
 
@@ -51,11 +53,13 @@ Keep the orchestration split into small workflows instead of one large graph:
 1. `KB - Ingest Raw Blueprint`
    - reacts only to `raw/**`
    - normalizes the event
-   - calls your planner
+   - creates the source-note baseline plan
+   - can swap in your LLM planner for richer wiki mutations
 
 2. `KB - Answer Blueprint`
    - retrieves wiki context
-   - prepares the answer packet for the LLM
+   - reads the retrieved wiki docs into a bounded context packet
+   - prepares the answer packet and answer-record shell for the LLM
    - does not mutate the wiki
 
 3. `KB - Apply Feedback`
@@ -76,5 +80,6 @@ Keep the orchestration split into small workflows instead of one large graph:
 
 - The maintenance workflows write reports under `state/maintenance/` by default.
 - The feedback workflow writes artifacts under `state/feedback/`.
-- The ingest and answer blueprints intentionally do not hide the planner or LLM step inside fake automation. You should wire your provider-specific AI node into those gaps explicitly.
+- The ingest blueprint is runnable for the safe source-note baseline. A richer ingestion planner still needs your provider-specific LLM node.
+- The answer blueprint stops at the provider-neutral LLM request because answer synthesis and feedback classification depend on your LLM provider.
 - The critical boundary remains the same as in `AGENTS.md`: only watch `raw/**`; never auto-trigger on `wiki/**`.

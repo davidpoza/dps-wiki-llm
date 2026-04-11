@@ -53,6 +53,26 @@ export const SYSTEM_CONFIG = {
     defaultIndexSection: "Entries",
     defaultIndexTitle: "Index"
   },
+  ingest: {
+    sourceIdHashLength: 10,
+    sourceSlugMaxLength: 72,
+    summaryMaxLength: 240,
+    rawContextMaxLength: 1200,
+    defaultLanguage: "unknown",
+    defaultSourceKind: "note",
+    sourceKindFolders: {
+      bookmarks: "bookmark",
+      voice: "voice",
+      web: "web",
+      inbox: "note"
+    } as Record<string, string>
+  },
+  answer: {
+    outputIdHashLength: 8,
+    outputSlugMaxLength: 64,
+    contextBodyMaxLength: 4000,
+    defaultQuestion: "What should I know from the current wiki state?"
+  },
   feedback: {
     validDecisions: ["none", "output_only", "propagate"] satisfies FeedbackDecision[],
     validOutcomes: ["applied", "rejected", "deferred"] satisfies FeedbackOutcome[],

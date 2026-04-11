@@ -7,8 +7,12 @@ This document is the English reference for the repository's implementation. It e
 | File | Purpose | Main Input | Main Output |
 |------|---------|------------|-------------|
 | `tools/init-db.ts` | Creates the SQLite database file and ensures the base schema exists. | CLI flags such as `--vault` and optional `--db`. | JSON with `db_path` and `initialized`. |
+| `tools/ingest-source.ts` | Normalizes a `raw/**` artifact into the canonical source payload. | Raw event JSON via `--input` or `stdin`. | Normalized Source Payload JSON. |
+| `tools/plan-source-note.ts` | Builds the deterministic baseline ingestion plan for creating a source note. | Normalized Source Payload JSON via `--input` or `stdin`. | JSON containing `mutation_plan` and `commit_input`. |
 | `tools/reindex.ts` | Scans wiki markdown files and rebuilds the relational and FTS indexes. | CLI flags such as `--vault` and optional `--db`. | JSON with indexed document count and rebuilt status. |
 | `tools/search.ts` | Runs a full-text search query against `state/kb.db`. | Positional search query plus CLI flags. | JSON search result payload with ranked documents. |
+| `tools/answer-context.ts` | Reads retrieved wiki documents and builds the answer context packet. | Search Result JSON plus question via `--input` or `stdin`. | Answer Context Packet JSON. |
+| `tools/answer-record.ts` | Writes a generated answer artifact and emits the canonical answer record. | Answer text plus Answer Record JSON via `--input` or `stdin`. | JSON with record, output path, and write status. |
 | `tools/apply-update.ts` | Applies a canonical mutation plan to markdown files and index pages. | Mutation Plan JSON via `--input` or `stdin`. | Mutation Result JSON. |
 | `tools/feedback-record.ts` | Normalizes a feedback decision, writes audit artifacts, and optionally derives a mutation plan. | Feedback Record JSON via `--input` or `stdin`. | JSON with normalized record and generated artifact paths. |
 | `tools/lint.ts` | Checks the wiki for structural and maintainability issues. | CLI flags such as `--vault` and optional `--write`. | Maintenance Result JSON for lint findings. |
@@ -26,6 +30,7 @@ This document is the English reference for the repository's implementation. It e
 | `tools/lib/fs-utils.ts` | Safe path resolution and filesystem helpers scoped to a vault root. | Enforces the "do not write outside the vault" boundary. |
 | `tools/lib/frontmatter.ts` | Minimal YAML-like parser, serializer, and merge logic for note frontmatter. | Supports the subset of frontmatter needed by the wiki tooling. |
 | `tools/lib/markdown.ts` | Markdown section parsing and idempotent note rendering. | Merges content by section instead of performing broad rewrites. |
+| `tools/lib/text.ts` | Shared hashing, slugging, truncation, and summary helpers. | Keeps artifact naming deterministic across scripts. |
 | `tools/lib/wiki-inspect.ts` | Wiki loading, metadata extraction, link parsing, and graph analysis. | Powers reindexing, linting, and health checks. |
 
 ## Execution Model
@@ -50,6 +55,24 @@ This keeps orchestration logic outside the scripts while keeping fragile, statef
 
 Use this script before the first reindex or search run against a new vault.
 
+### `tools/ingest-source.ts`
+
+- Accepts a raw event object containing `raw_path`, `path`, `filePath`, or `filename`.
+- Rejects inputs outside `raw/**`.
+- Reads the raw artifact, parses optional frontmatter, computes a SHA-256 checksum, and infers source kind from the raw folder.
+- Emits the canonical Normalized Source Payload used by downstream planners.
+
+This is the only local script that turns a raw event into a normalized ingestion payload.
+
+### `tools/plan-source-note.ts`
+
+- Accepts a Normalized Source Payload.
+- Builds a deterministic Mutation Plan that creates a `wiki/sources/` note and updates `INDEX.md`.
+- Includes idempotency keys, source references, and a matching Commit input payload.
+- Acts as a safe baseline planner when no provider-specific LLM planner is wired in.
+
+Replace this script in n8n when ingestion should also update concepts, entities, topics, or analyses from LLM planning.
+
 ### `tools/reindex.ts`
 
 - Loads every markdown document under `wiki/`.
@@ -67,6 +90,23 @@ The implementation is intentionally full-rebuild and deterministic rather than i
 - Returns ranked results using SQLite `bm25`.
 
 It searches only derived wiki state, never `raw/`.
+
+### `tools/answer-context.ts`
+
+- Accepts a question and Search Result JSON.
+- Reads the retrieved `wiki/**` markdown files from the vault.
+- Strips frontmatter and includes bounded body text in `context_docs`.
+- Creates the Answer Record shell that the answer workflow should carry into answer persistence and feedback evaluation.
+
+This script keeps markdown reads local and deterministic instead of making n8n code nodes perform filesystem logic.
+
+### `tools/answer-record.ts`
+
+- Accepts an `answer_record` object plus the generated answer text.
+- Writes the answer artifact under `outputs/`.
+- Emits the canonical Answer Record JSON for downstream feedback review.
+
+The answer artifact is operational output; it does not mutate the semantic wiki.
 
 ### `tools/apply-update.ts`
 
@@ -114,7 +154,7 @@ This script records operational traceability without turning semantic notes into
 ### `tools/config.ts`
 
 - Defines canonical vault-relative paths such as `wiki/`, `state/kb.db`, `state/feedback/`, and `state/change-log/`.
-- Defines behavior constants such as valid mutation actions, valid feedback decisions, lint thresholds, health-check staleness thresholds, and default search limit.
+- Defines behavior constants such as valid mutation actions, ingest defaults, answer artifact defaults, valid feedback decisions, lint thresholds, health-check staleness thresholds, and default search limit.
 - Owns the SQLite schema strings and pragmas used by `tools/lib/db.ts`.
 - Owns markdown section behavior such as bullet-oriented sections.
 
@@ -167,6 +207,14 @@ The implementation is intentionally narrow and dependency-free.
 - Rebuilds the final markdown document with merged frontmatter and content.
 
 This is the core note renderer used by `apply-update.ts`.
+
+### `tools/lib/text.ts`
+
+- Provides stable hashes for IDs and idempotency-friendly artifacts.
+- Provides filesystem-safe slugs with deterministic fallbacks.
+- Provides bounded text truncation and first-paragraph extraction.
+
+The helper is intentionally small so scripts can share naming behavior without adding broad dependencies.
 
 ### `tools/lib/wiki-inspect.ts`
 

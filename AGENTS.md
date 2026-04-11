@@ -527,6 +527,13 @@ LIMIT k;
 - prepares source material before any LLM planning step
 - should be the only script that turns a raw event into a normalized ingestion payload
 
+### `plan-source-note.ts`
+
+- consumes a normalized source payload
+- creates a safe baseline mutation plan for the source note and root index
+- emits the matching commit input for the baseline ingestion run
+- may be replaced by a richer LLM planner when ingestion should update concepts, entities, topics, or analyses
+
 ### `reindex.ts`
 
 - walks `wiki/`
@@ -539,6 +546,20 @@ LIMIT k;
 - input: query string
 - output: top-k documents as JSON
 - should search `wiki/`-derived state first, not `raw/`
+
+### `answer-context.ts`
+
+- consumes a question plus search result payload
+- reads retrieved `wiki/**` markdown files
+- emits bounded markdown context and an answer record shell for the answer workflow
+- should not mutate the wiki
+
+### `answer-record.ts`
+
+- consumes generated answer text plus an answer record shell
+- writes the answer artifact under `outputs/`
+- emits the canonical answer record for feedback evaluation
+- should not mutate the wiki
 
 ### `apply-update.ts`
 
@@ -883,10 +904,11 @@ Used by `n8n` for logging and traceability.
 ### Contract Mapping
 
 - `ingest-source.ts` -> normalized source payload
-- ingestion prompt -> mutation plan
+- `plan-source-note.ts` or ingestion prompt -> mutation plan
 - `apply-update.ts` -> mutation plan in, mutation result out
 - `search.ts` -> search result
-- answer workflow -> answer record
+- `answer-context.ts` -> answer context packet
+- `answer-record.ts` or answer workflow -> answer record
 - feedback evaluation -> feedback record and optional mutation plan
 - `lint.ts` / `health-check.ts` -> maintenance result
 - `commit.ts` -> commit result

@@ -11,7 +11,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -900,
+        -1160,
         -80
       ],
       "id": "6d5eb332-6ad7-4b8e-a5f0-8d8b66432667",
@@ -25,7 +25,7 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -900,
+        -1160,
         128
       ]
     },
@@ -38,7 +38,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -560,
+        -840,
         16
       ],
       "notesInFlow": true,
@@ -54,7 +54,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        -220,
+        -520,
         16
       ]
     },
@@ -67,24 +67,64 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
+        -200,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = {\n  question: $node[\"Prepare Query\"].json.question,\n  retrieval: $input.first().json\n};\nreturn [{\n  json: {\n    payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
+      },
+      "id": "f573919b-907d-4b4f-99c6-dbe0763bf0dd",
+      "name": "Build Context Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
         120,
         16
       ]
     },
     {
       "parameters": {
-        "jsCode": "const query = $node[\"Prepare Query\"].json.question;\nconst retrieval = $input.first().json;\nconst outputId = `out-${new Date().toISOString().slice(0, 10)}-answer-${Math.random().toString(36).slice(2, 8)}`;\nconst slug = query.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'answer';\nconst answerRecord = {\n  output_id: outputId,\n  question: query,\n  output_path: `outputs/${new Date().toISOString().slice(0, 10)}-${slug}.md`,\n  evidence_used: retrieval.results.map((item) => item.path),\n  should_review_for_feedback: true\n};\nreturn [{\n  json: {\n    status: 'needs_llm_node',\n    question: query,\n    retrieval,\n    answer_record,\n    llm_instructions: [\n      'Insert your provider-specific AI node after this step.',\n      'Read the retrieved wiki notes from retrieval.results[*].path.',\n      'Generate the answer first.',\n      'Then produce a canonical Feedback Record and send it to KB - Apply Feedback.'\n    ],\n    next_workflow: 'KB - Apply Feedback'\n  }\n}];"
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | npm --silent --prefix /app run answer-context -- --vault /data/vault\" }}",
+        "executeOnce": true
       },
-      "id": "ab13d918-54cb-4870-9563-f7bfb8de363b",
-      "name": "Build Answer Packet",
+      "id": "3d221ee4-2cf9-4125-a2f2-c85562433903",
+      "name": "Run answer-context.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        440,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('answer-context.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "629110e8-df91-4d95-a93c-cd39a3ba9029",
+      "name": "Parse Answer Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        420,
+        760,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const packet = $input.first().json;\nconst answerRecordPayload = {\n  answer_record: packet.answer_record,\n  answer: '<replace with provider LLM answer text>'\n};\nreturn [{\n  json: {\n    status: 'needs_provider_llm_node',\n    question: packet.question,\n    context_docs: packet.context_docs,\n    retrieval: packet.retrieval,\n    answer_record: packet.answer_record,\n    llm_instructions: [\n      'Insert your provider-specific LLM node after Parse Answer Context.',\n      'Use context_docs[*].body as grounded markdown context.',\n      'Generate the answer first; do not update wiki directly here.',\n      'Then call answer-record.ts with { answer_record, answer }.',\n      'Finally produce a canonical Feedback Record and send it to KB - Apply Feedback.'\n    ],\n    answer_record_command: 'npm --silent --prefix /app run answer-record -- --vault /data/vault',\n    answer_record_payload_shape: answerRecordPayload,\n    next_workflow: 'KB - Apply Feedback'\n  }\n}];"
+      },
+      "id": "ab13d918-54cb-4870-9563-f7bfb8de363b",
+      "name": "Build LLM Answer Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
         16
       ],
       "notesInFlow": true,
-      "notes": "Provider-neutral blueprint: wire your AI node after this step, not before search."
+      "notes": "Provider-neutral blueprint: wire your AI node after Parse Answer Context. Keep answer generation separate from feedback propagation."
     }
   ],
   "connections": {
@@ -136,7 +176,40 @@
       "main": [
         [
           {
-            "node": "Build Answer Packet",
+            "node": "Build Context Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context Payload": {
+      "main": [
+        [
+          {
+            "node": "Run answer-context.ts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run answer-context.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Answer Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Answer Context": {
+      "main": [
+        [
+          {
+            "node": "Build LLM Answer Request",
             "type": "main",
             "index": 0
           }

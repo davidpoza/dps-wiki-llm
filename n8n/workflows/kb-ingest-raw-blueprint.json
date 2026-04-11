@@ -16,13 +16,13 @@
       "type": "n8n-nodes-base.localFileTrigger",
       "typeVersion": 1,
       "position": [
-        -900,
-        -80
+        -1220,
+        -96
       ],
       "id": "5a6e83fa-f7d8-40d7-b465-36c3b8ab5bcc",
       "name": "Local File Trigger",
       "notesInFlow": true,
-      "notes": "Extend the ignore patterns after import. Keep the watch path on raw/** only."
+      "notes": "Keep the watch path on raw/** only. Extend ignores after import for .git, state, outputs, *.db, and .obsidian if your n8n trigger supports multiple ignore patterns."
     },
     {
       "parameters": {},
@@ -31,41 +31,95 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -900,
+        -1220,
         128
       ]
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst detectedPath = input.path || input.filePath || input.filename || 'raw/inbox/example.md';\nconst normalized = {\n  raw_path: detectedPath,\n  trigger_source: input.path ? 'local-file-trigger' : 'manual',\n  source_kind: detectedPath.includes('/voice/') ? 'voice' : detectedPath.includes('/bookmarks/') ? 'bookmark' : detectedPath.includes('/web/') ? 'web' : 'note'\n};\nreturn [{ json: normalized }];"
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst detectedPath = body.raw_path || body.path || body.filePath || body.filename || 'raw/inbox/example.md';\nconst normalized = {\n  raw_path: detectedPath,\n  trigger_source: body.path || body.filePath || body.filename ? 'local-file-trigger' : 'manual',\n  captured_at: body.captured_at || new Date().toISOString()\n};\nreturn [{ json: normalized }];"
       },
       "id": "16635cb1-fc84-42dc-ba91-f5f5f996e0f3",
       "name": "Normalize Raw Event",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -560,
+        -900,
         16
       ]
     },
     {
       "parameters": {
-        "jsCode": "return [{\n  json: {\n    plan_input_path: '/data/vault/state/tmp/ingest-plan.json',\n    commit_input_path: '/data/vault/state/tmp/ingest-commit.json',\n    note: 'Replace this node with ingest-source.ts plus your LLM planner. Downstream nodes assume a valid Mutation Plan JSON file exists at plan_input_path.'\n  }\n}];"
+        "jsCode": "const payload = $input.first().json;\nreturn [{\n  json: {\n    payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
       },
-      "id": "593c4c7c-23b5-4577-a117-81b6bfa9517d",
-      "name": "TODO Planner Output",
+      "id": "328e079d-24c2-4044-b3f5-9d8b242cb433",
+      "name": "Encode Raw Event Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -220,
+        -580,
         16
-      ],
-      "notesInFlow": true,
-      "notes": "Blueprint only. Replace with your real ingest-source + planner step before activating."
+      ]
     },
     {
       "parameters": {
-        "command": "={{ \"npm --silent --prefix /app run apply-update -- --vault /data/vault --input \" + $json.plan_input_path }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | npm --silent --prefix /app run ingest-source -- --vault /data/vault\" }}",
+        "executeOnce": true
+      },
+      "id": "cf7714bb-0496-44f8-a0ce-93d25fdac957",
+      "name": "Run ingest-source.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('ingest-source.ts returned empty stdout');\n}\nconst source_payload = JSON.parse(stdout);\nreturn [{\n  json: {\n    source_payload,\n    payload_b64: Buffer.from(JSON.stringify(source_payload), 'utf8').toString('base64')\n  }\n}];"
+      },
+      "id": "83cc9134-fb95-42a2-8272-f64d788a9dd7",
+      "name": "Parse Source Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        60,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | npm --silent --prefix /app run plan-source-note -- --vault /data/vault\" }}",
+        "executeOnce": true
+      },
+      "id": "df743684-4018-4c72-9eb2-94bc267ad44a",
+      "name": "Run plan-source-note.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        380,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "Deterministic baseline planner: creates the source note and root index update. Replace this node with your provider-specific LLM planner when you want concept/entity/topic updates in the same ingest run."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('plan-source-note.ts returned empty stdout');\n}\nconst parsed = JSON.parse(stdout);\nif (!parsed.mutation_plan || !parsed.commit_input) {\n  throw new Error('plan-source-note.ts must return mutation_plan and commit_input');\n}\nreturn [{\n  json: {\n    source_payload: parsed.source_payload,\n    mutation_plan: parsed.mutation_plan,\n    commit_input: parsed.commit_input,\n    plan_b64: Buffer.from(JSON.stringify(parsed.mutation_plan), 'utf8').toString('base64'),\n    commit_b64: Buffer.from(JSON.stringify(parsed.commit_input), 'utf8').toString('base64')\n  }\n}];"
+      },
+      "id": "3e447c22-d49a-4468-8545-78777d1f7f28",
+      "name": "Parse Source Note Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.plan_b64) + \" | npm --silent --prefix /app run apply-update -- --vault /data/vault\" }}",
         "executeOnce": true
       },
       "id": "779d37d9-3079-4e75-99dc-092929af9df7",
@@ -73,7 +127,20 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        120,
+        1020,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('apply-update.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "bc9ef6af-a5fe-4e88-8f59-fc4e2caf863f",
+      "name": "Parse Mutation Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
         16
       ]
     },
@@ -87,13 +154,26 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        400,
+        1620,
         16
       ]
     },
     {
       "parameters": {
-        "command": "={{ \"npm --silent --prefix /app run commit -- --vault /data/vault --input \" + $json.commit_input_path }}",
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('reindex.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "33bd8d14-1673-4ddf-91d0-af6461ac01dd",
+      "name": "Parse Reindex Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($node[\"Parse Source Note Plan\"].json.commit_b64) + \" | npm --silent --prefix /app run commit -- --vault /data/vault\" }}",
         "executeOnce": true
       },
       "id": "db6f28cf-7ded-420b-8a4c-78ddd9129115",
@@ -101,7 +181,33 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        680,
+        2220,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('commit.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "4db62253-f389-40ed-b318-cd5488d85eb7",
+      "name": "Parse Commit Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2520,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    status: 'ingest_applied',\n    source_payload: $node[\"Parse Source Payload\"].json.source_payload,\n    mutation_plan: $node[\"Parse Source Note Plan\"].json.mutation_plan,\n    mutation_result: $node[\"Parse Mutation Result\"].json,\n    reindex_result: $node[\"Parse Reindex Result\"].json,\n    commit_result: $node[\"Parse Commit Result\"].json\n  }\n}];"
+      },
+      "id": "52454bba-3431-4995-a3d7-c57bd6f68653",
+      "name": "Build Ingest Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2820,
         16
       ]
     }
@@ -133,14 +239,58 @@
       "main": [
         [
           {
-            "node": "TODO Planner Output",
+            "node": "Encode Raw Event Payload",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "TODO Planner Output": {
+    "Encode Raw Event Payload": {
+      "main": [
+        [
+          {
+            "node": "Run ingest-source.ts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run ingest-source.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Source Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Source Payload": {
+      "main": [
+        [
+          {
+            "node": "Run plan-source-note.ts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run plan-source-note.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Source Note Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Source Note Plan": {
       "main": [
         [
           {
@@ -155,6 +305,17 @@
       "main": [
         [
           {
+            "node": "Parse Mutation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Mutation Result": {
+      "main": [
+        [
+          {
             "node": "Run reindex.ts",
             "type": "main",
             "index": 0
@@ -166,7 +327,40 @@
       "main": [
         [
           {
+            "node": "Parse Reindex Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reindex Result": {
+      "main": [
+        [
+          {
             "node": "Run commit.ts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run commit.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Commit Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Commit Result": {
+      "main": [
+        [
+          {
+            "node": "Build Ingest Response",
             "type": "main",
             "index": 0
           }

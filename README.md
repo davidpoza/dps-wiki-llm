@@ -32,12 +32,16 @@ Breaking the `raw/` versus `wiki/` boundary creates loops, noisy state, and non-
 
 ## Implemented Tooling
 
-The repo now includes the full local toolchain except for raw-event normalization and the external LLM orchestration steps.
+The repo now includes the deterministic local toolchain. Provider-specific LLM planning and answer synthesis remain external orchestration steps.
 
 | Script | Purpose | Main outputs |
 |---|---|---|
 | `init-db.ts` | Creates the SQLite schema and FTS tables. | `state/kb.db` |
+| `ingest-source.ts` | Normalizes a `raw/**` artifact into the canonical source payload. | stdout JSON |
+| `plan-source-note.ts` | Builds a safe baseline Mutation Plan that creates the source note and root index entry. | stdout JSON |
 | `apply-update.ts` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
+| `answer-context.ts` | Reads retrieved wiki notes and builds the LLM context packet plus Answer Record shell. | stdout JSON |
+| `answer-record.ts` | Persists a generated answer artifact under `outputs/`. | `outputs/**` |
 | `feedback-record.ts` | Writes feedback records and can derive a follow-up mutation plan. | `state/feedback/**` |
 | `reindex.ts` | Rebuilds the `docs` table and FTS index from `wiki/**/*.md`. | `state/kb.db` |
 | `search.ts` | Runs FTS queries and returns ranked results as JSON. | stdout JSON |
@@ -47,8 +51,8 @@ The repo now includes the full local toolchain except for raw-event normalizatio
 
 Main gaps relative to the target architecture:
 
-- `ingest-source.ts` is not present yet
-- LLM planner and answer-synthesis steps are external to this codebase
+- a richer LLM planner can replace `plan-source-note.ts` when ingestion should update concepts, entities, topics, or analyses
+- answer synthesis and feedback classification are provider-specific LLM steps outside this codebase
 
 ## Code Documentation
 
@@ -70,7 +74,11 @@ Detailed English documentation for every script and shared library module lives 
 │       └── workflow.svg
 └── tools/
     ├── init-db.ts
+    ├── ingest-source.ts
+    ├── plan-source-note.ts
     ├── apply-update.ts
+    ├── answer-context.ts
+    ├── answer-record.ts
     ├── feedback-record.ts
     ├── reindex.ts
     ├── search.ts
@@ -93,7 +101,7 @@ vault/
 
 ## Workflow
 
-The diagram below summarizes the intended workflow. Green nodes are scripts already present in this repo; yellow nodes are planned or external components.
+The diagram below summarizes the intended workflow. Green nodes are scripts available in this repo; yellow nodes are external orchestration or provider-specific LLM components.
 
 Rendered using the official PlantUML web service:
 
@@ -137,6 +145,13 @@ Apply a mutation plan:
 npm run --silent apply-update -- --vault /path/to/vault --input ./plan.json
 ```
 
+Normalize a raw source and create the baseline source-note plan:
+
+```bash
+npm run --silent ingest-source -- --vault /path/to/vault --input ./raw-event.json
+npm run --silent plan-source-note -- --vault /path/to/vault --input ./source-payload.json
+```
+
 Rebuild the search index:
 
 ```bash
@@ -147,6 +162,13 @@ Run a search query:
 
 ```bash
 npm run --silent search -- --vault /path/to/vault "model context protocol" --limit 5
+```
+
+Build answer context and persist an answer artifact after LLM synthesis:
+
+```bash
+npm run --silent answer-context -- --vault /path/to/vault --input ./answer-context-input.json
+npm run --silent answer-record -- --vault /path/to/vault --input ./answer-record-input.json
 ```
 
 Record feedback:
@@ -171,7 +193,7 @@ npm run --silent commit -- --vault /path/to/vault --input ./commit.json
 ## CLI Conventions
 
 - `--vault` is the root of the target vault and defaults to the current working directory.
-- `--input` is used by JSON-driven scripts such as `apply-update.ts`, `feedback-record.ts`, and `commit.ts`.
+- `--input` is used by JSON-driven scripts such as `ingest-source.ts`, `plan-source-note.ts`, `apply-update.ts`, `answer-context.ts`, `answer-record.ts`, `feedback-record.ts`, and `commit.ts`.
 - `--db` can override the database path for `init-db.ts`, `reindex.ts`, and `search.ts`.
 - `--limit` controls result count in `search.ts`.
 - `--no-write` is supported by `feedback-record.ts`, `lint.ts`, and `health-check.ts`.
@@ -179,15 +201,18 @@ npm run --silent commit -- --vault /path/to/vault --input ./commit.json
 
 ## Configuration
 
-`tools/config.ts` is the central behavior configuration for the toolchain. It defines vault paths, default search limits, SQLite schema and pragmas, valid mutation and feedback values, note lint thresholds, health-check thresholds, markdown section behavior, and report directories.
+`tools/config.ts` is the central behavior configuration for the toolchain. It defines vault paths, ingest defaults, answer artifact defaults, search limits, SQLite schema and pragmas, valid mutation and feedback values, note lint thresholds, health-check thresholds, markdown section behavior, and report directories.
 
 The canonical JSON payload contracts from `AGENTS.md` are represented as TypeScript interfaces in `tools/lib/contracts.ts`.
 
 ## Operational Notes
 
 - `apply-update.ts` enforces `create`, `update`, and `noop` actions and tracks idempotency keys in `state/runtime/idempotency-keys.json`.
+- `ingest-source.ts` accepts only `raw/**` paths and emits a normalized source payload.
+- `plan-source-note.ts` is a deterministic baseline planner; use a provider-specific LLM planner for richer wiki propagation.
 - `reindex.ts` indexes markdown derived from `wiki/`, not `raw/`.
 - `search.ts` queries the FTS index and returns ranked results with `path`, `title`, `doc_type`, and `score`.
+- `answer-context.ts` reads retrieved wiki markdown for LLM context; `answer-record.ts` stores the answer under `outputs/`.
 - `lint.ts` focuses on structure and maintainability.
 - `health-check.ts` focuses on unsupported claims, stale low-confidence notes, and missing pages.
 - `commit.ts` writes a change log to `state/change-log/` before creating the git commit.

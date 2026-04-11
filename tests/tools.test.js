@@ -7,6 +7,7 @@ import {
   conceptNote,
   readFile,
   readJson,
+  repoPath,
   runCommand,
   runTool,
   sourceNote,
@@ -57,6 +58,140 @@ test("init-db, reindex, and search work together", async () => {
   assert.equal(search.json.query, "protocol");
   assert.equal(search.json.limit, 5);
   assert.ok(search.json.results.some((item) => item.path === "wiki/concepts/model-context-protocol.md"));
+});
+
+test("ingest-source and plan-source-note produce canonical ingestion contracts", async () => {
+  const vault = await tempDir("dps-wiki-llm-ingest-vault-");
+  await writeFile(
+    path.join(vault, "raw/web/2026-04-10-example-source.md"),
+    `---\ntitle: "Example Source"\ncanonical_url: "https://example.com/article"\nauthor: "Example Author"\ntags:\n  - llm\n  - wiki\n---\n\n# Ignored Heading\n\nThis source explains a persistent wiki workflow.\n`
+  );
+  const sourceInputPath = path.join(vault, "source-input.json");
+  await writeJson(sourceInputPath, {
+    raw_path: "raw/web/2026-04-10-example-source.md",
+    captured_at: "2026-04-10T20:15:00Z"
+  });
+
+  const source = await runTool("ingest-source", ["--vault", vault, "--input", sourceInputPath]);
+
+  assert.equal(source.json.source_kind, "web");
+  assert.equal(source.json.raw_path, "raw/web/2026-04-10-example-source.md");
+  assert.equal(source.json.title, "Example Source");
+  assert.equal(source.json.canonical_url, "https://example.com/article");
+  assert.equal(source.json.author, "Example Author");
+  assert.equal(source.json.language, "unknown");
+  assert.match(source.json.checksum, /^sha256:[0-9a-f]{64}$/);
+  assert.deepEqual(source.json.metadata.tags, ["llm", "wiki"]);
+
+  const planInputPath = path.join(vault, "source-payload.json");
+  await writeJson(planInputPath, source.json);
+
+  const plan = await runTool("plan-source-note", ["--vault", vault, "--input", planInputPath]);
+
+  assert.equal(plan.json.source_payload.source_id, source.json.source_id);
+  assert.equal(plan.json.mutation_plan.operation, "ingest");
+  assert.equal(plan.json.mutation_plan.page_actions[0].path, "wiki/sources/2026-04-10-example-source.md");
+  assert.equal(plan.json.mutation_plan.page_actions[0].idempotency_key, source.json.source_id);
+  assert.deepEqual(plan.json.mutation_plan.index_updates[0].entries_to_add, ["[[Example Source]]"]);
+  assert.equal(plan.json.commit_input.operation, "ingest");
+  assert.ok(plan.json.commit_input.paths_to_stage.includes("state/kb.db"));
+});
+
+test("answer-context reads wiki docs and answer-record persists the output artifact", async () => {
+  const vault = await createVault();
+  const contextInputPath = path.join(vault, "answer-context-input.json");
+  await writeJson(contextInputPath, {
+    question: "What does MCP connect?",
+    retrieval: {
+      query: "protocol",
+      limit: 1,
+      results: [
+        {
+          path: "wiki/concepts/model-context-protocol.md",
+          title: "Model Context Protocol",
+          doc_type: "concept",
+          score: 1.2
+        }
+      ]
+    }
+  });
+
+  const context = await runTool("answer-context", ["--vault", vault, "--input", contextInputPath]);
+
+  assert.equal(context.json.question, "What does MCP connect?");
+  assert.equal(context.json.context_docs[0].path, "wiki/concepts/model-context-protocol.md");
+  assert.match(context.json.context_docs[0].body, /MCP connects tools and context/);
+  assert.equal(context.json.answer_record.should_review_for_feedback, true);
+  assert.deepEqual(context.json.answer_record.evidence_used, ["wiki/concepts/model-context-protocol.md"]);
+
+  const answerInputPath = path.join(vault, "answer-record-input.json");
+  await writeJson(answerInputPath, {
+    answer_record: context.json.answer_record,
+    answer: "MCP connects tools and context."
+  });
+
+  const answer = await runTool("answer-record", ["--vault", vault, "--input", answerInputPath]);
+
+  assert.equal(answer.json.record.output_id, context.json.answer_record.output_id);
+  assert.equal(answer.json.wrote, true);
+  assert.ok(answer.json.output_path.startsWith("outputs/"));
+
+  const artifact = await readFile(path.join(vault, answer.json.output_path));
+  assert.match(artifact, /# Answer: What does MCP connect\?/);
+  assert.match(artifact, /MCP connects tools and context\./);
+  assert.match(artifact, /- wiki\/concepts\/model-context-protocol\.md/);
+});
+
+test("new JSON-driven entrypoints reject unsafe paths", async () => {
+  const vault = await createVault();
+  const ingestInputPath = path.join(vault, "unsafe-ingest.json");
+  await writeJson(ingestInputPath, { raw_path: "raw/../wiki/concepts/model-context-protocol.md" });
+
+  await assert.rejects(
+    runTool("ingest-source", ["--vault", vault, "--input", ingestInputPath]),
+    /rejects path traversal/
+  );
+
+  const answerContextInputPath = path.join(vault, "unsafe-answer-context.json");
+  await writeJson(answerContextInputPath, {
+    question: "Unsafe?",
+    retrieval: {
+      query: "unsafe",
+      limit: 1,
+      results: [{ path: "wiki/../raw/inbox/source.md", title: "Unsafe", doc_type: "source", score: 0 }]
+    }
+  });
+
+  await assert.rejects(
+    runTool("answer-context", ["--vault", vault, "--input", answerContextInputPath]),
+    /rejects path traversal/
+  );
+
+  const answerRecordInputPath = path.join(vault, "unsafe-answer-record.json");
+  await writeJson(answerRecordInputPath, {
+    question: "Unsafe?",
+    answer: "No.",
+    output_path: "outputs/../wiki/escape.md"
+  });
+
+  await assert.rejects(
+    runTool("answer-record", ["--vault", vault, "--input", answerRecordInputPath]),
+    /must stay under outputs/
+  );
+});
+
+test("n8n workflow files remain valid JSON", async () => {
+  const workflowDir = repoPath("n8n", "workflows");
+  const files = (await fs.readdir(workflowDir)).filter((file) => file.endsWith(".json"));
+
+  assert.ok(files.length > 0);
+
+  for (const file of files) {
+    const workflow = JSON.parse(await readFile(path.join(workflowDir, file)));
+    assert.equal(typeof workflow.name, "string");
+    assert.ok(Array.isArray(workflow.nodes));
+    assert.ok(workflow.connections && typeof workflow.connections === "object");
+  }
 });
 
 test("apply-update creates, updates, updates indexes, and records idempotency", async () => {
