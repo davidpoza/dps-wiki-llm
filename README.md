@@ -67,6 +67,8 @@ Docker Compose deployments can build the n8n runtime from [`Dockerfile`](Dockerf
 
 This example uses the published GHCR images for n8n plus the external runner. It mounts `./local-files` both at `/files` for normal n8n local files and at `/data/vault` for the repository workflows, because the workflow command nodes use `/data/vault`.
 
+Copy [`.env.sample`](.env.sample) to `.env` and fill the secrets before starting the stack.
+
 ```yaml
 version: "3.3"
 
