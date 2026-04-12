@@ -11,6 +11,7 @@ This directory contains importable n8n workflow JSON files aligned with the scri
 - `Local File Trigger` enabled in self-hosted n8n if you want reactive ingestion from `raw/`
 - `OPENROUTER_API_KEY` configured in the n8n runtime for OpenRouter calls
 - optional `OPENROUTER_MODEL` configured when you want to pin a model instead of using OpenRouter account defaults
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` configured when you want answer input/output and ingest logs over Telegram
 
 If your paths differ, update the command strings and watched paths after importing.
 
@@ -28,9 +29,10 @@ The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/pro
 
 - `workflows/kb-answer-blueprint.json`
   - runnable manual OpenRouter workflow
+  - accepts Telegram webhook updates on the existing webhook path and strips `/ask`, `/answer`, or `/query`
   - runs `search.ts`, reads the top-k wiki markdown through `answer-context.ts`, calls OpenRouter for answer synthesis, and writes the answer via `answer-record.ts`
   - calls OpenRouter again for a proposed Feedback Record and validates it with `feedback-record.ts --no-write`
-  - returns an `approval_payload` for manual review; it does not mutate `wiki/`
+  - sends a Telegram answer log when Telegram env is configured, and returns an `approval_payload` for manual review; it does not mutate `wiki/`
 
 - `workflows/kb-weekly-lint.json`
   - runnable
@@ -50,6 +52,7 @@ The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/pro
   - shows the orchestration for `raw/**` ingestion
   - runs `ingest-source.ts`, calls OpenRouter to clean the source note content, then uses `plan-source-note.ts` to create and commit the source note
   - calls OpenRouter for an optional richer Mutation Plan and auto-applies non-empty plans after guardrail validation, including narrow source-note `Linked Notes` backlinks
+  - sends a Telegram ingest log when Telegram env is configured
 
 ## Recommended Topology
 
@@ -63,9 +66,11 @@ Keep the orchestration split into small workflows instead of one large graph:
    - proposes richer wiki mutations through OpenRouter and applies safe non-empty plans with source/concept links
 
 2. `KB - Answer OpenRouter Manual`
+   - can receive questions from Telegram through the `kb-answer` webhook
    - retrieves wiki context
    - reads the retrieved wiki docs into a bounded context packet
    - calls OpenRouter for answer synthesis and feedback classification
+   - sends the answer/output log back to Telegram when configured
    - does not mutate the wiki
 
 3. `KB - Apply Feedback`
@@ -88,4 +93,5 @@ Keep the orchestration split into small workflows instead of one large graph:
 - The feedback workflow writes artifacts under `state/feedback/`.
 - Keep every workflow inactive for the first production cut and run them manually from n8n.
 - OpenRouter API keys must live in n8n environment or credentials, not in exported workflow JSON.
+- Telegram bot tokens must live in n8n environment or credentials, not in exported workflow JSON.
 - The critical boundary remains the same as in `AGENTS.md`: only watch `raw/**`; never auto-trigger on `wiki/**`.

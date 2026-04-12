@@ -90,6 +90,12 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /openrouter_source_note_meta/);
   assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /baseline_ingest_applied_llm_plan_applied/);
   assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /llm_guardrail_rejections/);
+  assert.ok(nodes.has("Build Telegram Ingest Log"));
+  assert.ok(nodes.has("Should Send Telegram Ingest Log?"));
+  assert.ok(nodes.has("Send Telegram Ingest Log"));
+  assert.ok(nodes.has("Finalize Ingest Response"));
+  assert.match(nodes.get("Build Telegram Ingest Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
+  assert.match(nodes.get("Build Telegram Ingest Log").parameters.jsCode, /KB ingest completed/);
 
   assert.equal(workflow.connections["Parse Source Payload"].main[0][0].node, "Build OpenRouter Source Note Request");
   assert.equal(workflow.connections["Build OpenRouter Source Note Request"].main[0][0].node, "Call OpenRouter Source Note Cleaner");
@@ -99,6 +105,11 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   assert.equal(workflow.connections["Should Apply LLM Plan?"].main[0][0].node, "Prepare LLM Plan Application");
   assert.equal(workflow.connections["Should Apply LLM Plan?"].main[1][0].node, "Build Ingest Response");
   assert.equal(workflow.connections["Parse LLM Commit Result"].main[0][0].node, "Build Ingest Response");
+  assert.equal(workflow.connections["Build Ingest Response"].main[0][0].node, "Build Telegram Ingest Log");
+  assert.equal(workflow.connections["Build Telegram Ingest Log"].main[0][0].node, "Should Send Telegram Ingest Log?");
+  assert.equal(workflow.connections["Should Send Telegram Ingest Log?"].main[0][0].node, "Send Telegram Ingest Log");
+  assert.equal(workflow.connections["Should Send Telegram Ingest Log?"].main[1][0].node, "Finalize Ingest Response");
+  assert.equal(workflow.connections["Send Telegram Ingest Log"].main[0][0].node, "Finalize Ingest Response");
 
   const parseLlmPlan = (plan) => {
     const $input = {
@@ -158,6 +169,47 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
     guarded.llm_guardrail_rejections.map((item) => item.reason),
     ["page path outside allowed wiki areas", "source note updates may only write Linked Notes"]
   );
+});
+
+test("answer workflow accepts Telegram input and sends Telegram output logs", async () => {
+  const workflow = JSON.parse(await fs.readFile(repoPath("n8n/workflows/kb-answer-blueprint.json"), "utf8"));
+  const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
+
+  assert.ok(nodes.has("Build Telegram Answer Log"));
+  assert.ok(nodes.has("Should Send Telegram Answer Log?"));
+  assert.ok(nodes.has("Send Telegram Answer Log"));
+  assert.ok(nodes.has("Finalize Answer Response"));
+  assert.match(nodes.get("Prepare Query").parameters.jsCode, /telegram_chat_id/);
+  assert.match(nodes.get("Prepare Query").parameters.jsCode, /Unauthorized Telegram chat id/);
+  assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
+  assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /KB answer completed/);
+
+  const $input = {
+    first: () => ({
+      json: {
+        body: {
+          update_id: 123,
+          message: {
+            message_id: 456,
+            chat: { id: 789 },
+            text: "/ask What does MCP connect?"
+          }
+        }
+      }
+    })
+  };
+  const prepared = new Function("$input", "$env", nodes.get("Prepare Query").parameters.jsCode)($input, {
+    TELEGRAM_CHAT_ID: "789"
+  })[0].json;
+  assert.equal(prepared.question, "What does MCP connect?");
+  assert.equal(prepared.telegram_chat_id, "789");
+  assert.equal(prepared.telegram_message_id, 456);
+
+  assert.equal(workflow.connections["Build Answer Response"].main[0][0].node, "Build Telegram Answer Log");
+  assert.equal(workflow.connections["Build Telegram Answer Log"].main[0][0].node, "Should Send Telegram Answer Log?");
+  assert.equal(workflow.connections["Should Send Telegram Answer Log?"].main[0][0].node, "Send Telegram Answer Log");
+  assert.equal(workflow.connections["Should Send Telegram Answer Log?"].main[1][0].node, "Finalize Answer Response");
+  assert.equal(workflow.connections["Send Telegram Answer Log"].main[0][0].node, "Finalize Answer Response");
 });
 
 test("ingest-source and plan-source-note produce canonical ingestion contracts", async () => {
@@ -339,6 +391,7 @@ test("n8n workflow files remain valid JSON", async () => {
   assert.ok(answer.nodes.some((node) => node.name === "Call OpenRouter Answer"));
   assert.ok(answer.nodes.some((node) => node.name === "Call OpenRouter Feedback"));
   assert.ok(answer.nodes.some((node) => node.name === "Validate feedback-record.ts"));
+  assert.ok(answer.nodes.some((node) => node.name === "Send Telegram Answer Log"));
   assert.match(
     answer.nodes.find((node) => node.name === "Build OpenRouter Answer Request").parameters.jsCode,
     /OPENROUTER_MODEL/
@@ -347,6 +400,7 @@ test("n8n workflow files remain valid JSON", async () => {
   const ingest = workflows.get("kb-ingest-raw-blueprint.json");
   assert.equal(ingest.name, "KB - Ingest Raw OpenRouter Manual");
   assert.ok(ingest.nodes.some((node) => node.name === "Call OpenRouter Ingest Planner"));
+  assert.ok(ingest.nodes.some((node) => node.name === "Send Telegram Ingest Log"));
   assert.match(
     ingest.nodes.find((node) => node.name === "Build Ingest Response").parameters.jsCode,
     /llm_plan_approval_required/

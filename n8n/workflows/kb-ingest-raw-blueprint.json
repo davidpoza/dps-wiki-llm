@@ -475,6 +475,85 @@
       ],
       "notesInFlow": true,
       "notes": "Validates the mandatory cleaned source-note JSON. Invalid or empty responses fail ingestion before wiki mutation."
+    },
+    {
+      "parameters": {
+        "jsCode": "function truncate(value, maxLength) {\n  const text = String(value ?? '');\n  return text.length > maxLength ? text.slice(0, maxLength - 3) + '...' : text;\n}\nfunction count(values) {\n  return Array.isArray(values) ? values.length : 0;\n}\nfunction compactLines(values) {\n  return values.filter((value) => typeof value === 'string' && value.trim()).join('\\n');\n}\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst chatId = String(env.TELEGRAM_CHAT_ID ?? '').trim();\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst source = $json.source_payload ?? {};\nconst baseline = $json.baseline_mutation_result ?? {};\nconst llm = $json.llm_mutation_result ?? null;\nconst guardrails = Array.isArray($json.llm_guardrail_rejections) ? $json.llm_guardrail_rejections : [];\nconst baselineCommit = $json.baseline_commit_result?.commit_sha ? 'Baseline commit: ' + $json.baseline_commit_result.commit_sha : '';\nconst llmCommit = $json.llm_commit_result?.commit_sha ? 'LLM commit: ' + $json.llm_commit_result.commit_sha : '';\nconst text = compactLines([\n  'KB ingest completed',\n  'Status: ' + ($json.status ?? 'unknown'),\n  'Source: ' + truncate(source.title || source.source_id || 'unknown', 500),\n  source.raw_path ? 'Raw: ' + source.raw_path : '',\n  'Baseline created/updated/skipped: ' + count(baseline.created) + '/' + count(baseline.updated) + '/' + count(baseline.skipped),\n  llm ? 'LLM created/updated/skipped: ' + count(llm.created) + '/' + count(llm.updated) + '/' + count(llm.skipped) : 'LLM changes: none',\n  guardrails.length ? 'Guardrail rejections: ' + guardrails.length : '',\n  baselineCommit,\n  llmCommit\n]);\nreturn [{\n  json: {\n    ...$json,\n    telegram_enabled: Boolean(token && chatId),\n    telegram_bot_token: token,\n    telegram_ingest_message: {\n      chat_id: chatId,\n      text,\n      disable_web_page_preview: true\n    }\n  }\n}];"
+      },
+      "id": "158ba25d-c43d-484a-893d-aa5220202c64",
+      "name": "Build Telegram Ingest Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7620,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "Builds a plain-text Telegram ingest log after the ingest response is available."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.telegram_enabled) }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "6f2ae5ba-14b1-4bfa-92ce-57ce5127469d",
+      "name": "Should Send Telegram Ingest Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        7920,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.telegram_ingest_message) }}",
+        "options": {}
+      },
+      "id": "e3e12c4d-2cfa-4ce0-80a1-250585a3dc94",
+      "name": "Send Telegram Ingest Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8220,
+        -96
+      ],
+      "notesInFlow": true,
+      "notes": "Sends a plain-text Telegram message through Bot API. Requires TELEGRAM_BOT_TOKEN and a chat id.",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const fallback = $node['Build Telegram Ingest Log'].json;\nconst telegramResponse = $json.ok !== undefined ? $json : null;\nreturn [{\n  json: {\n    ...fallback,\n    telegram_ingest_log_sent: Boolean(telegramResponse?.ok),\n    telegram_ingest_log_result: telegramResponse\n  }\n}];"
+      },
+      "id": "b38fe626-df5f-47d6-a1ad-b50707f49dc8",
+      "name": "Finalize Ingest Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8520,
+        16
+      ]
     }
   ],
   "connections": {
@@ -798,6 +877,57 @@
         [
           {
             "node": "Run plan-source-note.ts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Ingest Response": {
+      "main": [
+        [
+          {
+            "node": "Build Telegram Ingest Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Telegram Ingest Log": {
+      "main": [
+        [
+          {
+            "node": "Should Send Telegram Ingest Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Send Telegram Ingest Log?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Ingest Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Ingest Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Ingest Log": {
+      "main": [
+        [
+          {
+            "node": "Finalize Ingest Response",
             "type": "main",
             "index": 0
           }

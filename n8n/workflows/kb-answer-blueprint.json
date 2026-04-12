@@ -33,7 +33,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst question = typeof body.question === 'string' && body.question.trim() ? body.question.trim() : 'What should I know from the current wiki state?';\nconst limit = Number.isFinite(Number(body.limit)) && Number(body.limit) > 0 ? Number(body.limit) : 8;\nreturn [{ json: { question, limit } }];"
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst telegramMessage = body.message ?? body.edited_message ?? null;\nconst telegramChatId = telegramMessage?.chat?.id !== undefined ? String(telegramMessage.chat.id) : null;\nconst telegramText = typeof telegramMessage?.text === 'string' ? telegramMessage.text.trim() : '';\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nif (telegramChatId && allowedTelegramChatId && telegramChatId !== allowedTelegramChatId) {\n  throw new Error('Unauthorized Telegram chat id: ' + telegramChatId);\n}\nfunction stripTelegramCommand(text) {\n  return text.replace(/^\\/(?:ask|answer|query)(?:@\\w+)?\\s*/i, '').trim();\n}\nconst bodyQuestion = typeof body.question === 'string' ? body.question.trim() : '';\nconst question = telegramText\n  ? stripTelegramCommand(telegramText)\n  : bodyQuestion || 'What should I know from the current wiki state?';\nif (telegramText && !question) {\n  throw new Error('Telegram message did not include a question after the command');\n}\nconst limit = Number.isFinite(Number(body.limit)) && Number(body.limit) > 0 ? Number(body.limit) : 8;\nreturn [{\n  json: {\n    question,\n    limit,\n    telegram_chat_id: telegramChatId,\n    telegram_message_id: telegramMessage?.message_id ?? null,\n    telegram_update_id: body.update_id ?? null\n  }\n}];"
       },
       "id": "9bb85ad8-6020-4a97-9a2e-ad8f7f13cf1f",
       "name": "Prepare Query",
@@ -44,7 +44,7 @@
         16
       ],
       "notesInFlow": true,
-      "notes": "Expected input: { question, limit? }"
+      "notes": "Accepts { question, limit? } or a Telegram webhook update. Telegram commands /ask, /answer, and /query are stripped."
     },
     {
       "parameters": {
@@ -330,6 +330,85 @@
         4380,
         16
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function truncate(value, maxLength) {\n  const text = String(value ?? '');\n  return text.length > maxLength ? text.slice(0, maxLength - 3) + '...' : text;\n}\nfunction compactLines(values) {\n  return values.filter((value) => typeof value === 'string' && value.trim()).join('\\n');\n}\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst chatId = String($json.telegram_chat_id ?? env.TELEGRAM_CHAT_ID ?? '').trim();\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst evidence = Array.isArray($json.answer_record?.evidence_used) ? $json.answer_record.evidence_used : [];\nconst text = compactLines([\n  'KB answer completed',\n  'Question: ' + truncate($json.question, 500),\n  'Answer:',\n  truncate($json.answer, 2600),\n  $json.output_path ? 'Output: ' + $json.output_path : '',\n  evidence.length ? 'Evidence: ' + evidence.slice(0, 6).join(', ') : '',\n  'Feedback decision: ' + ($json.proposed_feedback?.decision ?? 'unknown'),\n  $json.approval_required ? 'Feedback approval required: yes' : 'Feedback approval required: no'\n]);\nreturn [{\n  json: {\n    ...$json,\n    telegram_enabled: Boolean(token && chatId),\n    telegram_bot_token: token,\n    telegram_answer_message: {\n      chat_id: chatId,\n      text,\n      disable_web_page_preview: true\n    }\n  }\n}];"
+      },
+      "id": "9426129b-4f0f-43b5-b91e-b59ec27da8f5",
+      "name": "Build Telegram Answer Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4680,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "Builds a Telegram answer log. It keeps the main answer response intact and only sends when Telegram env/chat id is present."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.telegram_enabled) }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "f5dbf588-eac5-45e9-9bb0-4f10d13a3482",
+      "name": "Should Send Telegram Answer Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        4980,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.telegram_answer_message) }}",
+        "options": {}
+      },
+      "id": "60c6afb5-f107-4461-9288-6a600803b157",
+      "name": "Send Telegram Answer Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5280,
+        -96
+      ],
+      "notesInFlow": true,
+      "notes": "Sends a plain-text Telegram message through Bot API. Requires TELEGRAM_BOT_TOKEN and a chat id.",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const fallback = $node['Build Telegram Answer Log'].json;\nconst telegramResponse = $json.ok !== undefined ? $json : null;\nreturn [{\n  json: {\n    ...fallback,\n    telegram_answer_log_sent: Boolean(telegramResponse?.ok),\n    telegram_answer_log_result: telegramResponse\n  }\n}];"
+      },
+      "id": "9839b6f2-0c6a-41cb-bd81-010eba613464",
+      "name": "Finalize Answer Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5580,
+        16
+      ]
     }
   ],
   "connections": {
@@ -536,6 +615,57 @@
         [
           {
             "node": "Build Answer Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Answer Response": {
+      "main": [
+        [
+          {
+            "node": "Build Telegram Answer Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Telegram Answer Log": {
+      "main": [
+        [
+          {
+            "node": "Should Send Telegram Answer Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Send Telegram Answer Log?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Answer Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Answer Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Answer Log": {
+      "main": [
+        [
+          {
+            "node": "Finalize Answer Response",
             "type": "main",
             "index": 0
           }

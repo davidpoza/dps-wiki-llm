@@ -56,11 +56,22 @@ OPENROUTER_MODEL=<optional model id>
 OPENROUTER_SITE_URL=<optional site/referer>
 OPENROUTER_ANSWER_TEMPERATURE=0.2
 N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+TELEGRAM_BOT_TOKEN=<secret>
+TELEGRAM_CHAT_ID=<allowed chat id>
 ```
 
 `OPENROUTER_MODEL` is optional so the model can be changed outside the workflow. If it is not set, OpenRouter account defaults apply.
 
-Add the same OpenRouter variables to the `n8n` service environment. If your Code nodes run in the external `n8n-runner` service, also pass `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, `OPENROUTER_ANSWER_TEMPERATURE`, and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there so Code nodes can read the required runtime configuration. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `commit.ts` is run by an `Execute Command` node, so the main `n8n` service needs them.
+Add the same OpenRouter and Telegram variables to the `n8n` service environment. If your Code nodes run in the external `n8n-runner` service, also pass `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, `OPENROUTER_ANSWER_TEMPERATURE`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there so Code nodes can read the required runtime configuration. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `commit.ts` is run by an `Execute Command` node, so the main `n8n` service needs them.
+
+For Telegram answer input, point your Telegram bot webhook at the production URL for the `kb-answer` webhook. `TELEGRAM_CHAT_ID` is also used as the allowed incoming chat id and as the default output chat for logs.
+
+Example:
+
+```sh
+curl -sS "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+  --data-urlencode "url=https://<n8n-host>/webhook/kb-answer"
+```
 
 The workflows use `Execute Command` and include a disabled-by-default `Local File Trigger` blueprint. Starting with n8n 2.0, those nodes must be explicitly enabled in the main n8n service by setting `NODES_EXCLUDE=[]`.
 
@@ -113,12 +124,14 @@ Run `KB - Answer OpenRouter Manual` manually with a question payload or pinned i
 
 The workflow:
 
+- accepts manual, webhook, or Telegram webhook input
 - runs `search.ts`
 - reads bounded wiki context with `answer-context.ts`
 - calls OpenRouter for answer synthesis
 - writes the answer with `answer-record.ts`
 - calls OpenRouter again for a proposed Feedback Record
 - validates that feedback with `feedback-record.ts --no-write`
+- sends a Telegram answer/output log when Telegram env is configured
 - returns an `approval_payload`
 
 The workflow does not update `wiki/`.
@@ -172,6 +185,7 @@ The workflow:
 - allows only a narrow backlink update to the exact baseline source note `Linked Notes` section
 - applies non-empty LLM plans with `apply-update.ts`
 - reindexes and creates a second commit for applied LLM changes
+- sends a Telegram ingest log when Telegram env is configured
 - returns `openrouter_source_note_meta`, `llm_mutation_plan`, `llm_guardrail_rejections`, `llm_plan_auto_apply_required`, `llm_mutation_result`, and `llm_commit_result`
 
 If the source-note cleaner fails or returns invalid JSON, the workflow fails before mutating `wiki/`.
