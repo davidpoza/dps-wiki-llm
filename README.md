@@ -63,6 +63,94 @@ The production V1 runbook lives in [`docs/production-runbook.md`](docs/productio
 
 Docker Compose deployments can build the n8n runtime from [`Dockerfile`](Dockerfile), which installs n8n, includes `git`, and bakes the compiled local scripts into `/app` for the workflow command nodes.
 
+## Docker Compose Example
+
+This example uses the published GHCR images for n8n plus the external runner. It mounts `./local-files` both at `/files` for normal n8n local files and at `/data/vault` for the repository workflows, because the workflow command nodes use `/data/vault`.
+
+```yaml
+version: "3.3"
+
+services:
+  n8n:
+    image: ghcr.io/davidpoza/dps-wiki-llm:latest
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=db
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_NON_ROOT_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_NON_ROOT_PASSWORD}
+
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_RUNNERS_MODE=external
+      - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
+      - N8N_RUNNERS_BROKER_LISTEN_ADDRESS=0.0.0.0
+
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - N8N_HOST=${DOMAIN_NAME}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://${DOMAIN_NAME}/
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - TZ=${GENERIC_TIMEZONE}
+
+      - NODE_FUNCTION_ALLOW_EXTERNAL=axios,qs
+      - NODES_EXCLUDE=[]
+
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL}
+      - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
+      - OPENROUTER_ANSWER_TEMPERATURE=0.2
+    depends_on:
+      - db
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+      - ./local-files:/files
+      - ./local-files:/data/vault
+
+  n8n-runner:
+    image: ghcr.io/davidpoza/dps-wiki-llm-runner:latest
+    restart: always
+    environment:
+      - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
+      - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
+      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL}
+      - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
+      - OPENROUTER_ANSWER_TEMPERATURE=0.2
+    depends_on:
+      - n8n
+    volumes:
+      - ./local-files:/data/vault
+
+  db:
+    image: postgres:16
+    restart: always
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
+      - POSTGRES_NON_ROOT_USER
+      - POSTGRES_NON_ROOT_PASSWORD
+    volumes:
+      - ./db-data:/var/lib/postgresql/data
+      - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+```
+
 ## Repository Structure
 
 ```text
