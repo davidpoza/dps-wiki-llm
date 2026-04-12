@@ -168,9 +168,9 @@ The workflow:
 - validates the LLM plan with guardrails
 - applies non-empty LLM plans with `apply-update.ts`
 - reindexes and creates a second commit for applied LLM changes
-- returns `llm_mutation_plan`, `llm_plan_auto_apply_required`, `llm_mutation_result`, and `llm_commit_result`
+- returns `llm_mutation_plan`, `llm_guardrail_rejections`, `llm_plan_auto_apply_required`, `llm_mutation_result`, and `llm_commit_result`
 
-If the LLM plan is empty, the workflow stops after the baseline commit and returns `baseline_ingest_applied_no_llm_changes`. If the plan has changes, the workflow applies only paths and actions allowed by the guardrails.
+If the LLM plan is empty, the workflow stops after the baseline commit and returns `baseline_ingest_applied_no_llm_changes`. If the plan includes unsafe actions, the workflow converts those actions to `noop`, reports them in `llm_guardrail_rejections`, and applies only the remaining safe changes.
 
 ## Safety Checks
 

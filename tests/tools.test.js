@@ -68,9 +68,12 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   assert.ok(nodes.has("Run LLM apply-update.ts"));
   assert.ok(nodes.has("Run LLM reindex.ts"));
   assert.ok(nodes.has("Run LLM commit.ts"));
-  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /allowedPagePrefixes/);
+  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Never write directly under wiki/);
+  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /allowed_page_path_prefixes/);
+  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /guardrailRejections/);
   assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /idempotency_key/);
   assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /baseline_ingest_applied_llm_plan_applied/);
+  assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /llm_guardrail_rejections/);
 
   assert.equal(workflow.connections["Parse LLM Ingest Plan"].main[0][0].node, "Should Apply LLM Plan?");
   assert.equal(workflow.connections["Should Apply LLM Plan?"].main[0][0].node, "Prepare LLM Plan Application");
