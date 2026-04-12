@@ -27,6 +27,7 @@ services:
       - OPENROUTER_MODEL=${OPENROUTER_MODEL}
       - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
       - OPENROUTER_ANSWER_TEMPERATURE=0.2
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE}
       - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME}
       - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL}
       - GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME}
@@ -54,11 +55,12 @@ OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 OPENROUTER_MODEL=<optional model id>
 OPENROUTER_SITE_URL=<optional site/referer>
 OPENROUTER_ANSWER_TEMPERATURE=0.2
+N8N_BLOCK_ENV_ACCESS_IN_NODE=false
 ```
 
 `OPENROUTER_MODEL` is optional so the model can be changed outside the workflow. If it is not set, OpenRouter account defaults apply.
 
-Add the same OpenRouter variables to the `n8n` service environment. If your Code nodes run in the external `n8n-runner` service, also pass `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, and `OPENROUTER_ANSWER_TEMPERATURE` there so Code nodes see the same runtime configuration. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `commit.ts` is run by an `Execute Command` node, so the main `n8n` service needs them.
+Add the same OpenRouter variables to the `n8n` service environment. If your Code nodes run in the external `n8n-runner` service, also pass `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, `OPENROUTER_ANSWER_TEMPERATURE`, and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there so Code nodes can read the required runtime configuration. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `commit.ts` is run by an `Execute Command` node, so the main `n8n` service needs them.
 
 The workflows use `Execute Command` and include a disabled-by-default `Local File Trigger` blueprint. Starting with n8n 2.0, those nodes must be explicitly enabled in the main n8n service by setting `NODES_EXCLUDE=[]`.
 
@@ -80,6 +82,7 @@ services:
     environment:
       - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
       - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE}
       - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
       - OPENROUTER_MODEL=${OPENROUTER_MODEL}
       - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
