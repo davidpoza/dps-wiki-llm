@@ -28,8 +28,8 @@ The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/pro
   - initializes `state/kb.db` and rebuilds the FTS index
 
 - `workflows/kb-answer-blueprint.json`
-  - runnable manual OpenRouter workflow
-  - accepts Telegram webhook updates on the existing webhook path and strips `/ask`, `/answer`, or `/query`
+  - runnable scheduled/manual OpenRouter workflow
+  - polls Telegram with `getUpdates` and strips `/ask`, `/answer`, or `/query`
   - runs `search.ts`, reads the top-k wiki markdown through `answer-context.ts`, calls OpenRouter for answer synthesis, and writes the answer via `answer-record.ts`
   - calls OpenRouter again for a proposed Feedback Record and validates it with `feedback-record.ts --no-write`
   - sends a Telegram answer log when Telegram env is configured, and returns an `approval_payload` for manual review; it does not mutate `wiki/`
@@ -65,8 +65,8 @@ Keep the orchestration split into small workflows instead of one large graph:
    - creates and commits the source-note baseline plan
    - proposes richer wiki mutations through OpenRouter and applies safe non-empty plans with source/concept links
 
-2. `KB - Answer OpenRouter Manual`
-   - can receive questions from Telegram through the `kb-answer` webhook
+2. `KB - Answer OpenRouter Telegram Polling`
+   - receives questions from Telegram through outbound `getUpdates` polling
    - retrieves wiki context
    - reads the retrieved wiki docs into a bounded context packet
    - calls OpenRouter for answer synthesis and feedback classification
@@ -94,4 +94,5 @@ Keep the orchestration split into small workflows instead of one large graph:
 - Keep every workflow inactive for the first production cut and run them manually from n8n.
 - OpenRouter API keys must live in n8n environment or credentials, not in exported workflow JSON.
 - Telegram bot tokens must live in n8n environment or credentials, not in exported workflow JSON.
+- Telegram answer input uses outbound `getUpdates` polling; delete any active Telegram webhook for the bot before activating the polling workflow.
 - The critical boundary remains the same as in `AGENTS.md`: only watch `raw/**`; never auto-trigger on `wiki/**`.

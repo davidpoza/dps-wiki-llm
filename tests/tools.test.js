@@ -172,14 +172,23 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   );
 });
 
-test("answer workflow accepts Telegram input and sends Telegram output logs", async () => {
+test("answer workflow polls Telegram input and sends Telegram output logs", async () => {
   const workflow = JSON.parse(await fs.readFile(repoPath("n8n/workflows/kb-answer-blueprint.json"), "utf8"));
   const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
 
+  assert.ok(!nodes.has("Webhook"));
+  assert.ok(nodes.has("Schedule Trigger"));
+  assert.ok(nodes.has("Build Telegram Poll Request"));
+  assert.ok(nodes.has("Should Poll Telegram?"));
+  assert.ok(nodes.has("Call Telegram getUpdates"));
+  assert.ok(nodes.has("Prepare Telegram Updates"));
   assert.ok(nodes.has("Build Telegram Answer Log"));
   assert.ok(nodes.has("Should Send Telegram Answer Log?"));
   assert.ok(nodes.has("Send Telegram Answer Log"));
   assert.ok(nodes.has("Finalize Answer Response"));
+  assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /getWorkflowStaticData/);
+  assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
+  assert.match(nodes.get("Prepare Telegram Updates").parameters.jsCode, /telegram_last_update_id/);
   assert.match(nodes.get("Prepare Query").parameters.jsCode, /telegram_chat_id/);
   assert.match(nodes.get("Prepare Query").parameters.jsCode, /Unauthorized Telegram chat id/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
@@ -196,7 +205,8 @@ test("answer workflow accepts Telegram input and sends Telegram output logs", as
             chat: { id: 789 },
             text: "/ask What does MCP connect?"
           }
-        }
+        },
+        telegram_polled: true
       }
     })
   };
@@ -206,7 +216,44 @@ test("answer workflow accepts Telegram input and sends Telegram output logs", as
   assert.equal(prepared.question, "What does MCP connect?");
   assert.equal(prepared.telegram_chat_id, "789");
   assert.equal(prepared.telegram_message_id, 456);
+  assert.equal(prepared.telegram_polled, true);
 
+  const staticData = {};
+  const polled = new Function(
+    "$input",
+    "$env",
+    "$getWorkflowStaticData",
+    nodes.get("Prepare Telegram Updates").parameters.jsCode
+  )(
+    {
+      first: () => ({
+        json: {
+          ok: true,
+          result: [
+            {
+              update_id: 123,
+              message: {
+                message_id: 456,
+                chat: { id: 789 },
+                text: "/ask What does MCP connect?"
+              }
+            }
+          ]
+        }
+      })
+    },
+    { TELEGRAM_CHAT_ID: "789" },
+    () => staticData
+  )[0].json;
+  assert.equal(polled.body.update_id, 123);
+  assert.equal(polled.telegram_polled, true);
+  assert.equal(staticData.telegram_last_update_id, 123);
+
+  assert.equal(workflow.connections["Schedule Trigger"].main[0][0].node, "Build Telegram Poll Request");
+  assert.equal(workflow.connections["Build Telegram Poll Request"].main[0][0].node, "Should Poll Telegram?");
+  assert.equal(workflow.connections["Should Poll Telegram?"].main[0][0].node, "Call Telegram getUpdates");
+  assert.equal(workflow.connections["Call Telegram getUpdates"].main[0][0].node, "Prepare Telegram Updates");
+  assert.equal(workflow.connections["Prepare Telegram Updates"].main[0][0].node, "Prepare Query");
   assert.equal(workflow.connections["Build Answer Response"].main[0][0].node, "Build Telegram Answer Log");
   assert.equal(workflow.connections["Build Telegram Answer Log"].main[0][0].node, "Should Send Telegram Answer Log?");
   assert.equal(workflow.connections["Should Send Telegram Answer Log?"].main[0][0].node, "Send Telegram Answer Log");
@@ -389,7 +436,9 @@ test("n8n workflow files remain valid JSON", async () => {
   }
 
   const answer = workflows.get("kb-answer-blueprint.json");
-  assert.equal(answer.name, "KB - Answer OpenRouter Manual");
+  assert.equal(answer.name, "KB - Answer OpenRouter Telegram Polling");
+  assert.ok(!answer.nodes.some((node) => node.name === "Webhook"));
+  assert.ok(answer.nodes.some((node) => node.name === "Call Telegram getUpdates"));
   assert.ok(answer.nodes.some((node) => node.name === "Call OpenRouter Answer"));
   assert.ok(answer.nodes.some((node) => node.name === "Call OpenRouter Feedback"));
   assert.ok(answer.nodes.some((node) => node.name === "Validate feedback-record.ts"));

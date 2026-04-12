@@ -293,7 +293,7 @@ Run the production V1 n8n flow manually:
 1. Import the workflows from `n8n/workflows/`.
 2. Set `OPENROUTER_API_KEY` in the n8n runtime and optionally set `OPENROUTER_MODEL`.
 3. Run `KB - Reindex Wiki`.
-4. Run `KB - Answer OpenRouter Manual` or `KB - Ingest Raw OpenRouter Manual`.
+4. Run `KB - Answer OpenRouter Telegram Polling` or `KB - Ingest Raw OpenRouter Manual`.
 5. Review any proposed feedback and the LLM ingest plan results.
 6. Run `KB - Apply Feedback` with `approved=true` only after review.
 

@@ -64,13 +64,13 @@ TELEGRAM_CHAT_ID=<allowed chat id>
 
 Add the same OpenRouter and Telegram variables to the `n8n` service environment. If your Code nodes run in the external `n8n-runner` service, also pass `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, `OPENROUTER_ANSWER_TEMPERATURE`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there so Code nodes can read the required runtime configuration. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `commit.ts` is run by an `Execute Command` node, so the main `n8n` service needs them.
 
-For Telegram answer input, point your Telegram bot webhook at the production URL for the `kb-answer` webhook. `TELEGRAM_CHAT_ID` is also used as the allowed incoming chat id and as the default output chat for logs.
+For Telegram answer input, the answer workflow polls Telegram with `getUpdates`. `TELEGRAM_CHAT_ID` is used as the allowed incoming chat id and as the default output chat for logs.
 
-Example:
+If you previously configured a Telegram webhook, delete it before enabling polling. Telegram does not allow `getUpdates` while a webhook is active.
+Polling only needs outbound HTTPS from n8n to Telegram; n8n does not need a public inbound URL for answer input.
 
 ```sh
-curl -sS "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
-  --data-urlencode "url=https://<n8n-host>/webhook/kb-answer"
+curl -sS "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/deleteWebhook"
 ```
 
 The workflows use `Execute Command` and include a disabled-by-default `Local File Trigger` blueprint. Starting with n8n 2.0, those nodes must be explicitly enabled in the main n8n service by setting `NODES_EXCLUDE=[]`.
@@ -122,11 +122,11 @@ If an `Execute Command` node still runs in the main n8n service or in a queue wo
 
 ## Answer Flow
 
-Run `KB - Answer OpenRouter Manual` manually with a question payload or pinned input.
+Run `KB - Answer OpenRouter Telegram Polling` manually with a question payload or activate it to poll Telegram once per minute.
 
 The workflow:
 
-- accepts manual, webhook, or Telegram webhook input
+- accepts manual input or one Telegram `getUpdates` item
 - runs `search.ts`
 - reads bounded wiki context with `answer-context.ts`
 - calls OpenRouter for answer synthesis
