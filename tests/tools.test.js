@@ -60,6 +60,24 @@ test("init-db, reindex, and search work together", async () => {
   assert.ok(search.json.results.some((item) => item.path === "wiki/concepts/model-context-protocol.md"));
 });
 
+test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails", async () => {
+  const workflow = JSON.parse(await fs.readFile(repoPath("n8n/workflows/kb-ingest-raw-blueprint.json"), "utf8"));
+  const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
+
+  assert.ok(nodes.has("Should Apply LLM Plan?"));
+  assert.ok(nodes.has("Run LLM apply-update.ts"));
+  assert.ok(nodes.has("Run LLM reindex.ts"));
+  assert.ok(nodes.has("Run LLM commit.ts"));
+  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /allowedPagePrefixes/);
+  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /idempotency_key/);
+  assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /baseline_ingest_applied_llm_plan_applied/);
+
+  assert.equal(workflow.connections["Parse LLM Ingest Plan"].main[0][0].node, "Should Apply LLM Plan?");
+  assert.equal(workflow.connections["Should Apply LLM Plan?"].main[0][0].node, "Prepare LLM Plan Application");
+  assert.equal(workflow.connections["Should Apply LLM Plan?"].main[1][0].node, "Build Ingest Response");
+  assert.equal(workflow.connections["Parse LLM Commit Result"].main[0][0].node, "Build Ingest Response");
+});
+
 test("ingest-source and plan-source-note produce canonical ingestion contracts", async () => {
   const vault = await tempDir("dps-wiki-llm-ingest-vault-");
   await writeFile(

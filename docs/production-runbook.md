@@ -165,9 +165,12 @@ The workflow:
 - builds the baseline source note plan with `plan-source-note.ts`
 - applies and commits that deterministic source note baseline
 - calls OpenRouter for an optional richer Mutation Plan
-- returns `llm_mutation_plan` and `llm_plan_approval_required`
+- validates the LLM plan with guardrails
+- applies non-empty LLM plans with `apply-update.ts`
+- reindexes and creates a second commit for applied LLM changes
+- returns `llm_mutation_plan`, `llm_plan_auto_apply_required`, `llm_mutation_result`, and `llm_commit_result`
 
-The LLM ingest plan is not applied by this workflow. Review it, save it as an approved plan if needed, then apply it manually with the deterministic scripts.
+If the LLM plan is empty, the workflow stops after the baseline commit and returns `baseline_ingest_applied_no_llm_changes`. If the plan has changes, the workflow applies only paths and actions allowed by the guardrails.
 
 ## Safety Checks
 

@@ -52,7 +52,7 @@ The repo now includes the deterministic local toolchain plus importable n8n work
 Production V1 gaps relative to the target architecture:
 
 - workflows should remain manually run until the VM, WebDAV behavior, and approval path are validated
-- the LLM ingest planner proposes richer wiki mutations, but human approval is still required before those changes are applied
+- the LLM ingest planner now auto-applies non-empty plans after guardrail validation
 - scheduled maintenance and raw file watching are intentionally left inactive for the first production cut
 
 ## Code Documentation
@@ -290,7 +290,7 @@ Run the production V1 n8n flow manually:
 2. Set `OPENROUTER_API_KEY` in the n8n runtime and optionally set `OPENROUTER_MODEL`.
 3. Run `KB - Reindex Wiki`.
 4. Run `KB - Answer OpenRouter Manual` or `KB - Ingest Raw OpenRouter Manual`.
-5. Review any proposed feedback or LLM mutation plan.
+5. Review any proposed feedback and the LLM ingest plan results.
 6. Run `KB - Apply Feedback` with `approved=true` only after review.
 
 Run maintenance checks without writing reports:
