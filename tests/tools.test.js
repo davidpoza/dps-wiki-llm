@@ -95,6 +95,7 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   assert.ok(nodes.has("Send Telegram Ingest Log"));
   assert.ok(nodes.has("Finalize Ingest Response"));
   assert.match(nodes.get("Build Telegram Ingest Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
+  assert.match(nodes.get("Build Telegram Ingest Log").parameters.jsCode, /telegram_skip_reason/);
   assert.match(nodes.get("Build Telegram Ingest Log").parameters.jsCode, /KB ingest completed/);
 
   assert.equal(workflow.connections["Parse Source Payload"].main[0][0].node, "Build OpenRouter Source Note Request");
@@ -182,6 +183,7 @@ test("answer workflow accepts Telegram input and sends Telegram output logs", as
   assert.match(nodes.get("Prepare Query").parameters.jsCode, /telegram_chat_id/);
   assert.match(nodes.get("Prepare Query").parameters.jsCode, /Unauthorized Telegram chat id/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
+  assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /telegram_skip_reason/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /KB answer completed/);
 
   const $input = {
