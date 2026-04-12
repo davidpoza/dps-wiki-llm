@@ -38,7 +38,7 @@ The repo now includes the deterministic local toolchain plus importable n8n work
 |---|---|---|
 | `init-db.ts` | Creates the SQLite schema and FTS tables. | `state/kb.db` |
 | `ingest-source.ts` | Normalizes a `raw/**` artifact into the canonical source payload. | stdout JSON |
-| `plan-source-note.ts` | Builds a safe baseline Mutation Plan that creates the source note and root index entry. | stdout JSON |
+| `plan-source-note.ts` | Builds a safe baseline Mutation Plan that creates the source note and root index entry, using an LLM-cleaned `source_note` when provided. | stdout JSON |
 | `apply-update.ts` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
 | `answer-context.ts` | Reads retrieved wiki notes and builds the LLM context packet plus Answer Record shell. | stdout JSON |
 | `answer-record.ts` | Persists a generated answer artifact under `outputs/`. | `outputs/**` |
@@ -325,7 +325,7 @@ The canonical JSON payload contracts from `AGENTS.md` are represented as TypeScr
 
 - `apply-update.ts` enforces `create`, `update`, and `noop` actions and tracks idempotency keys in `state/runtime/idempotency-keys.json`.
 - `ingest-source.ts` accepts only `raw/**` paths and emits a normalized source payload.
-- `plan-source-note.ts` is a deterministic baseline planner; the OpenRouter ingest workflow proposes richer wiki propagation separately for review.
+- `plan-source-note.ts` builds the baseline source note plan. The OpenRouter ingest workflow now requires an LLM-cleaned `source_note` before mutating `wiki/`, then proposes and auto-applies richer wiki propagation only after guardrail validation.
 - `reindex.ts` indexes markdown derived from `wiki/`, not `raw/`.
 - `search.ts` queries the FTS index and returns ranked results with `path`, `title`, `doc_type`, and `score`.
 - `answer-context.ts` reads retrieved wiki markdown for LLM context; the OpenRouter answer workflow stores the answer under `outputs/` with `answer-record.ts` and returns feedback for review.

@@ -24,6 +24,16 @@ export interface NormalizedSourcePayload {
   language?: string;
   checksum?: string;
   metadata?: JsonObject;
+  source_note?: LlmSourceNote;
+}
+
+export interface LlmSourceNote {
+  summary: string;
+  raw_context: string;
+  extracted_claims?: string[];
+  open_questions?: string[];
+  generated_by?: string;
+  model?: string;
 }
 
 export interface MarkdownPayload {

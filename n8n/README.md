@@ -48,8 +48,8 @@ The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/pro
 - `workflows/kb-ingest-raw-blueprint.json`
   - runnable manual OpenRouter workflow
   - shows the orchestration for `raw/**` ingestion
-  - runs `ingest-source.ts`, then uses `plan-source-note.ts` as a deterministic baseline planner for creating and committing the source note
-  - calls OpenRouter for an optional richer Mutation Plan; that LLM plan is returned for review and is not applied automatically
+  - runs `ingest-source.ts`, calls OpenRouter to clean the source note content, then uses `plan-source-note.ts` to create and commit the source note
+  - calls OpenRouter for an optional richer Mutation Plan and auto-applies non-empty plans after guardrail validation
 
 ## Recommended Topology
 
@@ -58,8 +58,9 @@ Keep the orchestration split into small workflows instead of one large graph:
 1. `KB - Ingest Raw OpenRouter Manual`
    - runs manually in V1; only activate the raw watcher after WebDAV behavior is validated
    - normalizes the event
+   - cleans the source note content through OpenRouter before mutating `wiki/`
    - creates and commits the source-note baseline plan
-   - proposes richer wiki mutations through OpenRouter for manual approval
+   - proposes richer wiki mutations through OpenRouter and applies safe non-empty plans
 
 2. `KB - Answer OpenRouter Manual`
    - retrieves wiki context

@@ -2,7 +2,7 @@
 
 import { SYSTEM_CONFIG } from "./config.js";
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
-import type { CommitInput, JsonObject, MutationPlan, NormalizedSourcePayload } from "./lib/contracts.js";
+import type { CommitInput, JsonObject, LlmSourceNote, MutationPlan, NormalizedSourcePayload } from "./lib/contracts.js";
 import { firstMeaningfulParagraph, slugify, stableHash, truncateText } from "./lib/text.js";
 
 interface SourceNotePlanOutput {
@@ -12,7 +12,7 @@ interface SourceNotePlanOutput {
 }
 
 /**
- * Build a deterministic minimal ingestion plan for raw artifacts.
+ * Build the minimal ingestion plan for raw artifacts.
  *
  * This does not replace a richer LLM planner. It creates the safe source-note baseline that every ingestion can apply.
  */
@@ -23,6 +23,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function normalizeStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  if (value.some((item) => typeof item !== "string")) {
+    throw new Error("source_note arrays must contain only strings");
+  }
+
+  const normalized = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeSourceNote(value: unknown): LlmSourceNote | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const summary = stringValue(value.summary);
+  const rawContext = stringValue(value.raw_context);
+
+  if (!summary || !rawContext) {
+    throw new Error("source_note requires non-empty summary and raw_context");
+  }
+
+  return {
+    summary,
+    raw_context: rawContext,
+    extracted_claims: normalizeStringArray(value.extracted_claims),
+    open_questions: normalizeStringArray(value.open_questions),
+    generated_by: stringValue(value.generated_by),
+    model: stringValue(value.model)
+  };
 }
 
 function normalizePayload(input: unknown): NormalizedSourcePayload {
@@ -52,7 +90,8 @@ function normalizePayload(input: unknown): NormalizedSourcePayload {
     author: stringValue(input.author),
     language: stringValue(input.language),
     checksum: stringValue(input.checksum),
-    metadata: isRecord(input.metadata) ? (input.metadata as JsonObject) : {}
+    metadata: isRecord(input.metadata) ? (input.metadata as JsonObject) : {},
+    source_note: normalizeSourceNote(input.source_note)
   };
 }
 
@@ -108,13 +147,46 @@ function frontmatterFor(payload: NormalizedSourcePayload): Record<string, unknow
     frontmatter.metadata = payload.metadata;
   }
 
+  if (payload.source_note) {
+    frontmatter.source_note_generated_by = payload.source_note.generated_by || "llm";
+
+    if (payload.source_note.model) {
+      frontmatter.source_note_model = payload.source_note.model;
+    }
+  }
+
   return frontmatter;
+}
+
+function sourceNoteSections(payload: NormalizedSourcePayload): Record<string, string[]> {
+  if (payload.source_note) {
+    const sections: Record<string, string[]> = {
+      Summary: [payload.source_note.summary],
+      "Raw Context": [payload.source_note.raw_context]
+    };
+
+    if (payload.source_note.extracted_claims && payload.source_note.extracted_claims.length > 0) {
+      sections["Extracted Claims"] = payload.source_note.extracted_claims;
+    }
+
+    if (payload.source_note.open_questions && payload.source_note.open_questions.length > 0) {
+      sections["Open Questions"] = payload.source_note.open_questions;
+    }
+
+    return sections;
+  }
+
+  const summary = buildSummary(payload.content, payload.title);
+  const rawContext = truncateText(payload.content || summary, SYSTEM_CONFIG.ingest.rawContextMaxLength);
+
+  return {
+    Summary: [summary],
+    "Raw Context": [rawContext]
+  };
 }
 
 function buildPlan(payload: NormalizedSourcePayload): SourceNotePlanOutput {
   const sourceNotePath = buildSourceNotePath(payload);
-  const summary = buildSummary(payload.content, payload.title);
-  const rawContext = truncateText(payload.content || summary, SYSTEM_CONFIG.ingest.rawContextMaxLength);
   const planId = `plan-${safeTimestamp(payload.captured_at)}-ingest-${stableHash(
     `${payload.source_id}:${payload.raw_path}`,
     SYSTEM_CONFIG.ingest.sourceIdHashLength
@@ -136,10 +208,7 @@ function buildPlan(payload: NormalizedSourcePayload): SourceNotePlanOutput {
         payload: {
           title: payload.title,
           frontmatter: frontmatterFor(payload),
-          sections: {
-            Summary: [summary],
-            "Raw Context": [rawContext]
-          },
+          sections: sourceNoteSections(payload),
           change_reason: "Initial source ingestion"
         }
       }

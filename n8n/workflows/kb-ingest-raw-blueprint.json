@@ -98,11 +98,11 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        380,
+        1280,
         16
       ],
       "notesInFlow": true,
-      "notes": "Deterministic baseline planner: creates only the source note and root index update. Additional LLM plans are validated and applied later with guardrails."
+      "notes": "Creates the source note and root index Mutation Plan. In the n8n ingest flow its input is the mandatory LLM-cleaned source_note payload."
     },
     {
       "parameters": {
@@ -113,7 +113,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        700,
+        1600,
         16
       ]
     },
@@ -127,7 +127,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        1020,
+        1920,
         16
       ]
     },
@@ -140,7 +140,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1320,
+        2220,
         16
       ]
     },
@@ -154,7 +154,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        1620,
+        2520,
         16
       ]
     },
@@ -167,7 +167,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1920,
+        2820,
         16
       ]
     },
@@ -181,7 +181,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        2220,
+        3120,
         16
       ]
     },
@@ -194,20 +194,20 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2520,
+        3420,
         16
       ]
     },
     {
       "parameters": {
-        "jsCode": "const sourcePayload = $node['Parse Source Payload'].json.source_payload;\nconst baselinePlan = $node['Parse Source Note Plan'].json.mutation_plan;\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst baseUrl = (env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/+$/, '');\nconst model = (env.OPENROUTER_MODEL || '').trim();\nconst sourceRefs = [sourcePayload.raw_path, baselinePlan.page_actions?.[0]?.path].filter(Boolean);\nconst allowedPagePathPrefixes = ['wiki/concepts/', 'wiki/entities/', 'wiki/topics/', 'wiki/analyses/'];\nconst requestBody = {\n  ...(model ? { model } : {}),\n  stream: false,\n  temperature: 0,\n  messages: [\n    {\n      role: 'system',\n      content: [\n        'You produce only valid JSON matching the Mutation Plan contract.',\n        'This plan may be applied automatically and must not include the baseline source-note action.',\n        'Every page_actions[].path must start exactly with one of: wiki/concepts/, wiki/entities/, wiki/topics/, or wiki/analyses/.',\n        'Never write directly under wiki/, for example use wiki/concepts/lean-server.md instead of wiki/lean-server.md.',\n        'Only propose small grounded changes under those allowed page path prefixes.',\n        'Do not write raw content dumps. Prefer noop or empty page_actions when the source lacks reusable knowledge.',\n        'Every write action must include an idempotency_key and source_refs must include the raw_path and baseline source note path when available.'\n      ].join(' ')\n    },\n    {\n      role: 'user',\n      content: JSON.stringify({\n        source_payload: sourcePayload,\n        baseline_mutation_plan: baselinePlan,\n        allowed_page_path_prefixes: allowedPagePathPrefixes,\n        invalid_page_path_examples: ['wiki/lean-server.md', 'wiki/example.md'],\n        required_json_shape: {\n          plan_id: 'plan-' + sourcePayload.source_id + '-llm-ingest-review',\n          operation: 'ingest',\n          summary: 'Auto-applied LLM plan for reusable wiki updates',\n          source_refs: sourceRefs,\n          page_actions: [\n            {\n              path: 'wiki/concepts/example-concept.md',\n              action: 'noop',\n              doc_type: 'concept',\n              change_type: 'fact',\n              idempotency_key: sourcePayload.source_id + ':wiki/concepts/example-concept.md',\n              payload: { sections: {} }\n            }\n          ],\n          index_updates: [],\n          post_actions: { reindex: true, commit: true }\n        }\n      }, null, 2)\n    }\n  ]\n};\nreturn [{\n  json: {\n    source_payload: sourcePayload,\n    baseline_mutation_plan: baselinePlan,\n    baseline_mutation_result: $node['Parse Mutation Result'].json,\n    baseline_reindex_result: $node['Parse Reindex Result'].json,\n    baseline_commit_result: $node['Parse Commit Result'].json,\n    openrouter_url: baseUrl + '/chat/completions',\n    openrouter_request: requestBody\n  }\n}];"
+        "jsCode": "const sourcePayload = $node['Parse Source Note Plan'].json.source_payload;\nconst baselinePlan = $node['Parse Source Note Plan'].json.mutation_plan;\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst baseUrl = (env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/+$/, '');\nconst model = (env.OPENROUTER_MODEL || '').trim();\nconst sourceRefs = [sourcePayload.raw_path, baselinePlan.page_actions?.[0]?.path].filter(Boolean);\nconst allowedPagePathPrefixes = ['wiki/concepts/', 'wiki/entities/', 'wiki/topics/', 'wiki/analyses/'];\nconst requestBody = {\n  ...(model ? { model } : {}),\n  stream: false,\n  temperature: 0,\n  messages: [\n    {\n      role: 'system',\n      content: [\n        'You produce only valid JSON matching the Mutation Plan contract.',\n        'This plan may be applied automatically and must not include the baseline source-note action.',\n        'Every page_actions[].path must start exactly with one of: wiki/concepts/, wiki/entities/, wiki/topics/, or wiki/analyses/.',\n        'Never write directly under wiki/, for example use wiki/concepts/lean-server.md instead of wiki/lean-server.md.',\n        'Only propose small grounded changes under those allowed page path prefixes.',\n        'Do not write raw content dumps. Prefer noop or empty page_actions when the source lacks reusable knowledge.',\n        'Every write action must include an idempotency_key and source_refs must include the raw_path and baseline source note path when available.'\n      ].join(' ')\n    },\n    {\n      role: 'user',\n      content: JSON.stringify({\n        source_payload: sourcePayload,\n        baseline_mutation_plan: baselinePlan,\n        allowed_page_path_prefixes: allowedPagePathPrefixes,\n        invalid_page_path_examples: ['wiki/lean-server.md', 'wiki/example.md'],\n        required_json_shape: {\n          plan_id: 'plan-' + sourcePayload.source_id + '-llm-ingest-review',\n          operation: 'ingest',\n          summary: 'Auto-applied LLM plan for reusable wiki updates',\n          source_refs: sourceRefs,\n          page_actions: [\n            {\n              path: 'wiki/concepts/example-concept.md',\n              action: 'noop',\n              doc_type: 'concept',\n              change_type: 'fact',\n              idempotency_key: sourcePayload.source_id + ':wiki/concepts/example-concept.md',\n              payload: { sections: {} }\n            }\n          ],\n          index_updates: [],\n          post_actions: { reindex: true, commit: true }\n        }\n      }, null, 2)\n    }\n  ]\n};\nreturn [{\n  json: {\n    source_payload: sourcePayload,\n    baseline_mutation_plan: baselinePlan,\n    baseline_mutation_result: $node['Parse Mutation Result'].json,\n    baseline_reindex_result: $node['Parse Reindex Result'].json,\n    baseline_commit_result: $node['Parse Commit Result'].json,\n    openrouter_source_note_meta: $node['Parse LLM Source Note'].json.openrouter_source_note_meta,\n    openrouter_url: baseUrl + '/chat/completions',\n    openrouter_request: requestBody\n  }\n}];"
       },
       "id": "20ce5d16-07b4-45d2-ad64-91bb5108b8f0",
       "name": "Build OpenRouter Ingest Plan Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2820,
+        3720,
         16
       ],
       "notesInFlow": true,
@@ -249,7 +249,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3120,
+        4020,
         16
       ]
     },
@@ -262,7 +262,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3420,
+        4320,
         16
       ]
     },
@@ -282,7 +282,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        3720,
+        4620,
         16
       ]
     },
@@ -295,7 +295,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4020,
+        4920,
         -96
       ]
     },
@@ -309,7 +309,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        4320,
+        5220,
         -96
       ]
     },
@@ -322,7 +322,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4620,
+        5520,
         -96
       ]
     },
@@ -336,7 +336,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        4920,
+        5820,
         -96
       ]
     },
@@ -349,7 +349,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5220,
+        6120,
         -96
       ]
     },
@@ -362,7 +362,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5520,
+        6420,
         -96
       ]
     },
@@ -376,7 +376,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        5820,
+        6720,
         -96
       ]
     },
@@ -389,22 +389,92 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6120,
+        7020,
         -96
       ]
     },
     {
       "parameters": {
-        "jsCode": "const llmApplied = Boolean($json.llm_mutation_result);\nreturn [{\n  json: {\n    status: llmApplied ? 'baseline_ingest_applied_llm_plan_applied' : 'baseline_ingest_applied_no_llm_changes',\n    source_payload: $json.source_payload,\n    baseline_mutation_plan: $json.baseline_mutation_plan,\n    baseline_mutation_result: $json.baseline_mutation_result,\n    baseline_reindex_result: $json.baseline_reindex_result,\n    baseline_commit_result: $json.baseline_commit_result,\n    llm_mutation_plan: $json.llm_mutation_plan,\n    llm_guardrail_rejections: $json.llm_guardrail_rejections ?? [],\n    llm_plan_approval_required: $json.llm_plan_approval_required,\n    llm_plan_auto_apply_required: $json.llm_plan_auto_apply_required,\n    llm_mutation_result: $json.llm_mutation_result ?? null,\n    llm_reindex_result: $json.llm_reindex_result ?? null,\n    llm_commit_result: $json.llm_commit_result ?? null,\n    openrouter_ingest_meta: $json.openrouter_ingest_meta\n  }\n}];"
+        "jsCode": "const llmApplied = Boolean($json.llm_mutation_result);\nreturn [{\n  json: {\n    status: llmApplied ? 'baseline_ingest_applied_llm_plan_applied' : 'baseline_ingest_applied_no_llm_changes',\n    source_payload: $json.source_payload,\n    baseline_mutation_plan: $json.baseline_mutation_plan,\n    baseline_mutation_result: $json.baseline_mutation_result,\n    baseline_reindex_result: $json.baseline_reindex_result,\n    baseline_commit_result: $json.baseline_commit_result,\n    openrouter_source_note_meta: $json.openrouter_source_note_meta,\n    llm_mutation_plan: $json.llm_mutation_plan,\n    llm_guardrail_rejections: $json.llm_guardrail_rejections ?? [],\n    llm_plan_approval_required: $json.llm_plan_approval_required,\n    llm_plan_auto_apply_required: $json.llm_plan_auto_apply_required,\n    llm_mutation_result: $json.llm_mutation_result ?? null,\n    llm_reindex_result: $json.llm_reindex_result ?? null,\n    llm_commit_result: $json.llm_commit_result ?? null,\n    openrouter_ingest_meta: $json.openrouter_ingest_meta\n  }\n}];"
       },
       "id": "fc739fd6-07f2-41f4-919b-137ed8860fdb",
       "name": "Build Ingest Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6420,
+        7320,
         16
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sourcePayload = $node['Parse Source Payload'].json.source_payload;\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst baseUrl = (env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/+$/, '');\nconst model = (env.OPENROUTER_MODEL || '').trim();\nconst requestBody = {\n  ...(model ? { model } : {}),\n  stream: false,\n  temperature: 0,\n  messages: [\n    {\n      role: 'system',\n      content: [\n        'You produce only valid JSON for a cleaned source note.',\n        'Clean and normalize the source content without losing materially useful information.',\n        'Do not invent facts, links, names, dates, numbers, or claims not present in the source.',\n        'Remove only boilerplate, navigation, ads, duplicated text, formatting noise, and irrelevant wrapper text.',\n        'Do not propose wiki mutations. This step only prepares the wiki/sources note content.',\n        'Return a JSON object with summary, raw_context, extracted_claims, and open_questions.'\n      ].join(' ')\n    },\n    {\n      role: 'user',\n      content: JSON.stringify({\n        source_payload: sourcePayload,\n        required_json_shape: {\n          summary: 'Faithful concise summary of the source.',\n          raw_context: 'Cleaned normalized source content preserving all materially useful information.',\n          extracted_claims: ['Grounded claim from the source.'],\n          open_questions: ['Optional unresolved ambiguity from the source.']\n        },\n        constraints: [\n          'Preserve concrete names, dates, numbers, URLs, tool names, decisions, and caveats from the source.',\n          'Use extracted_claims only for claims directly supported by the source.',\n          'Use open_questions only for unresolved gaps present in or implied by the source.',\n          'If the source is thin, keep raw_context short but still faithful.'\n        ]\n      }, null, 2)\n    }\n  ]\n};\nreturn [{\n  json: {\n    source_payload: sourcePayload,\n    openrouter_url: baseUrl + '/chat/completions',\n    openrouter_request: requestBody\n  }\n}];"
+      },
+      "id": "15a7f63e-5014-4c8e-a4c9-5950a0e7a2aa",
+      "name": "Build OpenRouter Source Note Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        380,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "Builds the mandatory OpenRouter request that cleans the source content for the wiki/sources note before any wiki mutation."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.openrouter_url }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.OPENROUTER_SITE_URL || 'https://localhost' }}"
+            },
+            {
+              "name": "X-OpenRouter-Title",
+              "value": "dps-wiki-llm"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
+        "options": {}
+      },
+      "id": "5848180b-2059-4a01-af58-50599f2fed1d",
+      "name": "Call OpenRouter Source Note Cleaner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function extractJson(text) {\n  const fence = String.fromCharCode(96, 96, 96);\n  const stripped = text.trim().replace(new RegExp('^' + fence + '(?:json)?\\\\s*', 'i'), '').replace(new RegExp(fence + '$', 'i'), '').trim();\n  try {\n    return JSON.parse(stripped);\n  } catch (error) {\n    const match = stripped.match(/\\{[\\s\\S]*\\}/);\n    if (!match) throw error;\n    return JSON.parse(match[0]);\n  }\n}\nfunction assertRecord(value, label) {\n  if (!value || typeof value !== 'object' || Array.isArray(value)) {\n    throw new Error(label + ' must be an object');\n  }\n}\nfunction stringField(record, field) {\n  const value = record[field];\n  if (typeof value !== 'string' || !value.trim()) {\n    throw new Error('LLM source note must include non-empty ' + field);\n  }\n  return value.trim();\n}\nfunction stringArrayField(record, field, required) {\n  const value = record[field];\n  if (value === undefined && !required) {\n    return [];\n  }\n  if (!Array.isArray(value)) {\n    throw new Error('LLM source note must include ' + field + '[]');\n  }\n  if (value.some((item) => typeof item !== 'string')) {\n    throw new Error('LLM source note ' + field + '[] must contain only strings');\n  }\n  return value\n    .map((item) => item.trim())\n    .filter(Boolean);\n}\nconst raw = $input.first().json;\nconst response = raw.body ?? raw;\nconst choice = Array.isArray(response.choices) ? response.choices[0] : undefined;\nconst content = choice?.message?.content ?? choice?.text;\nconst text = Array.isArray(content)\n  ? content.map((part) => typeof part === 'string' ? part : part?.text ?? '').join('').trim()\n  : typeof content === 'string'\n    ? content.trim()\n    : '';\nif (!text) {\n  throw new Error('OpenRouter source note response did not include JSON content');\n}\nconst proposedSourceNote = extractJson(text);\nassertRecord(proposedSourceNote, 'LLM source note');\nconst packet = $node['Build OpenRouter Source Note Request'].json;\nconst sourceNote = {\n  summary: stringField(proposedSourceNote, 'summary'),\n  raw_context: stringField(proposedSourceNote, 'raw_context'),\n  extracted_claims: stringArrayField(proposedSourceNote, 'extracted_claims', true),\n  open_questions: stringArrayField(proposedSourceNote, 'open_questions', false),\n  generated_by: 'openrouter',\n  model: response.model ?? packet.openrouter_request.model ?? undefined\n};\nconst sourcePayload = {\n  ...packet.source_payload,\n  source_note: sourceNote\n};\nreturn [{\n  json: {\n    ...packet,\n    source_payload: sourcePayload,\n    source_note: sourceNote,\n    payload_b64: Buffer.from(JSON.stringify(sourcePayload), 'utf8').toString('base64'),\n    openrouter_source_note_meta: {\n      id: response.id ?? null,\n      model: response.model ?? packet.openrouter_request.model ?? null,\n      usage: response.usage ?? null,\n      finish_reason: choice?.finish_reason ?? null\n    }\n  }\n}];"
+      },
+      "id": "c0bef524-d050-47f7-a9b0-33387b2f6229",
+      "name": "Parse LLM Source Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        16
+      ],
+      "notesInFlow": true,
+      "notes": "Validates the mandatory cleaned source-note JSON. Invalid or empty responses fail ingestion before wiki mutation."
     }
   ],
   "connections": {
@@ -467,7 +537,7 @@
       "main": [
         [
           {
-            "node": "Run plan-source-note.ts",
+            "node": "Build OpenRouter Source Note Request",
             "type": "main",
             "index": 0
           }
@@ -695,6 +765,39 @@
         [
           {
             "node": "Build Ingest Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build OpenRouter Source Note Request": {
+      "main": [
+        [
+          {
+            "node": "Call OpenRouter Source Note Cleaner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenRouter Source Note Cleaner": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM Source Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse LLM Source Note": {
+      "main": [
+        [
+          {
+            "node": "Run plan-source-note.ts",
             "type": "main",
             "index": 0
           }

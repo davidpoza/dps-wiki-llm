@@ -162,13 +162,17 @@ Run `KB - Ingest Raw OpenRouter Manual` manually while V1 is stabilizing.
 The workflow:
 
 - normalizes a `raw/**` path with `ingest-source.ts`
+- calls OpenRouter to clean the source content into a structured `source_note`
+- validates that the LLM source note includes non-empty `summary` and `raw_context`
 - builds the baseline source note plan with `plan-source-note.ts`
-- applies and commits that deterministic source note baseline
+- applies and commits that LLM-cleaned source note baseline
 - calls OpenRouter for an optional richer Mutation Plan
 - validates the LLM plan with guardrails
 - applies non-empty LLM plans with `apply-update.ts`
 - reindexes and creates a second commit for applied LLM changes
-- returns `llm_mutation_plan`, `llm_guardrail_rejections`, `llm_plan_auto_apply_required`, `llm_mutation_result`, and `llm_commit_result`
+- returns `openrouter_source_note_meta`, `llm_mutation_plan`, `llm_guardrail_rejections`, `llm_plan_auto_apply_required`, `llm_mutation_result`, and `llm_commit_result`
+
+If the source-note cleaner fails or returns invalid JSON, the workflow fails before mutating `wiki/`.
 
 If the LLM plan is empty, the workflow stops after the baseline commit and returns `baseline_ingest_applied_no_llm_changes`. If the plan includes unsafe actions, the workflow converts those actions to `noop`, reports them in `llm_guardrail_rejections`, and applies only the remaining safe changes.
 
@@ -177,5 +181,5 @@ If the LLM plan is empty, the workflow stops after the baseline commit and retur
 - Never activate a workflow that watches `wiki/**`.
 - Keep the raw watcher in `KB - Ingest Raw OpenRouter Manual` inactive until WebDAV sync behavior is validated.
 - Do not store `OPENROUTER_API_KEY` in workflow JSON, markdown notes, or committed files.
-- Treat every LLM-generated Mutation Plan as untrusted until reviewed.
+- Treat every LLM-generated source note and Mutation Plan as untrusted; the workflow validates shape before writes and guardrails the applied mutation plan.
 - Use `KB - Apply Feedback` for approved feedback propagation so `feedback-record.ts`, `apply-update.ts`, `reindex.ts`, and `commit.ts` preserve traceability.

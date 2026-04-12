@@ -66,12 +66,13 @@ This is the only local script that turns a raw event into a normalized ingestion
 
 ### `tools/plan-source-note.ts`
 
-- Accepts a Normalized Source Payload.
-- Builds a deterministic Mutation Plan that creates a `wiki/sources/` note and updates `INDEX.md`.
+- Accepts a Normalized Source Payload, optionally enriched with `source_note`.
+- Builds a Mutation Plan that creates a `wiki/sources/` note and updates `INDEX.md`.
+- Uses `source_note.summary`, `source_note.raw_context`, `source_note.extracted_claims`, and `source_note.open_questions` when provided; otherwise keeps the deterministic fallback for direct CLI usage.
 - Includes idempotency keys, source references, and a matching Commit input payload.
 - Acts as the safe baseline planner for source-note creation.
 
-The production OpenRouter ingest workflow keeps this baseline and adds a separate LLM-proposed Mutation Plan for human review when ingestion should also update concepts, entities, topics, or analyses.
+The production OpenRouter ingest workflow requires an LLM-cleaned `source_note` before this baseline runs, then adds a separate guardrail-validated LLM Mutation Plan when ingestion should also update concepts, entities, topics, or analyses.
 
 ### `tools/reindex.ts`
 

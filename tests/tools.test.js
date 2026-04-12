@@ -65,16 +65,29 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
 
   assert.ok(nodes.has("Should Apply LLM Plan?"));
+  assert.ok(nodes.has("Build OpenRouter Source Note Request"));
+  assert.ok(nodes.has("Call OpenRouter Source Note Cleaner"));
+  assert.ok(nodes.has("Parse LLM Source Note"));
   assert.ok(nodes.has("Run LLM apply-update.ts"));
   assert.ok(nodes.has("Run LLM reindex.ts"));
   assert.ok(nodes.has("Run LLM commit.ts"));
+  assert.match(nodes.get("Build OpenRouter Source Note Request").parameters.jsCode, /without losing materially useful information/);
+  assert.match(nodes.get("Build OpenRouter Source Note Request").parameters.jsCode, /Do not invent facts/);
+  assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /LLM source note must include non-empty/);
+  assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /payload_b64/);
   assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Never write directly under wiki/);
   assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /allowed_page_path_prefixes/);
+  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Parse Source Note Plan/);
   assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /guardrailRejections/);
   assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /idempotency_key/);
+  assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /openrouter_source_note_meta/);
   assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /baseline_ingest_applied_llm_plan_applied/);
   assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /llm_guardrail_rejections/);
 
+  assert.equal(workflow.connections["Parse Source Payload"].main[0][0].node, "Build OpenRouter Source Note Request");
+  assert.equal(workflow.connections["Build OpenRouter Source Note Request"].main[0][0].node, "Call OpenRouter Source Note Cleaner");
+  assert.equal(workflow.connections["Call OpenRouter Source Note Cleaner"].main[0][0].node, "Parse LLM Source Note");
+  assert.equal(workflow.connections["Parse LLM Source Note"].main[0][0].node, "Run plan-source-note.ts");
   assert.equal(workflow.connections["Parse LLM Ingest Plan"].main[0][0].node, "Should Apply LLM Plan?");
   assert.equal(workflow.connections["Should Apply LLM Plan?"].main[0][0].node, "Prepare LLM Plan Application");
   assert.equal(workflow.connections["Should Apply LLM Plan?"].main[1][0].node, "Build Ingest Response");
@@ -116,6 +129,38 @@ test("ingest-source and plan-source-note produce canonical ingestion contracts",
   assert.deepEqual(plan.json.mutation_plan.index_updates[0].entries_to_add, ["[[Example Source]]"]);
   assert.equal(plan.json.commit_input.operation, "ingest");
   assert.ok(plan.json.commit_input.paths_to_stage.includes("state/kb.db"));
+});
+
+test("plan-source-note uses an LLM-cleaned source_note when present", async () => {
+  const vault = await tempDir("dps-wiki-llm-source-note-vault-");
+  const planInputPath = path.join(vault, "source-payload.json");
+
+  await writeJson(planInputPath, {
+    source_id: "src-2026-04-10-web-cleaned",
+    source_kind: "web",
+    captured_at: "2026-04-10T20:15:00Z",
+    raw_path: "raw/web/cleaned.md",
+    title: "Cleaned Source",
+    content: "Noisy original content that should not be used for the source note.",
+    source_note: {
+      summary: "LLM-cleaned summary.",
+      raw_context: "LLM-cleaned raw context with preserved details.",
+      extracted_claims: ["Grounded claim one.", "Grounded claim two."],
+      open_questions: ["What remains unresolved?"],
+      generated_by: "openrouter",
+      model: "test/model"
+    }
+  });
+
+  const plan = await runTool("plan-source-note", ["--vault", vault, "--input", planInputPath]);
+  const sourceAction = plan.json.mutation_plan.page_actions[0];
+
+  assert.deepEqual(sourceAction.payload.sections.Summary, ["LLM-cleaned summary."]);
+  assert.deepEqual(sourceAction.payload.sections["Raw Context"], ["LLM-cleaned raw context with preserved details."]);
+  assert.deepEqual(sourceAction.payload.sections["Extracted Claims"], ["Grounded claim one.", "Grounded claim two."]);
+  assert.deepEqual(sourceAction.payload.sections["Open Questions"], ["What remains unresolved?"]);
+  assert.equal(sourceAction.payload.frontmatter.source_note_generated_by, "openrouter");
+  assert.equal(sourceAction.payload.frontmatter.source_note_model, "test/model");
 });
 
 test("answer-context reads wiki docs and answer-record persists the output artifact", async () => {

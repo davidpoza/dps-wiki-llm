@@ -29,6 +29,7 @@ actor "User query" as userQuery
 rectangle "raw/**\nEvent stream" as raw #E7F5FF
 rectangle "n8n trigger\n(raw/** only)" as n8n #FFF3BF
 rectangle "ingest-source.ts\nnormalized source payload" as ingest #DFF3E4
+rectangle "LLM source cleaner\nnormalized source note" as sourceCleaner #FFF3BF
 rectangle "plan-source-note.ts\nbaseline source note plan" as baselinePlanner #DFF3E4
 rectangle "LLM planner\noptional richer Mutation Plan" as planner #FFF3BF
 rectangle "apply-update.ts\nidempotent file updates" as apply #DFF3E4
@@ -48,7 +49,8 @@ rectangle "feedback-record.ts\nfeedback decision + optional plan" as feedback #D
 rawEvent --> raw
 raw --> n8n : file event
 n8n --> ingest
-ingest --> baselinePlanner
+ingest --> sourceCleaner
+sourceCleaner --> baselinePlanner
 ingest --> planner : optional richer plan
 baselinePlanner --> apply : Mutation Plan
 planner --> apply : Mutation Plan
