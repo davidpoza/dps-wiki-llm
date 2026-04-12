@@ -77,9 +77,16 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /payload_b64/);
   assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Never write directly under wiki/);
   assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /allowed_page_path_prefixes/);
+  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /source_note_update_allowed_path/);
+  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Linked Notes/);
+  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Sources/);
   assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Parse Source Note Plan/);
   assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /guardrailRejections/);
   assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /idempotency_key/);
+  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /baselineSourceNotePath/);
+  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /hasOnlyLinkedNotesSection/);
+  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /source note updates may only write Linked Notes/);
+  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /page path outside allowed wiki areas/);
   assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /openrouter_source_note_meta/);
   assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /baseline_ingest_applied_llm_plan_applied/);
   assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /llm_guardrail_rejections/);
@@ -92,6 +99,65 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   assert.equal(workflow.connections["Should Apply LLM Plan?"].main[0][0].node, "Prepare LLM Plan Application");
   assert.equal(workflow.connections["Should Apply LLM Plan?"].main[1][0].node, "Build Ingest Response");
   assert.equal(workflow.connections["Parse LLM Commit Result"].main[0][0].node, "Build Ingest Response");
+
+  const parseLlmPlan = (plan) => {
+    const $input = {
+      first: () => ({
+        json: {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify(plan)
+              }
+            }
+          ]
+        }
+      })
+    };
+    const $node = {
+      "Build OpenRouter Ingest Plan Request": {
+        json: {
+          baseline_mutation_plan: {
+            page_actions: [{ path: "wiki/sources/source-a.md" }]
+          }
+        }
+      }
+    };
+
+    return new Function("$input", "$node", nodes.get("Parse LLM Ingest Plan").parameters.jsCode)($input, $node)[0].json;
+  };
+  const guarded = parseLlmPlan({
+    plan_id: "plan-guardrail-test",
+    source_refs: ["raw/inbox/source-a.md", "wiki/sources/source-a.md"],
+    page_actions: [
+      {
+        path: "wiki/sources/source-a.md",
+        action: "update",
+        idempotency_key: "src-a:linked-notes",
+        payload: { sections: { "Linked Notes": ["[[Model Context Protocol]]"] } }
+      },
+      {
+        path: "wiki/sources/other-source.md",
+        action: "update",
+        idempotency_key: "src-a:other",
+        payload: { sections: { "Linked Notes": ["[[Other]]"] } }
+      },
+      {
+        path: "wiki/sources/source-a.md",
+        action: "update",
+        idempotency_key: "src-a:summary",
+        payload: { sections: { Summary: ["Do not rewrite source summary."] } }
+      }
+    ],
+    index_updates: []
+  });
+  assert.equal(guarded.llm_mutation_plan.page_actions[0].action, "update");
+  assert.equal(guarded.llm_mutation_plan.page_actions[1].action, "noop");
+  assert.equal(guarded.llm_mutation_plan.page_actions[2].action, "noop");
+  assert.deepEqual(
+    guarded.llm_guardrail_rejections.map((item) => item.reason),
+    ["page path outside allowed wiki areas", "source note updates may only write Linked Notes"]
+  );
 });
 
 test("ingest-source and plan-source-note produce canonical ingestion contracts", async () => {
@@ -340,6 +406,18 @@ test("apply-update creates, updates, updates indexes, and records idempotency", 
         }
       },
       {
+        path: "wiki/sources/source-a.md",
+        action: "update",
+        doc_type: "source",
+        change_type: "new_link",
+        idempotency_key: "src-new-source:source-linked-notes",
+        payload: {
+          sections: {
+            "Linked Notes": ["[[Model Context Protocol]]"]
+          }
+        }
+      },
+      {
         path: "wiki/concepts/noop.md",
         action: "noop",
         idempotency_key: "noop"
@@ -359,12 +437,15 @@ test("apply-update creates, updates, updates indexes, and records idempotency", 
   assert.equal(first.json.status, "applied");
   assert.deepEqual(first.json.created, ["wiki/sources/new-source.md"]);
   assert.ok(first.json.updated.includes("wiki/concepts/model-context-protocol.md"));
+  assert.ok(first.json.updated.includes("wiki/sources/source-a.md"));
   assert.ok(first.json.updated.includes("INDEX.md"));
   assert.ok(first.json.skipped.includes("wiki/concepts/noop.md"));
 
   const source = await readFile(path.join(vault, "wiki/sources/new-source.md"));
   assert.match(source, /# New Source/);
   assert.match(source, /updated_by: "apply-update.ts"/);
+  const linkedSource = await readFile(path.join(vault, "wiki/sources/source-a.md"));
+  assert.match(linkedSource, /## Linked Notes\n- \[\[Model Context Protocol\]\]/);
 
   const ledger = await readJson(path.join(vault, "state/runtime/idempotency-keys.json"));
   assert.equal(ledger["src-new-source"].path, "wiki/sources/new-source.md");
@@ -372,6 +453,7 @@ test("apply-update creates, updates, updates indexes, and records idempotency", 
   const second = await runTool("apply-update", ["--vault", vault, "--input", planPath]);
   assert.ok(second.json.idempotent_hits.includes("src-new-source"));
   assert.ok(second.json.idempotent_hits.includes("src-new-source:concept"));
+  assert.ok(second.json.idempotent_hits.includes("src-new-source:source-linked-notes"));
   assert.ok(second.json.skipped.includes("wiki/sources/new-source.md"));
 });
 

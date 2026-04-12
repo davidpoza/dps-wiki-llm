@@ -168,6 +168,8 @@ The workflow:
 - applies and commits that LLM-cleaned source note baseline
 - calls OpenRouter for an optional richer Mutation Plan
 - validates the LLM plan with guardrails
+- links grounded concept/entity/topic/analysis updates back to the baseline source note through `Sources`
+- allows only a narrow backlink update to the exact baseline source note `Linked Notes` section
 - applies non-empty LLM plans with `apply-update.ts`
 - reindexes and creates a second commit for applied LLM changes
 - returns `openrouter_source_note_meta`, `llm_mutation_plan`, `llm_guardrail_rejections`, `llm_plan_auto_apply_required`, `llm_mutation_result`, and `llm_commit_result`

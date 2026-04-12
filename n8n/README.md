@@ -49,7 +49,7 @@ The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/pro
   - runnable manual OpenRouter workflow
   - shows the orchestration for `raw/**` ingestion
   - runs `ingest-source.ts`, calls OpenRouter to clean the source note content, then uses `plan-source-note.ts` to create and commit the source note
-  - calls OpenRouter for an optional richer Mutation Plan and auto-applies non-empty plans after guardrail validation
+  - calls OpenRouter for an optional richer Mutation Plan and auto-applies non-empty plans after guardrail validation, including narrow source-note `Linked Notes` backlinks
 
 ## Recommended Topology
 
@@ -60,7 +60,7 @@ Keep the orchestration split into small workflows instead of one large graph:
    - normalizes the event
    - cleans the source note content through OpenRouter before mutating `wiki/`
    - creates and commits the source-note baseline plan
-   - proposes richer wiki mutations through OpenRouter and applies safe non-empty plans
+   - proposes richer wiki mutations through OpenRouter and applies safe non-empty plans with source/concept links
 
 2. `KB - Answer OpenRouter Manual`
    - retrieves wiki context
