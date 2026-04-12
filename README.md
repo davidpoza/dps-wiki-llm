@@ -38,6 +38,7 @@ The repo now includes the deterministic local toolchain plus importable n8n work
 |---|---|---|
 | `init-db.ts` | Creates the SQLite schema and FTS tables. | `state/kb.db` |
 | `ingest-source.ts` | Normalizes a `raw/**` artifact into the canonical source payload. | stdout JSON |
+| `youtube-transcript.ts` | Writes a raw YouTube transcript artifact from video captions. | `raw/web/**` plus stdout JSON |
 | `plan-source-note.ts` | Builds a safe baseline Mutation Plan that creates the source note and root index entry, using an LLM-cleaned `source_note` when provided. | stdout JSON |
 | `apply-update.ts` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
 | `answer-context.ts` | Reads retrieved wiki notes and builds the LLM context packet plus Answer Record shell. | stdout JSON |
@@ -293,7 +294,7 @@ Run the production V1 n8n flow manually:
 1. Import the workflows from `n8n/workflows/`.
 2. Set `OPENROUTER_API_KEY` in the n8n runtime and optionally set `OPENROUTER_MODEL`.
 3. Run `KB - Reindex Wiki`.
-4. Run `KB - Answer OpenRouter Telegram Polling` or `KB - Ingest Raw OpenRouter Manual`.
+4. Run `KB - Telegram Bot Polling` or `KB - Ingest Raw OpenRouter Manual`.
 5. Review any proposed feedback and the LLM ingest plan results.
 6. Run `KB - Apply Feedback` with `approved=true` only after review.
 
@@ -313,7 +314,7 @@ npm run --silent commit -- --vault /path/to/vault --input ./commit.json
 ## CLI Conventions
 
 - `--vault` is the root of the target vault and defaults to the current working directory.
-- `--input` is used by JSON-driven scripts such as `ingest-source.ts`, `plan-source-note.ts`, `apply-update.ts`, `answer-context.ts`, `answer-record.ts`, `feedback-record.ts`, and `commit.ts`.
+- `--input` is used by JSON-driven scripts such as `ingest-source.ts`, `youtube-transcript.ts`, `plan-source-note.ts`, `apply-update.ts`, `answer-context.ts`, `answer-record.ts`, `feedback-record.ts`, and `commit.ts`.
 - `--db` can override the database path for `init-db.ts`, `reindex.ts`, and `search.ts`.
 - `--limit` controls result count in `search.ts`.
 - `--no-write` is supported by `feedback-record.ts`, `lint.ts`, and `health-check.ts`.

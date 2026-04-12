@@ -64,10 +64,10 @@ TELEGRAM_CHAT_ID=<allowed chat id>
 
 Add the same OpenRouter and Telegram variables to the `n8n` service environment. If your Code nodes run in the external `n8n-runner` service, also pass `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, `OPENROUTER_ANSWER_TEMPERATURE`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there so Code nodes can read the required runtime configuration. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `commit.ts` is run by an `Execute Command` node, so the main `n8n` service needs them.
 
-For Telegram answer input, the answer workflow polls Telegram with `getUpdates`. `TELEGRAM_CHAT_ID` is used as the allowed incoming chat id and as the default output chat for logs.
+For Telegram bot input, `KB - Telegram Bot Polling` polls Telegram with `getUpdates`. `TELEGRAM_CHAT_ID` is used as the allowed incoming chat id and as the default output chat for logs.
 
 If you previously configured a Telegram webhook, delete it before enabling polling. Telegram does not allow `getUpdates` while a webhook is active.
-Polling only needs outbound HTTPS from n8n to Telegram; n8n does not need a public inbound URL for answer input.
+Polling only needs outbound HTTPS from n8n to Telegram; n8n does not need a public inbound URL for bot input.
 
 ```sh
 curl -sS "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/deleteWebhook"
@@ -120,23 +120,20 @@ If an `Execute Command` node still runs in the main n8n service or in a queue wo
 4. Run `KB - Weekly Lint` and `KB - Monthly Health Check` manually to inspect structural and traceability findings.
 5. Do not activate scheduled maintenance until manual runs are clean enough for unattended reports.
 
-## Answer Flow
+## Telegram Bot Flow
 
-Run `KB - Answer OpenRouter Telegram Polling` manually with a question payload or activate it to poll Telegram once per minute.
+Run `KB - Telegram Bot Polling` manually with a question payload or activate it to poll Telegram once per minute.
 
 The workflow:
 
 - accepts manual input or one Telegram `getUpdates` item
-- runs `search.ts`
-- reads bounded wiki context with `answer-context.ts`
-- calls OpenRouter for answer synthesis
-- writes the answer with `answer-record.ts`
-- calls OpenRouter again for a proposed Feedback Record
-- validates that feedback with `feedback-record.ts --no-write`
-- sends a Telegram answer/output log when Telegram env is configured
-- returns an `approval_payload`
+- routes `/ask`, `/answer`, `/query`, and free text to the answer path
+- runs `search.ts`, `answer-context.ts`, `answer-record.ts`, and feedback validation for answers
+- routes `/ingest <youtube-url>` to `youtube-transcript.ts`
+- writes YouTube captions to `raw/web/**` before running the normal ingest pipeline
+- sends Telegram logs for answer output, completed ingest, and handled ingest failures such as videos without subtitles
 
-The workflow does not update `wiki/`.
+The answer path does not update `wiki/`. The `/ingest` path mutates `raw/**` first, then runs the controlled ingest pipeline that updates `wiki/**`, reindexes, and commits.
 
 ## Feedback Application
 

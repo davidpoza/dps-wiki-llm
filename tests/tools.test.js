@@ -172,7 +172,7 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   );
 });
 
-test("answer workflow polls Telegram input and sends Telegram output logs", async () => {
+test("telegram bot workflow routes answer and ingest commands", async () => {
   const workflow = JSON.parse(await fs.readFile(repoPath("n8n/workflows/kb-answer-blueprint.json"), "utf8"));
   const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
 
@@ -182,6 +182,12 @@ test("answer workflow polls Telegram input and sends Telegram output logs", asyn
   assert.ok(nodes.has("Should Poll Telegram?"));
   assert.ok(nodes.has("Call Telegram getUpdates"));
   assert.ok(nodes.has("Prepare Telegram Updates"));
+  assert.ok(nodes.has("Is Telegram Ingest Command?"));
+  assert.ok(nodes.has("Prepare YouTube Ingest Request"));
+  assert.ok(nodes.has("Run youtube-transcript.ts"));
+  assert.ok(nodes.has("Parse YouTube Transcript Result"));
+  assert.ok(nodes.has("Should Ingest YouTube Transcript?"));
+  assert.ok(nodes.has("Build Telegram Ingest Failure Log"));
   assert.ok(nodes.has("Build Telegram Answer Log"));
   assert.ok(nodes.has("Should Send Telegram Answer Log?"));
   assert.ok(nodes.has("Send Telegram Answer Log"));
@@ -189,6 +195,8 @@ test("answer workflow polls Telegram input and sends Telegram output logs", asyn
   assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /getWorkflowStaticData/);
   assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
   assert.match(nodes.get("Prepare Telegram Updates").parameters.jsCode, /telegram_last_update_id/);
+  assert.match(nodes.get("Prepare Telegram Updates").parameters.jsCode, /ingest/);
+  assert.match(nodes.get("Run youtube-transcript.ts").parameters.command, /youtube-transcript/);
   assert.match(nodes.get("Prepare Query").parameters.jsCode, /telegram_chat_id/);
   assert.match(nodes.get("Prepare Query").parameters.jsCode, /Unauthorized Telegram chat id/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
@@ -247,13 +255,54 @@ test("answer workflow polls Telegram input and sends Telegram output logs", asyn
   )[0].json;
   assert.equal(polled.body.update_id, 123);
   assert.equal(polled.telegram_polled, true);
+  assert.equal(polled.telegram_command, "ask");
   assert.equal(staticData.telegram_last_update_id, 123);
+
+  const ingestCommand = new Function(
+    "$input",
+    "$env",
+    "$getWorkflowStaticData",
+    nodes.get("Prepare Telegram Updates").parameters.jsCode
+  )(
+    {
+      first: () => ({
+        json: {
+          ok: true,
+          result: [
+            {
+              update_id: 124,
+              message: {
+                message_id: 457,
+                chat: { id: 789 },
+                text: "/ingest https://youtu.be/dQw4w9WgXcQ"
+              }
+            }
+          ]
+        }
+      })
+    },
+    { TELEGRAM_CHAT_ID: "789" },
+    () => staticData
+  )[0].json;
+  assert.equal(ingestCommand.telegram_command, "ingest");
+  assert.equal(staticData.telegram_last_update_id, 124);
+
+  const ingestRequest = new Function("$input", nodes.get("Prepare YouTube Ingest Request").parameters.jsCode)({
+    first: () => ({ json: ingestCommand })
+  })[0].json;
+  assert.equal(ingestRequest.youtube_ingest_status, "pending");
+  assert.equal(ingestRequest.youtube_ingest_url, "https://youtu.be/dQw4w9WgXcQ");
+  assert.ok(ingestRequest.youtube_payload_b64);
 
   assert.equal(workflow.connections["Schedule Trigger"].main[0][0].node, "Build Telegram Poll Request");
   assert.equal(workflow.connections["Build Telegram Poll Request"].main[0][0].node, "Should Poll Telegram?");
   assert.equal(workflow.connections["Should Poll Telegram?"].main[0][0].node, "Call Telegram getUpdates");
   assert.equal(workflow.connections["Call Telegram getUpdates"].main[0][0].node, "Prepare Telegram Updates");
-  assert.equal(workflow.connections["Prepare Telegram Updates"].main[0][0].node, "Prepare Query");
+  assert.equal(workflow.connections["Prepare Telegram Updates"].main[0][0].node, "Is Telegram Ingest Command?");
+  assert.equal(workflow.connections["Is Telegram Ingest Command?"].main[0][0].node, "Prepare YouTube Ingest Request");
+  assert.equal(workflow.connections["Is Telegram Ingest Command?"].main[1][0].node, "Prepare Query");
+  assert.equal(workflow.connections["Should Ingest YouTube Transcript?"].main[0][0].node, "Normalize Raw Event");
+  assert.equal(workflow.connections["Should Ingest YouTube Transcript?"].main[1][0].node, "Build Telegram Ingest Failure Log");
   assert.equal(workflow.connections["Build Answer Response"].main[0][0].node, "Build Telegram Answer Log");
   assert.equal(workflow.connections["Build Telegram Answer Log"].main[0][0].node, "Should Send Telegram Answer Log?");
   assert.equal(workflow.connections["Should Send Telegram Answer Log?"].main[0][0].node, "Send Telegram Answer Log");
@@ -296,6 +345,70 @@ test("ingest-source and plan-source-note produce canonical ingestion contracts",
   assert.deepEqual(plan.json.mutation_plan.index_updates[0].entries_to_add, ["[[Example Source]]"]);
   assert.equal(plan.json.commit_input.operation, "ingest");
   assert.ok(plan.json.commit_input.paths_to_stage.includes("state/kb.db"));
+});
+
+test("youtube-transcript writes a raw YouTube transcript source", async () => {
+  const vault = await tempDir("dps-wiki-llm-youtube-vault-");
+  const inputPath = path.join(vault, "youtube-input.json");
+  await writeJson(inputPath, {
+    url: "https://youtu.be/dQw4w9WgXcQ",
+    captured_at: "2026-04-12T10:00:00Z",
+    player_response: {
+      videoDetails: {
+        title: "Example YouTube Talk",
+        author: "Example Channel"
+      },
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: [
+            {
+              baseUrl: "https://example.com/captions",
+              languageCode: "en",
+              name: { simpleText: "English" }
+            }
+          ]
+        }
+      }
+    },
+    transcript_json: {
+      events: [
+        { tStartMs: 0, dDurationMs: 1200, segs: [{ utf8: "First caption." }] },
+        { tStartMs: 1200, dDurationMs: 1800, segs: [{ utf8: "Second caption." }] }
+      ]
+    }
+  });
+
+  const result = await runTool("youtube-transcript", ["--vault", vault, "--input", inputPath]);
+
+  assert.equal(result.json.status, "created");
+  assert.equal(result.json.video_id, "dQw4w9WgXcQ");
+  assert.equal(result.json.segment_count, 2);
+  assert.match(result.json.raw_path, /^raw\/web\/2026-04-12-youtube-example-youtube-talk-/);
+
+  const raw = await readFile(path.join(vault, result.json.raw_path));
+  assert.match(raw, /source: "youtube"/);
+  assert.match(raw, /youtube_video_id: "dQw4w9WgXcQ"/);
+  assert.match(raw, /\[00:00:00\] First caption\./);
+  assert.match(raw, /\[00:00:01\] Second caption\./);
+});
+
+test("youtube-transcript reports YouTube videos without subtitles", async () => {
+  const vault = await tempDir("dps-wiki-llm-youtube-empty-vault-");
+  const inputPath = path.join(vault, "youtube-input.json");
+  await writeJson(inputPath, {
+    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    player_response: {
+      videoDetails: {
+        title: "No Captions"
+      }
+    }
+  });
+
+  const result = await runTool("youtube-transcript", ["--vault", vault, "--input", inputPath]);
+
+  assert.equal(result.json.status, "failed");
+  assert.equal(result.json.reason, "YouTube video has no captions or subtitles");
+  assert.equal(result.json.video_id, "dQw4w9WgXcQ");
 });
 
 test("plan-source-note uses an LLM-cleaned source_note when present", async () => {
@@ -436,9 +549,10 @@ test("n8n workflow files remain valid JSON", async () => {
   }
 
   const answer = workflows.get("kb-answer-blueprint.json");
-  assert.equal(answer.name, "KB - Answer OpenRouter Telegram Polling");
+  assert.equal(answer.name, "KB - Telegram Bot Polling");
   assert.ok(!answer.nodes.some((node) => node.name === "Webhook"));
   assert.ok(answer.nodes.some((node) => node.name === "Call Telegram getUpdates"));
+  assert.ok(answer.nodes.some((node) => node.name === "Run youtube-transcript.ts"));
   assert.ok(answer.nodes.some((node) => node.name === "Call OpenRouter Answer"));
   assert.ok(answer.nodes.some((node) => node.name === "Call OpenRouter Feedback"));
   assert.ok(answer.nodes.some((node) => node.name === "Validate feedback-record.ts"));

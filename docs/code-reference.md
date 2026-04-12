@@ -8,6 +8,7 @@ This document is the English reference for the repository's implementation. It e
 |------|---------|------------|-------------|
 | `tools/init-db.ts` | Creates the SQLite database file and ensures the base schema exists. | CLI flags such as `--vault` and optional `--db`. | JSON with `db_path` and `initialized`. |
 | `tools/ingest-source.ts` | Normalizes a `raw/**` artifact into the canonical source payload. | Raw event JSON via `--input` or `stdin`. | Normalized Source Payload JSON. |
+| `tools/youtube-transcript.ts` | Extracts YouTube captions and writes them as a raw web artifact. | JSON with `url` and optional `captured_at` via `--input` or `stdin`. | JSON with created `raw_path` or a handled failure reason. |
 | `tools/plan-source-note.ts` | Builds the deterministic baseline ingestion plan for creating a source note. | Normalized Source Payload JSON via `--input` or `stdin`. | JSON containing `mutation_plan` and `commit_input`. |
 | `tools/reindex.ts` | Scans wiki markdown files and rebuilds the relational and FTS indexes. | CLI flags such as `--vault` and optional `--db`. | JSON with indexed document count and rebuilt status. |
 | `tools/search.ts` | Runs a full-text search query against `state/kb.db`. | Positional search query plus CLI flags. | JSON search result payload with ranked documents. |
@@ -63,6 +64,13 @@ Use this script before the first reindex or search run against a new vault.
 - Emits the canonical Normalized Source Payload used by downstream planners.
 
 This is the only local script that turns a raw event into a normalized ingestion payload.
+
+### `tools/youtube-transcript.ts`
+
+- Accepts a YouTube video URL and optional language preferences.
+- Loads the YouTube caption track metadata, selects a manual track when possible, and falls back to available captions.
+- Writes the transcript as a `raw/web/**` markdown artifact with source metadata and timestamped caption lines.
+- Returns `status: "failed"` with a reason for handled cases such as missing subtitles, so n8n can send a Telegram log without mutating the wiki.
 
 ### `tools/plan-source-note.ts`
 
