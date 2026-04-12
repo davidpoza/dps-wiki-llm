@@ -9,6 +9,52 @@ import { SYSTEM_CONFIG } from "./config.js";
  * Search the SQLite FTS index built from wiki markdown documents.
  */
 
+const STOP_WORDS = new Set([
+  "a",
+  "about",
+  "al",
+  "and",
+  "best",
+  "con",
+  "dame",
+  "de",
+  "del",
+  "el",
+  "en",
+  "for",
+  "give",
+  "la",
+  "las",
+  "lo",
+  "los",
+  "me",
+  "mejor",
+  "mejores",
+  "of",
+  "on",
+  "para",
+  "por",
+  "que",
+  "sobre",
+  "the",
+  "to",
+  "un",
+  "una",
+  "y"
+]);
+
+const QUERY_SYNONYMS: Record<string, string[]> = {
+  consejos: ["tips"],
+  estrategia: ["strategy"],
+  estrategias: ["strategies"],
+  gestion: ["management"],
+  habito: ["habit"],
+  habitos: ["habits"],
+  productividad: ["productivity"],
+  tiempo: ["time"],
+  trabajo: ["work"]
+};
+
 /**
  * Parse shared CLI flags plus the first positional search query.
  *
@@ -58,8 +104,35 @@ function parseSearchArgs() {
   };
 }
 
+function normalizeToken(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "");
+}
+
+function buildFtsQuery(query: string): string {
+  const tokens = query
+    .split(/[\s"'`.,;:!?()[\]{}<>/\\|]+/g)
+    .map(normalizeToken)
+    .filter((token) => token.length >= 2 && !STOP_WORDS.has(token));
+  const expanded = new Set<string>();
+
+  for (const token of tokens) {
+    expanded.add(token);
+    for (const synonym of QUERY_SYNONYMS[token] ?? []) {
+      expanded.add(synonym);
+    }
+  }
+
+  const terms = [...expanded].map((term) => `"${term.replaceAll('"', '""')}"`);
+  return terms.length > 0 ? terms.join(" OR ") : `"${query.replaceAll('"', '""')}"`;
+}
+
 async function main(): Promise<void> {
   const args = parseSearchArgs();
+  const ftsQuery = buildFtsQuery(args.query);
   const vaultRoot = resolveVaultRoot(args.vault);
   const dbPath = args.db ? resolveWithinRoot(vaultRoot, args.db) : resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.dbPath);
   const db = await openDatabase(dbPath);
@@ -76,7 +149,7 @@ async function main(): Promise<void> {
       LIMIT ?;
     `);
 
-    rows = statement.all(args.query, args.limit) as Array<{ path: string; title: string; doc_type: string; score: number }>;
+    rows = statement.all(ftsQuery, args.limit) as Array<{ path: string; title: string; doc_type: string; score: number }>;
   } finally {
     db.close();
   }
@@ -84,6 +157,7 @@ async function main(): Promise<void> {
   writeJsonStdout(
     {
       query: args.query,
+      fts_query: ftsQuery,
       limit: args.limit,
       db_path: relativeVaultPath(vaultRoot, dbPath),
       results: rows.map((row) => ({

@@ -94,6 +94,7 @@ The implementation is intentionally full-rebuild and deterministic rather than i
 ### `tools/search.ts`
 
 - Accepts the query as the first positional argument.
+- Normalizes natural-language queries into an FTS expression with stopword removal and a small bilingual synonym expansion.
 - Resolves the target database file inside the vault.
 - Queries `docs_fts` and joins back to `docs` for path, title, and type metadata.
 - Returns ranked results using SQLite `bm25`.

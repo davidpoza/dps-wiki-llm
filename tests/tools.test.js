@@ -39,6 +39,14 @@ async function createVault() {
     `---\ntype: "index"\ntitle: "Root Index"\nupdated: "2026-04-11"\n---\n\n# Root Index\n\n## Entries\n- [[Model Context Protocol]]\n`
   );
   await writeFile(path.join(vault, "INDEX.md"), "# Index\n\n## Entries\n- [[Model Context Protocol]]\n");
+  await writeFile(
+    path.join(vault, "wiki/sources/productivity-guide.md"),
+    sourceNote(
+      "The Productivity Guide: Time Management Strategies That Work",
+      `## Summary\nA source about productivity and time management strategies.\n\n## Raw Context\nThe productivity guide covers practical time management strategies that work.\n\n## Extracted Claims\n- Productivity improves when time management strategies are explicit.`,
+      "raw/web/productivity-guide.md"
+    )
+  );
 
   return vault;
 }
@@ -51,13 +59,27 @@ test("init-db, reindex, and search work together", async () => {
 
   const reindex = await runTool("reindex", ["--vault", vault]);
   assert.equal(reindex.json.db_path, "state/kb.db");
-  assert.equal(reindex.json.indexed, 3);
+  assert.equal(reindex.json.indexed, 4);
   assert.equal(reindex.json.fts_rebuilt, true);
 
   const search = await runTool("search", ["--vault", vault, "--limit", "5", "protocol"]);
   assert.equal(search.json.query, "protocol");
   assert.equal(search.json.limit, 5);
   assert.ok(search.json.results.some((item) => item.path === "wiki/concepts/model-context-protocol.md"));
+
+  const naturalSearch = await runTool("search", ["--vault", vault, "--limit", "5", "what should I know about model context"]);
+  assert.match(naturalSearch.json.fts_query, / OR /);
+  assert.ok(naturalSearch.json.results.some((item) => item.path === "wiki/concepts/model-context-protocol.md"));
+
+  const spanishSearch = await runTool("search", [
+    "--vault",
+    vault,
+    "--limit",
+    "5",
+    "dame los mejores tips sobre productividad"
+  ]);
+  assert.match(spanishSearch.json.fts_query, /productivity/);
+  assert.ok(spanishSearch.json.results.some((item) => item.path === "wiki/sources/productivity-guide.md"));
 });
 
 test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails", async () => {
@@ -76,6 +98,7 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /LLM source note must include non-empty/);
   assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /payload_b64/);
   assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Never write directly under wiki/);
+  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /wiki\/topics\/productivity\.md/);
   assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /allowed_page_path_prefixes/);
   assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /source_note_update_allowed_path/);
   assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Linked Notes/);
@@ -194,11 +217,13 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
   assert.ok(nodes.has("Finalize Answer Response"));
   assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /getWorkflowStaticData/);
   assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
+  assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /offset = -1/);
   assert.match(nodes.get("Prepare Telegram Updates").parameters.jsCode, /telegram_last_update_id/);
   assert.match(nodes.get("Prepare Telegram Updates").parameters.jsCode, /ingest/);
   assert.match(nodes.get("Run youtube-transcript.ts").parameters.command, /youtube-transcript/);
   assert.match(nodes.get("Prepare Query").parameters.jsCode, /telegram_chat_id/);
   assert.match(nodes.get("Prepare Query").parameters.jsCode, /Unauthorized Telegram chat id/);
+  assert.match(nodes.get("Build Answer Response").parameters.jsCode, /telegram_update_id/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /telegram_skip_reason/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /KB answer completed/);
@@ -225,6 +250,7 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
   assert.equal(prepared.telegram_chat_id, "789");
   assert.equal(prepared.telegram_message_id, 456);
   assert.equal(prepared.telegram_polled, true);
+  assert.equal(prepared.telegram_update_id, 123);
 
   const staticData = {};
   const polled = new Function(
@@ -749,12 +775,12 @@ test("lint and health-check emit structured maintenance results", async () => {
 
   const lint = await runTool("lint", ["--vault", vault, "--no-write"]);
   assert.equal(lint.json.kind, "lint");
-  assert.equal(lint.json.stats.docs, 3);
+  assert.equal(lint.json.stats.docs, 4);
   assert.equal(lint.json.findings.length, 0);
 
   const health = await runTool("health-check", ["--vault", vault, "--no-write"]);
   assert.equal(health.json.kind, "health-check");
-  assert.equal(health.json.stats.docs, 3);
+  assert.equal(health.json.stats.docs, 4);
   assert.deepEqual(health.json.missing_pages, []);
   assert.equal(health.json.findings.length, 0);
 });
