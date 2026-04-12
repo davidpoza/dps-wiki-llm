@@ -25,6 +25,11 @@ type TranscriptSegment = {
   text: string;
 };
 
+type LoadedTranscript = {
+  track: CaptionTrack;
+  segments: TranscriptSegment[];
+};
+
 type InputPayload = {
   url?: string;
   captured_at?: string;
@@ -174,27 +179,40 @@ function labelFromTrack(track: CaptionTrack): string {
 }
 
 function selectCaptionTrack(tracks: CaptionTrack[], languagePreferences: string[]): CaptionTrack | null {
+  return orderCaptionTracks(tracks, languagePreferences)[0] ?? null;
+}
+
+function orderCaptionTracks(tracks: CaptionTrack[], languagePreferences: string[]): CaptionTrack[] {
   const usable = tracks.filter((track) => stringValue(track.baseUrl));
   if (usable.length === 0) {
-    return null;
+    return [];
   }
 
   const normalizedPreferences = languagePreferences.map((language) => language.toLowerCase());
-  for (const language of normalizedPreferences) {
-    const exactManual = usable.find(
-      (track) => track.languageCode?.toLowerCase() === language && track.kind !== "asr"
-    );
-    if (exactManual) {
-      return exactManual;
+  const ordered: CaptionTrack[] = [];
+  const add = (track: CaptionTrack | undefined) => {
+    if (track && !ordered.includes(track)) {
+      ordered.push(track);
     }
+  };
 
-    const exactAny = usable.find((track) => track.languageCode?.toLowerCase() === language);
-    if (exactAny) {
-      return exactAny;
+  for (const language of normalizedPreferences) {
+    for (const track of usable.filter((entry) => entry.languageCode?.toLowerCase() === language && entry.kind !== "asr")) {
+      add(track);
+    }
+    for (const track of usable.filter((entry) => entry.languageCode?.toLowerCase() === language)) {
+      add(track);
     }
   }
 
-  return usable.find((track) => track.kind !== "asr") ?? usable[0] ?? null;
+  for (const track of usable.filter((entry) => entry.kind !== "asr")) {
+    add(track);
+  }
+  for (const track of usable) {
+    add(track);
+  }
+
+  return ordered;
 }
 
 function parsePlayerResponseFromHtml(html: string): unknown | null {
@@ -309,6 +327,76 @@ function parseTranscriptXml(xml: string): TranscriptSegment[] {
   return segments;
 }
 
+function parseSrv3Xml(xml: string): TranscriptSegment[] {
+  const segments: TranscriptSegment[] = [];
+  const pattern = /<p\b([^>]*)>([\s\S]*?)<\/p>/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(xml)) !== null) {
+    const attrs = match[1] ?? "";
+    const body = match[2] ?? "";
+    const start = /\bt="([^"]+)"/.exec(attrs)?.[1];
+    const duration = /\bd="([^"]+)"/.exec(attrs)?.[1];
+    const text = decodeXml(body.replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim();
+    if (!text) {
+      continue;
+    }
+
+    segments.push({
+      start_ms: start ? Math.round(Number(start)) : 0,
+      duration_ms: duration ? Math.round(Number(duration)) : null,
+      text
+    });
+  }
+
+  return segments;
+}
+
+function parseVtt(vtt: string): TranscriptSegment[] {
+  const segments: TranscriptSegment[] = [];
+  const blocks = vtt.replace(/\r/g, "").split(/\n\n+/g);
+
+  for (const block of blocks) {
+    const lines = block
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const timestampIndex = lines.findIndex((line) => line.includes("-->"));
+    if (timestampIndex < 0) {
+      continue;
+    }
+
+    const start = lines[timestampIndex].split("-->")[0]?.trim();
+    const text = lines
+      .slice(timestampIndex + 1)
+      .join(" ")
+      .replace(/<[^>]+>/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!text) {
+      continue;
+    }
+
+    segments.push({
+      start_ms: start ? parseVttTimestamp(start) : 0,
+      duration_ms: null,
+      text
+    });
+  }
+
+  return segments;
+}
+
+function parseVttTimestamp(value: string): number {
+  const parts = value.replace(",", ".").split(":").map(Number);
+  if (parts.some((part) => Number.isNaN(part))) {
+    return 0;
+  }
+
+  const seconds = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+  return Math.round(seconds * 1000);
+}
+
 function decodeXml(value: string): string {
   return value
     .replaceAll("&amp;", "&")
@@ -319,7 +407,7 @@ function decodeXml(value: string): string {
     .replace(/&#(\d+);/g, (_match, code: string) => String.fromCharCode(Number(code)));
 }
 
-function withFormat(url: string, format: "json3" | "srv3"): string {
+function withFormat(url: string, format: "json3" | "srv3" | "vtt"): string {
   const parsed = new URL(url);
   parsed.searchParams.set("fmt", format);
   return parsed.toString();
@@ -353,23 +441,64 @@ async function loadTranscript(input: InputPayload, track: CaptionTrack): Promise
     return parseTranscriptJson(input.transcript_json);
   }
 
+  const testTranscripts = isRecord(input.metadata) ? input.metadata.test_transcripts : undefined;
+  const testBaseUrl = stringValue(track.baseUrl);
+  if (isRecord(testTranscripts) && testBaseUrl) {
+    const transcript = testTranscripts[testBaseUrl];
+    if (typeof transcript === "string") {
+      return parseTranscriptJsonSafe(transcript) ?? parseSrv3Xml(transcript) ?? parseTranscriptXml(transcript) ?? parseVtt(transcript);
+    }
+  }
+
   const baseUrl = stringValue(track.baseUrl);
   if (!baseUrl) {
     return [];
   }
 
   const jsonText = await fetchText(withFormat(baseUrl, "json3"));
-  try {
-    const parsed = JSON.parse(jsonText) as unknown;
-    const segments = parseTranscriptJson(parsed);
-    if (segments.length > 0) {
-      return segments;
-    }
-  } catch {
-    // Fall through to XML parsing. YouTube may ignore fmt=json3 for some tracks.
+  const jsonSegments = parseTranscriptJsonSafe(jsonText);
+  if (jsonSegments && jsonSegments.length > 0) {
+    return jsonSegments;
   }
 
-  return parseTranscriptXml(jsonText);
+  const jsonXmlSegments = parseTranscriptXml(jsonText);
+  if (jsonXmlSegments.length > 0) {
+    return jsonXmlSegments;
+  }
+
+  const srv3Text = await fetchText(withFormat(baseUrl, "srv3"));
+  const srv3Segments = parseSrv3Xml(srv3Text);
+  if (srv3Segments.length > 0) {
+    return srv3Segments;
+  }
+
+  const legacyXmlSegments = parseTranscriptXml(srv3Text);
+  if (legacyXmlSegments.length > 0) {
+    return legacyXmlSegments;
+  }
+
+  const vttText = await fetchText(withFormat(baseUrl, "vtt"));
+  return parseVtt(vttText);
+}
+
+function parseTranscriptJsonSafe(text: string): TranscriptSegment[] | null {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    return parseTranscriptJson(parsed);
+  } catch {
+    return null;
+  }
+}
+
+async function loadFirstUsableTranscript(input: InputPayload, tracks: CaptionTrack[]): Promise<LoadedTranscript | null> {
+  for (const track of tracks) {
+    const segments = await loadTranscript(input, track);
+    if (segments.length > 0) {
+      return { track, segments };
+    }
+  }
+
+  return null;
 }
 
 function slugify(value: string, fallback: string): string {
@@ -464,24 +593,27 @@ async function main(): Promise<void> {
     return;
   }
 
-  const track = selectCaptionTrack(tracks, input.language_preferences ?? ["en", "es"]);
+  const orderedTracks = orderCaptionTracks(tracks, input.language_preferences ?? ["en", "es"]);
+  const track = orderedTracks[0] ?? null;
   if (!track) {
     writeJsonStdout({ status: "failed", reason: "YouTube video has no usable caption track", url, video_id: videoId } satisfies Result, args.pretty);
     return;
   }
 
-  const segments = await loadTranscript(input, track);
-  if (segments.length === 0) {
-    writeJsonStdout({ status: "failed", reason: "Selected YouTube caption track is empty", url, video_id: videoId } satisfies Result, args.pretty);
+  const loaded = await loadFirstUsableTranscript(input, orderedTracks);
+  if (!loaded) {
+    writeJsonStdout({ status: "failed", reason: "YouTube caption tracks are empty or unavailable", url, video_id: videoId } satisfies Result, args.pretty);
     return;
   }
+  const segments = loaded.segments;
+  const selectedTrack = loaded.track;
 
   const capturedAt = normalizeCapturedAt(input.captured_at);
   const title = stringValue(input.title) || titleFromPlayerResponse(playerResponse) || `YouTube video ${videoId}`;
   const author = authorFromPlayerResponse(playerResponse);
   const datePrefix = capturedAt.slice(0, 10);
   const slug = slugify(title, videoId);
-  const hash = crypto.createHash("sha256").update(`${videoId}:${track.languageCode ?? ""}:${segments.length}`).digest("hex").slice(0, 8);
+  const hash = crypto.createHash("sha256").update(`${videoId}:${selectedTrack.languageCode ?? ""}:${segments.length}`).digest("hex").slice(0, 8);
   const rawPath = path.posix.join(SYSTEM_CONFIG.paths.rawDir, "web", `${datePrefix}-youtube-${slug}-${hash}.md`);
   const markdown = buildRawMarkdown({
     title,
@@ -489,9 +621,9 @@ async function main(): Promise<void> {
     capturedAt,
     videoId,
     author,
-    captionLanguage: track.languageCode || "unknown",
-    captionName: labelFromTrack(track),
-    captionKind: track.kind || "manual",
+    captionLanguage: selectedTrack.languageCode || "unknown",
+    captionName: labelFromTrack(selectedTrack),
+    captionKind: selectedTrack.kind || "manual",
     segments
   });
 
@@ -505,9 +637,9 @@ async function main(): Promise<void> {
       video_id: videoId,
       url,
       captured_at: capturedAt,
-      caption_language: track.languageCode || "unknown",
-      caption_name: labelFromTrack(track),
-      caption_kind: track.kind || "manual",
+      caption_language: selectedTrack.languageCode || "unknown",
+      caption_name: labelFromTrack(selectedTrack),
+      caption_kind: selectedTrack.kind || "manual",
       segment_count: segments.length,
       character_count: segments.reduce((total, segment) => total + segment.text.length, 0)
     } satisfies Result,
