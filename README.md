@@ -211,7 +211,7 @@ Requirements:
 
 - Node.js `>=22.5.0`, for built-in `node:sqlite` support
 - dependencies installed with `npm install`
-- Git configured with `user.name` and `user.email` if you plan to use `commit.ts`
+- Git identity configured if you plan to use `commit.ts`; either set `user.name` and `user.email`, or provide `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` or `GIT_COMMITTER_NAME`/`GIT_COMMITTER_EMAIL` in the runtime environment
 
 The tools are TypeScript source files compiled to `dist/` and executed from the generated JavaScript in the package scripts. `npm install` runs the build through `prepare`; run `npm run build` again after changing source. Use `--silent` when command output must remain parseable JSON for automation.
 

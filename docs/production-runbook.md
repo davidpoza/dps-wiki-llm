@@ -7,7 +7,7 @@ This runbook describes the first production cut: manual operation from self-host
 - Build the n8n service from this repository's `Dockerfile`; it installs n8n from npm, installs `git`/SSH tooling, and copies the compiled scripts under `/app`.
 - Mount the target vault at `/data/vault`.
 - Let the Dockerfile build `dist/`; do not mount over `/app` at runtime.
-- Configure Git identity in the environment where `commit.ts` runs.
+- Configure Git identity where `commit.ts` runs. Use `git config user.name`/`git config user.email` in the vault repository, or set `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, and `GIT_COMMITTER_EMAIL` in the runtime environment.
 - Keep imported workflows inactive for V1; use manual n8n executions while validating behavior.
 
 For the compose file you shared, replace the `n8n` service image line with a local build and add the vault mount:
@@ -27,6 +27,10 @@ services:
       - OPENROUTER_MODEL=${OPENROUTER_MODEL}
       - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
       - OPENROUTER_ANSWER_TEMPERATURE=0.2
+      - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME}
+      - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL}
+      - GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME}
+      - GIT_COMMITTER_EMAIL=${GIT_COMMITTER_EMAIL}
       - NODES_EXCLUDE=[]
     volumes:
       - ./n8n_data:/home/node/.n8n

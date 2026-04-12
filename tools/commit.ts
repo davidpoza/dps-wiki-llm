@@ -22,9 +22,14 @@ const execFile = promisify(execFileCallback);
  * @param {boolean} [allowFailure=false]
  * @returns {Promise<string>}
  */
-async function git(args: string[], workdir: string, allowFailure = false): Promise<string> {
+async function git(
+  args: string[],
+  workdir: string,
+  allowFailure = false,
+  extraEnv: NodeJS.ProcessEnv = {}
+): Promise<string> {
   try {
-    const { stdout } = await execFile("git", args, { cwd: workdir });
+    const { stdout } = await execFile("git", args, { cwd: workdir, env: { ...process.env, ...extraEnv } });
     return stdout.trim();
   } catch (error) {
     if (allowFailure) {
@@ -168,18 +173,51 @@ function uniquePaths(paths: Array<string | null>): string[] {
 }
 
 /**
- * Ensure git identity is configured before attempting to create a commit.
+ * Read the first non-empty environment variable from a list of names.
+ *
+ * @param {string[]} names
+ * @returns {string}
+ */
+function readEnv(...names: string[]): string {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+/**
+ * Resolve git identity from config or standard Git environment variables.
  *
  * @param {string} repoRoot
- * @returns {Promise<void>}
+ * @returns {Promise<NodeJS.ProcessEnv>}
  */
-async function ensureGitIdentity(repoRoot: string): Promise<void> {
+async function resolveGitIdentityEnv(repoRoot: string): Promise<NodeJS.ProcessEnv> {
   const userName = await git(["config", "user.name"], repoRoot, true);
   const userEmail = await git(["config", "user.email"], repoRoot, true);
 
-  if (!userName || !userEmail) {
-    throw new Error("Git user.name and user.email must be configured before commit.ts can create commits");
+  if (userName && userEmail) {
+    return {};
   }
+
+  const envName = userName || readEnv("GIT_COMMITTER_NAME", "GIT_AUTHOR_NAME");
+  const envEmail = userEmail || readEnv("GIT_COMMITTER_EMAIL", "GIT_AUTHOR_EMAIL");
+
+  if (envName && envEmail) {
+    return {
+      GIT_AUTHOR_NAME: readEnv("GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME") || envName,
+      GIT_AUTHOR_EMAIL: readEnv("GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL") || envEmail,
+      GIT_COMMITTER_NAME: readEnv("GIT_COMMITTER_NAME", "GIT_AUTHOR_NAME") || envName,
+      GIT_COMMITTER_EMAIL: readEnv("GIT_COMMITTER_EMAIL", "GIT_AUTHOR_EMAIL") || envEmail
+    };
+  }
+
+  throw new Error(
+    "Git identity is required before commit.ts can create commits. Configure git user.name and user.email in the vault repo, or set GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL or GIT_COMMITTER_NAME/GIT_COMMITTER_EMAIL in the runtime environment."
+  );
 }
 
 async function main(): Promise<void> {
@@ -187,7 +225,6 @@ async function main(): Promise<void> {
   const input = normalizeCommitInput(await readJsonInput(args.input));
   const vaultRoot = resolveVaultRoot(args.vault);
   const repoRoot = await git(["rev-parse", "--show-toplevel"], vaultRoot);
-  await ensureGitIdentity(repoRoot);
 
   const materialPaths = uniquePaths([
     ...input.paths_to_stage,
@@ -224,6 +261,7 @@ async function main(): Promise<void> {
     return;
   }
 
+  const gitIdentityEnv = await resolveGitIdentityEnv(repoRoot);
   const changeLogRelativePath = `${SYSTEM_CONFIG.paths.changeLogDir}/${nowStamp()}-${slugify(input.operation)}.md`;
   const changeLogAbsolutePath = resolveWithinRoot(vaultRoot, changeLogRelativePath);
   await ensureDirectory(resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.changeLogDir));
@@ -233,7 +271,7 @@ async function main(): Promise<void> {
   await git(["add", "--", changeLogRelativePath], repoRoot);
 
   const commitMessage = input.commit_message || `${input.operation}: ${input.summary}`;
-  await git(["commit", "-m", commitMessage], repoRoot);
+  await git(["commit", "-m", commitMessage], repoRoot, false, gitIdentityEnv);
   const commitSha = await git(["rev-parse", "--short", "HEAD"], repoRoot);
 
   const result: CommitResult = {

@@ -533,11 +533,43 @@ test("commit stages intended files, writes change log, and creates a local git c
   assert.equal(status.stdout, "?? commit-input.json\n");
 });
 
+test("commit accepts git identity from environment variables", async () => {
+  const vault = await tempDir("dps-wiki-llm-env-git-vault-");
+  await runCommand("git", ["init"], { cwd: vault });
+
+  await writeFile(
+    path.join(vault, "wiki/concepts/env-commit-test.md"),
+    conceptNote("Env Commit Test", "## Summary\nA note to commit with environment identity.")
+  );
+
+  const inputPath = path.join(vault, "commit-input.json");
+  await writeJson(inputPath, {
+    operation: "ingest",
+    summary: "Commit with environment identity",
+    source_refs: ["raw/inbox/source.md"],
+    affected_notes: ["wiki/concepts/env-commit-test.md"],
+    paths_to_stage: []
+  });
+
+  const env = {
+    GIT_CONFIG_GLOBAL: path.join(vault, "missing-global-gitconfig"),
+    GIT_AUTHOR_NAME: "Env User",
+    GIT_AUTHOR_EMAIL: "env@example.com",
+    GIT_COMMITTER_NAME: "Env User",
+    GIT_COMMITTER_EMAIL: "env@example.com"
+  };
+  const result = await runTool("commit", ["--vault", vault, "--input", inputPath], { env });
+
+  assert.equal(result.json.operation, "ingest");
+  assert.equal(result.json.commit_created, true);
+
+  const log = await runCommand("git", ["log", "-1", "--format=%an <%ae>|%cn <%ce>"], { cwd: vault, env });
+  assert.equal(log.stdout.trim(), "Env User <env@example.com>|Env User <env@example.com>");
+});
+
 test("commit returns commit_created false when there are no material paths", async () => {
   const vault = await tempDir("dps-wiki-llm-empty-git-vault-");
   await runCommand("git", ["init"], { cwd: vault });
-  await runCommand("git", ["config", "user.name", "Test User"], { cwd: vault });
-  await runCommand("git", ["config", "user.email", "test@example.com"], { cwd: vault });
 
   const inputPath = path.join(vault, "commit-input.json");
   await writeJson(inputPath, {
@@ -548,7 +580,11 @@ test("commit returns commit_created false when there are no material paths", asy
     paths_to_stage: []
   });
 
-  const result = await runTool("commit", ["--vault", vault, "--input", inputPath]);
+  const result = await runTool("commit", ["--vault", vault, "--input", inputPath], {
+    env: {
+      GIT_CONFIG_GLOBAL: path.join(vault, "missing-global-gitconfig")
+    }
+  });
   assert.deepEqual(result.json, {
     operation: "manual",
     commit_created: false,

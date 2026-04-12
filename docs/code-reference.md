@@ -147,7 +147,7 @@ It is the semantic complement to `lint.ts`.
 - Normalizes commit metadata from JSON input.
 - Stages only the files relevant to the operation.
 - Writes a structured markdown change log into `state/change-log/`.
-- Requires `git user.name` and `git user.email` to be configured before committing.
+- Requires Git identity before committing, from `git user.name`/`git user.email` or standard Git author/committer environment variables.
 
 This script records operational traceability without turning semantic notes into change logs.
 
