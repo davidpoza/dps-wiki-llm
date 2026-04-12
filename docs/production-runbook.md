@@ -81,7 +81,7 @@ services:
       - ${DPS_WIKI_VAULT_PATH}:/data/vault
 ```
 
-The runner image installs `axios` and `qs` for JavaScript Code nodes and copies the compiled scripts to `/app/dist/tools`. It does not install OS packages like `git` because the official `n8nio/runners` image does not expose a supported OS package manager.
+The runner image installs `axios` and `qs` for JavaScript Code nodes, keeps both JavaScript and Python runner entries in `/etc/n8n-task-runners.json`, and copies the compiled scripts to `/app/dist/tools`. It does not install OS packages like `git` because the official `n8nio/runners` image does not expose a supported OS package manager.
 
 If an `Execute Command` node still runs in the main n8n service or in a queue worker, that service also needs the repository `Dockerfile` image and the same vault mount.
 

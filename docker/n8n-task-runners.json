@@ -12,6 +12,19 @@
         "NODE_FUNCTION_ALLOW_BUILTIN": "crypto,fs,path,buffer,util",
         "NODE_FUNCTION_ALLOW_EXTERNAL": "axios,qs"
       }
+    },
+    {
+      "runner-type": "python",
+      "workdir": "/opt/runners/task-runner-python",
+      "command": "/usr/bin/python3",
+      "args": [
+        "-m",
+        "task_runner"
+      ],
+      "health-check-server-port": "5682",
+      "env-overrides": {
+        "PYTHONPATH": "/opt/runners/task-runner-python"
+      }
     }
   ]
 }
