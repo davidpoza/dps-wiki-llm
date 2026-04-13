@@ -51,6 +51,34 @@ async function createVault() {
   return vault;
 }
 
+function fakeYtDlpBinaryArgs() {
+  const code = `
+const fs = require("node:fs");
+const path = require("node:path");
+
+const args = process.argv.slice(1);
+const info = JSON.parse(process.env.FAKE_YTDLP_INFO_JSON || "{}");
+
+if (args.includes("--dump-json")) {
+  process.stdout.write(JSON.stringify(info) + "\\n");
+  process.exit(0);
+}
+
+const pathsIndex = args.indexOf("--paths");
+const langIndex = args.indexOf("--sub-langs");
+const outputDir = pathsIndex >= 0 ? args[pathsIndex + 1] : process.cwd();
+const language = langIndex >= 0 ? args[langIndex + 1] : "en";
+const extension = process.env.FAKE_YTDLP_SUBTITLE_EXT || "vtt";
+const subtitle = process.env.FAKE_YTDLP_SUBTITLE || "WEBVTT\\n\\n00:00:00.000 --> 00:00:01.000\\nFallback caption.\\n";
+const id = info.id || "fake-video";
+
+fs.mkdirSync(outputDir, { recursive: true });
+fs.writeFileSync(path.join(outputDir, id + "." + language + "." + extension), subtitle, "utf8");
+`;
+
+  return ["--eval", code, "--"];
+}
+
 test("init-db, reindex, and search work together", async () => {
   const vault = await createVault();
 
@@ -221,6 +249,7 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
   assert.match(nodes.get("Prepare Telegram Updates").parameters.jsCode, /telegram_last_update_id/);
   assert.match(nodes.get("Prepare Telegram Updates").parameters.jsCode, /ingest/);
   assert.match(nodes.get("Run youtube-transcript.ts").parameters.command, /youtube-transcript/);
+  assert.match(nodes.get("Run youtube-transcript.ts").notes, /yt-dlp/);
   assert.match(nodes.get("Prepare Query").parameters.jsCode, /telegram_chat_id/);
   assert.match(nodes.get("Prepare Query").parameters.jsCode, /Unauthorized Telegram chat id/);
   assert.match(nodes.get("Build Answer Response").parameters.jsCode, /telegram_update_id/);
@@ -375,36 +404,31 @@ test("ingest-source and plan-source-note produce canonical ingestion contracts",
 
 test("youtube-transcript writes a raw YouTube transcript source", async () => {
   const vault = await tempDir("dps-wiki-llm-youtube-vault-");
+  const fakeYtDlpArgs = fakeYtDlpBinaryArgs();
   const inputPath = path.join(vault, "youtube-input.json");
   await writeJson(inputPath, {
     url: "https://youtu.be/dQw4w9WgXcQ",
     captured_at: "2026-04-12T10:00:00Z",
-    player_response: {
-      videoDetails: {
-        title: "Example YouTube Talk",
-        author: "Example Channel"
-      },
-      captions: {
-        playerCaptionsTracklistRenderer: {
-          captionTracks: [
-            {
-              baseUrl: "https://example.com/captions",
-              languageCode: "en",
-              name: { simpleText: "English" }
-            }
-          ]
-        }
-      }
-    },
-    transcript_json: {
-      events: [
-        { tStartMs: 0, dDurationMs: 1200, segs: [{ utf8: "First caption." }] },
-        { tStartMs: 1200, dDurationMs: 1800, segs: [{ utf8: "Second caption." }] }
-      ]
-    }
+    language_preferences: ["en", "es"]
   });
 
-  const result = await runTool("youtube-transcript", ["--vault", vault, "--input", inputPath]);
+  const result = await runTool("youtube-transcript", ["--vault", vault, "--input", inputPath], {
+    env: {
+      YTDLP_BINARY: process.execPath,
+      YTDLP_BINARY_ARGS: JSON.stringify(fakeYtDlpArgs),
+      FAKE_YTDLP_INFO_JSON: JSON.stringify({
+        id: "dQw4w9WgXcQ",
+        title: "Example YouTube Talk",
+        uploader: "Example Channel",
+        webpage_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        subtitles: {
+          en: [{ ext: "vtt", name: "English" }]
+        },
+        automatic_captions: {}
+      }),
+      FAKE_YTDLP_SUBTITLE: "WEBVTT\n\n00:00:00.000 --> 00:00:01.200\nFirst caption.\n\n00:00:01.200 --> 00:00:03.000\nSecond caption.\n"
+    }
+  });
 
   assert.equal(result.json.status, "created");
   assert.equal(result.json.video_id, "dQw4w9WgXcQ");
@@ -420,60 +444,55 @@ test("youtube-transcript writes a raw YouTube transcript source", async () => {
 
 test("youtube-transcript reports YouTube videos without subtitles", async () => {
   const vault = await tempDir("dps-wiki-llm-youtube-empty-vault-");
+  const fakeYtDlpArgs = fakeYtDlpBinaryArgs();
   const inputPath = path.join(vault, "youtube-input.json");
   await writeJson(inputPath, {
-    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    player_response: {
-      videoDetails: {
-        title: "No Captions"
-      }
-    }
+    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
   });
 
-  const result = await runTool("youtube-transcript", ["--vault", vault, "--input", inputPath]);
+  const result = await runTool("youtube-transcript", ["--vault", vault, "--input", inputPath], {
+    env: {
+      YTDLP_BINARY: process.execPath,
+      YTDLP_BINARY_ARGS: JSON.stringify(fakeYtDlpArgs),
+      FAKE_YTDLP_INFO_JSON: JSON.stringify({
+        id: "dQw4w9WgXcQ",
+        title: "No Captions",
+        subtitles: {},
+        automatic_captions: {}
+      })
+    }
+  });
 
   assert.equal(result.json.status, "failed");
   assert.equal(result.json.reason, "YouTube video has no captions or subtitles");
   assert.equal(result.json.video_id, "dQw4w9WgXcQ");
 });
 
-test("youtube-transcript falls back to autogenerated srv3 captions", async () => {
+test("youtube-transcript falls back to autogenerated captions from yt-dlp", async () => {
   const vault = await tempDir("dps-wiki-llm-youtube-asr-vault-");
+  const fakeYtDlpArgs = fakeYtDlpBinaryArgs();
   const inputPath = path.join(vault, "youtube-input.json");
   await writeJson(inputPath, {
     url: "https://www.youtube.com/watch?v=GOhMh__Z4xI",
     captured_at: "2026-04-12T11:00:00Z",
-    player_response: {
-      videoDetails: {
-        title: "ASR Captions"
-      },
-      captions: {
-        playerCaptionsTracklistRenderer: {
-          captionTracks: [
-            {
-              baseUrl: "https://example.com/manual-empty",
-              languageCode: "en",
-              name: { simpleText: "English" }
-            },
-            {
-              baseUrl: "https://example.com/asr",
-              languageCode: "en",
-              kind: "asr",
-              name: { simpleText: "English (auto-generated)" }
-            }
-          ]
-        }
-      }
-    },
-    metadata: {
-      test_transcripts: {
-        "https://example.com/manual-empty": "{\"events\":[]}",
-        "https://example.com/asr": "<timedtext><body><p t=\"0\" d=\"1500\"><s>Auto generated line.</s></p></body></timedtext>"
-      }
-    }
+    language_preferences: ["en"]
   });
 
-  const result = await runTool("youtube-transcript", ["--vault", vault, "--input", inputPath]);
+  const result = await runTool("youtube-transcript", ["--vault", vault, "--input", inputPath], {
+    env: {
+      YTDLP_BINARY: process.execPath,
+      YTDLP_BINARY_ARGS: JSON.stringify(fakeYtDlpArgs),
+      FAKE_YTDLP_INFO_JSON: JSON.stringify({
+        id: "GOhMh__Z4xI",
+        title: "ASR Captions",
+        subtitles: {},
+        automatic_captions: {
+          en: [{ ext: "vtt", name: "English (auto-generated)" }]
+        }
+      }),
+      FAKE_YTDLP_SUBTITLE: "WEBVTT\n\n00:00:00.000 --> 00:00:01.500\nAuto generated line.\n"
+    }
+  });
 
   assert.equal(result.json.status, "created");
   assert.equal(result.json.caption_kind, "asr");

@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
+import { spawn } from "node:child_process";
 import crypto from "node:crypto";
+import type { Dirent } from "node:fs";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 import { SYSTEM_CONFIG } from "./config.js";
@@ -8,26 +12,10 @@ import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
 import type { JsonObject } from "./lib/contracts.js";
 import { resolveVaultRoot, resolveWithinRoot, writeTextFile } from "./lib/fs-utils.js";
 
-type CaptionTrack = {
-  baseUrl?: string;
-  name?: {
-    simpleText?: string;
-    runs?: Array<{ text?: string }>;
-  };
-  languageCode?: string;
-  kind?: string;
-  vssId?: string;
-};
-
 type TranscriptSegment = {
   start_ms: number;
   duration_ms: number | null;
   text: string;
-};
-
-type LoadedTranscript = {
-  track: CaptionTrack;
-  segments: TranscriptSegment[];
 };
 
 type InputPayload = {
@@ -35,9 +23,6 @@ type InputPayload = {
   captured_at?: string;
   language_preferences?: string[];
   title?: string;
-  player_response?: unknown;
-  transcript_json?: unknown;
-  watch_html?: string;
   metadata?: JsonObject;
 };
 
@@ -61,6 +46,29 @@ type Result =
       url?: string;
       video_id?: string;
     };
+
+type SubtitleKind = "manual" | "asr";
+
+type SubtitleCandidate = {
+  language: string;
+  name: string;
+  kind: SubtitleKind;
+};
+
+type YtDlpInfo = {
+  id?: unknown;
+  title?: unknown;
+  uploader?: unknown;
+  channel?: unknown;
+  webpage_url?: unknown;
+  subtitles?: unknown;
+  automatic_captions?: unknown;
+};
+
+type CommandResult = {
+  stdout: string;
+  stderr: string;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -116,154 +124,247 @@ function normalizeCapturedAt(value: unknown): string {
   return date.toISOString();
 }
 
-function titleFromPlayerResponse(playerResponse: unknown): string | undefined {
-  if (!isRecord(playerResponse)) {
-    return undefined;
-  }
+function normalizeLanguagePreferences(value: string[] | undefined): string[] {
+  const preferences = (value ?? ["en", "es"])
+    .map((language) => language.trim().toLowerCase())
+    .filter(Boolean);
 
-  const details = playerResponse.videoDetails;
-  if (!isRecord(details)) {
-    return undefined;
-  }
-
-  return stringValue(details.title);
+  return preferences.length > 0 ? preferences : ["en", "es"];
 }
 
-function authorFromPlayerResponse(playerResponse: unknown): string | undefined {
-  if (!isRecord(playerResponse)) {
-    return undefined;
-  }
+async function runYtDlp(args: string[]): Promise<CommandResult> {
+  const binary = process.env.YTDLP_BINARY || "yt-dlp";
+  const prefixArgs = parseYtDlpBinaryArgs(process.env.YTDLP_BINARY_ARGS);
+  const ioDir = await fs.mkdtemp(path.join(os.tmpdir(), "dps-wiki-llm-ytdlp-stdio-"));
+  const stdoutPath = path.join(ioDir, "stdout");
+  const stderrPath = path.join(ioDir, "stderr");
+  const stdoutFile = await fs.open(stdoutPath, "w");
+  const stderrFile = await fs.open(stderrPath, "w");
 
-  const details = playerResponse.videoDetails;
-  if (!isRecord(details)) {
-    return undefined;
-  }
+  try {
+    const { code } = await new Promise<{ code: number | null }>((resolve, reject) => {
+      const child = spawn(binary, [...prefixArgs, ...args], {
+        stdio: ["ignore", stdoutFile.fd, stderrFile.fd]
+      });
 
-  return stringValue(details.author);
+      child.on("error", (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") {
+          reject(new Error(`yt-dlp executable not found: ${binary}`));
+          return;
+        }
+
+        reject(error);
+      });
+      child.on("close", (exitCode) => {
+        resolve({ code: exitCode });
+      });
+    });
+
+    await stdoutFile.close();
+    await stderrFile.close();
+
+    const stdout = await fs.readFile(stdoutPath, "utf8");
+    const stderr = await fs.readFile(stderrPath, "utf8");
+
+    if (code !== 0) {
+      const detail = stderr.trim() || stdout.trim() || "no stderr";
+      throw new Error(`yt-dlp failed with exit code ${code}: ${detail}`);
+    }
+
+    return { stdout, stderr };
+  } finally {
+    await stdoutFile.close().catch(() => undefined);
+    await stderrFile.close().catch(() => undefined);
+    await fs.rm(ioDir, { recursive: true, force: true });
+  }
 }
 
-function captionTracksFromPlayerResponse(playerResponse: unknown): CaptionTrack[] {
-  if (!isRecord(playerResponse)) {
+function parseYtDlpBinaryArgs(value: string | undefined): string[] {
+  if (!value) {
     return [];
   }
 
-  const captions = playerResponse.captions;
-  if (!isRecord(captions)) {
+  const parsed = JSON.parse(value) as unknown;
+  if (!Array.isArray(parsed) || !parsed.every((entry) => typeof entry === "string")) {
+    throw new Error("YTDLP_BINARY_ARGS must be a JSON array of strings");
+  }
+
+  return parsed;
+}
+
+async function loadYtDlpInfo(url: string): Promise<YtDlpInfo | null> {
+  const result = await runYtDlp(["--dump-json", "--skip-download", "--no-playlist", "--no-warnings", url]);
+  const payload = result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1);
+
+  if (!payload) {
+    return null;
+  }
+
+  const parsed = JSON.parse(payload) as unknown;
+  return isRecord(parsed) ? parsed : null;
+}
+
+function subtitleCandidatesFromInfo(info: YtDlpInfo): SubtitleCandidate[] {
+  return [
+    ...subtitleCandidatesFromMap(info.subtitles, "manual"),
+    ...subtitleCandidatesFromMap(info.automatic_captions, "asr")
+  ];
+}
+
+function subtitleCandidatesFromMap(value: unknown, kind: SubtitleKind): SubtitleCandidate[] {
+  if (!isRecord(value)) {
     return [];
   }
 
-  const tracklist = captions.playerCaptionsTracklistRenderer;
-  if (!isRecord(tracklist)) {
-    return [];
+  const candidates: SubtitleCandidate[] = [];
+  for (const [language, entries] of Object.entries(value)) {
+    if (!language.trim()) {
+      continue;
+    }
+
+    const subtitleEntries = Array.isArray(entries) ? entries.filter(isRecord) : [];
+    const name = subtitleEntries.map((entry) => stringValue(entry.name)).find(Boolean) ?? language;
+
+    candidates.push({
+      language,
+      name,
+      kind
+    });
   }
 
-  const tracks = tracklist.captionTracks;
-  return Array.isArray(tracks) ? tracks.filter(isRecord) : [];
+  return candidates;
 }
 
-function labelFromTrack(track: CaptionTrack): string {
-  const name = track.name;
-  if (!name) {
-    return track.languageCode || "unknown";
-  }
-
-  if (typeof name.simpleText === "string") {
-    return name.simpleText;
-  }
-
-  if (Array.isArray(name.runs)) {
-    return name.runs.map((run) => run.text ?? "").join("").trim() || track.languageCode || "unknown";
-  }
-
-  return track.languageCode || "unknown";
-}
-
-function selectCaptionTrack(tracks: CaptionTrack[], languagePreferences: string[]): CaptionTrack | null {
-  return orderCaptionTracks(tracks, languagePreferences)[0] ?? null;
-}
-
-function orderCaptionTracks(tracks: CaptionTrack[], languagePreferences: string[]): CaptionTrack[] {
-  const usable = tracks.filter((track) => stringValue(track.baseUrl));
-  if (usable.length === 0) {
-    return [];
-  }
-
-  const normalizedPreferences = languagePreferences.map((language) => language.toLowerCase());
-  const ordered: CaptionTrack[] = [];
-  const add = (track: CaptionTrack | undefined) => {
-    if (track && !ordered.includes(track)) {
-      ordered.push(track);
+function orderSubtitleCandidates(candidates: SubtitleCandidate[], languagePreferences: string[]): SubtitleCandidate[] {
+  const ordered: SubtitleCandidate[] = [];
+  const add = (candidate: SubtitleCandidate | undefined) => {
+    if (candidate && !ordered.includes(candidate)) {
+      ordered.push(candidate);
     }
   };
 
-  for (const language of normalizedPreferences) {
-    for (const track of usable.filter((entry) => entry.languageCode?.toLowerCase() === language && entry.kind !== "asr")) {
-      add(track);
+  for (const preference of languagePreferences) {
+    for (const kind of ["manual", "asr"] satisfies SubtitleKind[]) {
+      for (const candidate of candidates.filter((entry) => entry.kind === kind && entry.language.toLowerCase() === preference)) {
+        add(candidate);
+      }
     }
-    for (const track of usable.filter((entry) => entry.languageCode?.toLowerCase() === language)) {
-      add(track);
+
+    for (const kind of ["manual", "asr"] satisfies SubtitleKind[]) {
+      for (const candidate of candidates.filter((entry) => entry.kind === kind && languageMatchesPreference(entry.language, preference))) {
+        add(candidate);
+      }
     }
   }
 
-  for (const track of usable.filter((entry) => entry.kind !== "asr")) {
-    add(track);
+  for (const candidate of candidates.filter((entry) => entry.kind === "manual")) {
+    add(candidate);
   }
-  for (const track of usable) {
-    add(track);
+  for (const candidate of candidates) {
+    add(candidate);
   }
 
   return ordered;
 }
 
-function parsePlayerResponseFromHtml(html: string): unknown | null {
-  const marker = "ytInitialPlayerResponse";
-  const markerIndex = html.indexOf(marker);
-  if (markerIndex < 0) {
+function languageMatchesPreference(language: string, preference: string): boolean {
+  const normalized = language.toLowerCase();
+  return normalized === preference || normalized.startsWith(`${preference}-`) || normalized.startsWith(`${preference}_`);
+}
+
+async function downloadSubtitle(url: string, candidate: SubtitleCandidate, outputDir: string): Promise<void> {
+  const subtitleFlag = candidate.kind === "asr" ? "--write-auto-subs" : "--write-subs";
+
+  await runYtDlp([
+    "--skip-download",
+    subtitleFlag,
+    "--sub-langs",
+    candidate.language,
+    "--sub-format",
+    "vtt/json3/srv3/best",
+    "--no-playlist",
+    "--no-warnings",
+    "--paths",
+    outputDir,
+    "-o",
+    "%(id)s.%(ext)s",
+    url
+  ]);
+}
+
+async function listSubtitleFiles(root: string): Promise<string[]> {
+  const files: string[] = [];
+  const allowedExtensions = new Set([".vtt", ".json3", ".srv3", ".xml", ".ttml"]);
+
+  async function visit(dir: string): Promise<void> {
+    let entries: Dirent<string>[];
+
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+        return;
+      }
+
+      throw error;
+    }
+
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await visit(entryPath);
+        continue;
+      }
+
+      if (entry.isFile() && allowedExtensions.has(path.extname(entry.name).toLowerCase())) {
+        files.push(entryPath);
+      }
+    }
+  }
+
+  await visit(root);
+  return files.sort();
+}
+
+function selectDownloadedSubtitle(files: string[], candidate: SubtitleCandidate): string | null {
+  const languageMarker = `.${candidate.language.toLowerCase()}.`;
+  return files.find((file) => path.basename(file).toLowerCase().includes(languageMarker)) ?? files[0] ?? null;
+}
+
+async function loadSubtitleSegments(filePath: string): Promise<TranscriptSegment[]> {
+  const raw = await fs.readFile(filePath, "utf8");
+  const extension = path.extname(filePath).toLowerCase();
+
+  if (extension === ".json3") {
+    return parseTranscriptJsonSafe(raw) ?? [];
+  }
+
+  if (extension === ".srv3") {
+    return parseSrv3Xml(raw);
+  }
+
+  if (extension === ".xml" || extension === ".ttml") {
+    return parseTranscriptXml(raw);
+  }
+
+  if (extension === ".vtt") {
+    return parseVtt(raw);
+  }
+
+  return parseVtt(raw);
+}
+
+function parseTranscriptJsonSafe(text: string): TranscriptSegment[] | null {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    return parseTranscriptJson(parsed);
+  } catch {
     return null;
   }
-
-  const braceStart = html.indexOf("{", markerIndex);
-  if (braceStart < 0) {
-    return null;
-  }
-
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-
-  for (let index = braceStart; index < html.length; index += 1) {
-    const char = html[index];
-
-    if (inString) {
-      if (escape) {
-        escape = false;
-      } else if (char === "\\") {
-        escape = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      continue;
-    }
-
-    if (char === "{") {
-      depth += 1;
-      continue;
-    }
-
-    if (char === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return JSON.parse(html.slice(braceStart, index + 1));
-      }
-    }
-  }
-
-  return null;
 }
 
 function parseTranscriptJson(value: unknown): TranscriptSegment[] {
@@ -407,100 +508,6 @@ function decodeXml(value: string): string {
     .replace(/&#(\d+);/g, (_match, code: string) => String.fromCharCode(Number(code)));
 }
 
-function withFormat(url: string, format: "json3" | "srv3" | "vtt"): string {
-  const parsed = new URL(url);
-  parsed.searchParams.set("fmt", format);
-  return parsed.toString();
-}
-
-async function fetchText(url: string): Promise<string> {
-  const response = await fetch(url, {
-    headers: {
-      "user-agent": "dps-wiki-llm/0.1 youtube-transcript"
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} while fetching ${url}`);
-  }
-
-  return response.text();
-}
-
-async function loadPlayerResponse(input: InputPayload, videoId: string): Promise<unknown | null> {
-  if (input.player_response) {
-    return input.player_response;
-  }
-
-  const html = input.watch_html ?? (await fetchText(`https://www.youtube.com/watch?v=${videoId}`));
-  return parsePlayerResponseFromHtml(html);
-}
-
-async function loadTranscript(input: InputPayload, track: CaptionTrack): Promise<TranscriptSegment[]> {
-  if (input.transcript_json) {
-    return parseTranscriptJson(input.transcript_json);
-  }
-
-  const testTranscripts = isRecord(input.metadata) ? input.metadata.test_transcripts : undefined;
-  const testBaseUrl = stringValue(track.baseUrl);
-  if (isRecord(testTranscripts) && testBaseUrl) {
-    const transcript = testTranscripts[testBaseUrl];
-    if (typeof transcript === "string") {
-      return parseTranscriptJsonSafe(transcript) ?? parseSrv3Xml(transcript) ?? parseTranscriptXml(transcript) ?? parseVtt(transcript);
-    }
-  }
-
-  const baseUrl = stringValue(track.baseUrl);
-  if (!baseUrl) {
-    return [];
-  }
-
-  const jsonText = await fetchText(withFormat(baseUrl, "json3"));
-  const jsonSegments = parseTranscriptJsonSafe(jsonText);
-  if (jsonSegments && jsonSegments.length > 0) {
-    return jsonSegments;
-  }
-
-  const jsonXmlSegments = parseTranscriptXml(jsonText);
-  if (jsonXmlSegments.length > 0) {
-    return jsonXmlSegments;
-  }
-
-  const srv3Text = await fetchText(withFormat(baseUrl, "srv3"));
-  const srv3Segments = parseSrv3Xml(srv3Text);
-  if (srv3Segments.length > 0) {
-    return srv3Segments;
-  }
-
-  const legacyXmlSegments = parseTranscriptXml(srv3Text);
-  if (legacyXmlSegments.length > 0) {
-    return legacyXmlSegments;
-  }
-
-  const vttText = await fetchText(withFormat(baseUrl, "vtt"));
-  return parseVtt(vttText);
-}
-
-function parseTranscriptJsonSafe(text: string): TranscriptSegment[] | null {
-  try {
-    const parsed = JSON.parse(text) as unknown;
-    return parseTranscriptJson(parsed);
-  } catch {
-    return null;
-  }
-}
-
-async function loadFirstUsableTranscript(input: InputPayload, tracks: CaptionTrack[]): Promise<LoadedTranscript | null> {
-  for (const track of tracks) {
-    const segments = await loadTranscript(input, track);
-    if (segments.length > 0) {
-      return { track, segments };
-    }
-  }
-
-  return null;
-}
-
 function slugify(value: string, fallback: string): string {
   const slug = value
     .normalize("NFKD")
@@ -575,55 +582,68 @@ async function main(): Promise<void> {
     return;
   }
 
-  const videoId = extractVideoId(url);
-  if (!videoId) {
+  const videoIdFromUrl = extractVideoId(url);
+  if (!videoIdFromUrl) {
     writeJsonStdout({ status: "failed", reason: "URL is not a supported YouTube video URL", url } satisfies Result, args.pretty);
     return;
   }
 
-  const playerResponse = await loadPlayerResponse(input, videoId);
-  if (!playerResponse) {
-    writeJsonStdout({ status: "failed", reason: "Could not load YouTube player metadata", url, video_id: videoId } satisfies Result, args.pretty);
+  const info = await loadYtDlpInfo(url);
+  if (!info) {
+    writeJsonStdout({ status: "failed", reason: "Could not load YouTube metadata with yt-dlp", url, video_id: videoIdFromUrl } satisfies Result, args.pretty);
     return;
   }
 
-  const tracks = captionTracksFromPlayerResponse(playerResponse);
-  if (tracks.length === 0) {
+  const videoId = stringValue(info.id) ?? videoIdFromUrl;
+  const candidates = subtitleCandidatesFromInfo(info);
+  if (candidates.length === 0) {
     writeJsonStdout({ status: "failed", reason: "YouTube video has no captions or subtitles", url, video_id: videoId } satisfies Result, args.pretty);
     return;
   }
 
-  const orderedTracks = orderCaptionTracks(tracks, input.language_preferences ?? ["en", "es"]);
-  const track = orderedTracks[0] ?? null;
-  if (!track) {
+  const selectedSubtitle = orderSubtitleCandidates(candidates, normalizeLanguagePreferences(input.language_preferences))[0] ?? null;
+  if (!selectedSubtitle) {
     writeJsonStdout({ status: "failed", reason: "YouTube video has no usable caption track", url, video_id: videoId } satisfies Result, args.pretty);
     return;
   }
 
-  const loaded = await loadFirstUsableTranscript(input, orderedTracks);
-  if (!loaded) {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "dps-wiki-llm-ytdlp-"));
+  let segments: TranscriptSegment[] = [];
+
+  try {
+    await downloadSubtitle(url, selectedSubtitle, tempDir);
+    const subtitleFiles = await listSubtitleFiles(tempDir);
+    const subtitleFile = selectDownloadedSubtitle(subtitleFiles, selectedSubtitle);
+
+    if (subtitleFile) {
+      segments = await loadSubtitleSegments(subtitleFile);
+    }
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+
+  if (segments.length === 0) {
     writeJsonStdout({ status: "failed", reason: "YouTube caption tracks are empty or unavailable", url, video_id: videoId } satisfies Result, args.pretty);
     return;
   }
-  const segments = loaded.segments;
-  const selectedTrack = loaded.track;
 
   const capturedAt = normalizeCapturedAt(input.captured_at);
-  const title = stringValue(input.title) || titleFromPlayerResponse(playerResponse) || `YouTube video ${videoId}`;
-  const author = authorFromPlayerResponse(playerResponse);
+  const title = stringValue(input.title) || stringValue(info.title) || `YouTube video ${videoId}`;
+  const author = stringValue(info.uploader) || stringValue(info.channel);
+  const canonicalUrl = stringValue(info.webpage_url) || url;
   const datePrefix = capturedAt.slice(0, 10);
   const slug = slugify(title, videoId);
-  const hash = crypto.createHash("sha256").update(`${videoId}:${selectedTrack.languageCode ?? ""}:${segments.length}`).digest("hex").slice(0, 8);
+  const hash = crypto.createHash("sha256").update(`${videoId}:${selectedSubtitle.language}:${selectedSubtitle.kind}:${segments.length}`).digest("hex").slice(0, 8);
   const rawPath = path.posix.join(SYSTEM_CONFIG.paths.rawDir, "web", `${datePrefix}-youtube-${slug}-${hash}.md`);
   const markdown = buildRawMarkdown({
     title,
-    url,
+    url: canonicalUrl,
     capturedAt,
     videoId,
     author,
-    captionLanguage: selectedTrack.languageCode || "unknown",
-    captionName: labelFromTrack(selectedTrack),
-    captionKind: selectedTrack.kind || "manual",
+    captionLanguage: selectedSubtitle.language,
+    captionName: selectedSubtitle.name,
+    captionKind: selectedSubtitle.kind,
     segments
   });
 
@@ -635,11 +655,11 @@ async function main(): Promise<void> {
       raw_path: rawPath,
       title,
       video_id: videoId,
-      url,
+      url: canonicalUrl,
       captured_at: capturedAt,
-      caption_language: selectedTrack.languageCode || "unknown",
-      caption_name: labelFromTrack(selectedTrack),
-      caption_kind: selectedTrack.kind || "manual",
+      caption_language: selectedSubtitle.language,
+      caption_name: selectedSubtitle.name,
+      caption_kind: selectedSubtitle.kind,
       segment_count: segments.length,
       character_count: segments.reduce((total, segment) => total + segment.text.length, 0)
     } satisfies Result,

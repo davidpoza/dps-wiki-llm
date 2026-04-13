@@ -4,7 +4,7 @@ This runbook describes the first production cut: manual operation from self-host
 
 ## Runtime
 
-- Build the n8n service from this repository's `Dockerfile`; it installs n8n from npm, installs `git`/SSH tooling, and copies the compiled scripts under `/app`.
+- Build the n8n service from this repository's `Dockerfile`; it installs n8n from npm, installs `git`/SSH tooling plus `yt-dlp`, and copies the compiled scripts under `/app`.
 - Mount the target vault at `/data/vault`.
 - Let the Dockerfile build `dist/`; do not mount over `/app` at runtime.
 - Configure Git identity where `commit.ts` runs. Use `git config user.name`/`git config user.email` in the vault repository, or set `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, and `GIT_COMMITTER_EMAIL` in the runtime environment.
@@ -41,7 +41,7 @@ services:
 
 The workflow command nodes already call `node /app/dist/tools/<tool>.js ...`, so they will use the scripts baked into this image.
 
-The image intentionally uses `node:22-alpine` and installs `n8n` from npm instead of extending `n8nio/n8n:latest`, because recent official n8n images do not expose a supported package manager for adding OS tools. This keeps `git` available for `commit.ts`.
+The image intentionally uses `node:22-alpine` and installs `n8n` from npm instead of extending `n8nio/n8n:latest`, because recent official n8n images do not expose a supported package manager for adding OS tools. This keeps `git` available for `commit.ts` and `yt-dlp` available for YouTube subtitle ingestion.
 
 The GitHub Actions workflow at `.github/workflows/docker-publish.yml` publishes the n8n image to GitHub Container Registry as `ghcr.io/<owner>/<repo>` and the runner image as `ghcr.io/<owner>/<repo>-runner`. It runs only on `main`, version tags like `v1.0.0`, and manual dispatch; pull requests do not build or publish the images.
 
@@ -130,7 +130,7 @@ The workflow:
 - routes `/ask`, `/answer`, `/query`, and free text to the answer path
 - runs `search.ts`, `answer-context.ts`, `answer-record.ts`, and feedback validation for answers
 - routes `/ingest <youtube-url>` to `youtube-transcript.ts`
-- writes YouTube captions to `raw/web/**` before running the normal ingest pipeline
+- writes `yt-dlp`-fetched YouTube subtitles to `raw/web/**` before running the normal ingest pipeline
 - sends Telegram logs for answer output, completed ingest, and handled ingest failures such as videos without subtitles
 
 The answer path does not update `wiki/`. The `/ingest` path mutates `raw/**` first, then runs the controlled ingest pipeline that updates `wiki/**`, reindexes, and commits.

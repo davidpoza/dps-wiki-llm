@@ -38,7 +38,7 @@ The repo now includes the deterministic local toolchain plus importable n8n work
 |---|---|---|
 | `init-db.ts` | Creates the SQLite schema and FTS tables. | `state/kb.db` |
 | `ingest-source.ts` | Normalizes a `raw/**` artifact into the canonical source payload. | stdout JSON |
-| `youtube-transcript.ts` | Writes a raw YouTube transcript artifact from video captions. | `raw/web/**` plus stdout JSON |
+| `youtube-transcript.ts` | Calls `yt-dlp` to fetch YouTube subtitles and writes them as a raw transcript artifact. | `raw/web/**` plus stdout JSON |
 | `plan-source-note.ts` | Builds a safe baseline Mutation Plan that creates the source note and root index entry, using an LLM-cleaned `source_note` when provided. | stdout JSON |
 | `apply-update.ts` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
 | `answer-context.ts` | Reads retrieved wiki notes and builds the LLM context packet plus Answer Record shell. | stdout JSON |
@@ -62,7 +62,7 @@ Detailed English documentation for every script and shared library module lives 
 
 The production V1 runbook lives in [`docs/production-runbook.md`](docs/production-runbook.md).
 
-Docker Compose deployments can build the n8n runtime from [`Dockerfile`](Dockerfile), which installs n8n, includes `git`, and bakes the compiled local scripts into `/app` for the workflow command nodes.
+Docker Compose deployments can build the n8n runtime from [`Dockerfile`](Dockerfile), which installs n8n, includes `git` and `yt-dlp`, and bakes the compiled local scripts into `/app` for the workflow command nodes.
 
 ## Docker Compose Example
 

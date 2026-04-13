@@ -568,7 +568,7 @@
         -260
       ],
       "notesInFlow": true,
-      "notes": "Writes a raw/web markdown artifact from YouTube captions. Expected no-caption failures return JSON with status=failed."
+      "notes": "Calls youtube-transcript.ts, which delegates YouTube subtitle metadata and subtitle download to yt-dlp, then writes a raw/web markdown artifact. Expected no-caption failures return JSON with status=failed."
     },
     {
       "parameters": {

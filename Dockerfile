@@ -19,9 +19,10 @@ ARG N8N_VERSION=latest
 USER root
 
 RUN set -eux; \
-  apk add --no-cache ca-certificates git openssh-client tini su-exec; \
-  apk add --no-cache --virtual .build-deps python3 make g++; \
+  apk add --no-cache ca-certificates git openssh-client python3 py3-pip tini su-exec; \
+  apk add --no-cache --virtual .build-deps make g++; \
   npm install -g "n8n@${N8N_VERSION}"; \
+  python3 -m pip install --no-cache-dir --break-system-packages yt-dlp; \
   apk del .build-deps; \
   npm cache clean --force
 
@@ -36,6 +37,7 @@ RUN set -eux; \
   node -e "require('node:sqlite')"; \
   test -f /app/dist/tools/search.js; \
   git --version; \
+  yt-dlp --version; \
   n8n --version
 
 USER node

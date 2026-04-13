@@ -5,7 +5,7 @@ This directory contains importable n8n workflow JSON files aligned with the scri
 ## Assumptions
 
 - repository scripts available inside the n8n container at `/app`
-- for Docker Compose, build the `n8n` service from the repository `Dockerfile`; the image installs n8n from npm, installs `git`, and builds `dist/` during `docker compose build`
+- for Docker Compose, build the `n8n` service from the repository `Dockerfile`; the image installs n8n from npm, installs `git` and `yt-dlp`, and builds `dist/` during `docker compose build`
 - Obsidian vault mounted inside the n8n container at `/data/vault`
 - `Execute Command` enabled in self-hosted n8n
 - `Local File Trigger` enabled in self-hosted n8n if you want reactive ingestion from `raw/`
@@ -31,7 +31,7 @@ The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/pro
   - runnable scheduled/manual Telegram bot workflow
   - polls Telegram with `getUpdates` and routes `/ask`, `/answer`, `/query`, and `/ingest`
   - answer route runs `search.ts`, reads the top-k wiki markdown through `answer-context.ts`, calls OpenRouter for answer synthesis, and writes the answer via `answer-record.ts`
-  - ingest route accepts `/ingest <youtube-url>`, extracts YouTube captions through `youtube-transcript.ts`, creates a `raw/web/**` artifact, and runs the normal ingest pipeline
+  - ingest route accepts `/ingest <youtube-url>`, extracts YouTube subtitles through `youtube-transcript.ts` backed by `yt-dlp`, creates a `raw/web/**` artifact, and runs the normal ingest pipeline
   - sends Telegram logs for answer output, completed ingest, and handled ingest failures such as videos without subtitles
 
 - `workflows/kb-weekly-lint.json`
@@ -68,7 +68,7 @@ Keep the orchestration split into small workflows instead of one large graph:
 2. `KB - Telegram Bot Polling`
    - receives bot commands through outbound `getUpdates` polling
    - routes `/ask`, `/answer`, `/query`, and free text into the answer path
-   - routes `/ingest <youtube-url>` into YouTube transcript extraction, raw artifact creation, and the normal ingest pipeline
+   - routes `/ingest <youtube-url>` into `yt-dlp`-backed YouTube subtitle extraction, raw artifact creation, and the normal ingest pipeline
    - sends answer, ingest success, and ingest failure logs back to Telegram when configured
 
 3. `KB - Apply Feedback`
