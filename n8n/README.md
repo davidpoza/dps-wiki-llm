@@ -10,7 +10,7 @@ This directory contains importable n8n workflow JSON files aligned with the scri
 - `Execute Command` enabled in self-hosted n8n
 - `Local File Trigger` enabled in self-hosted n8n if you want reactive ingestion from `raw/`
 - `OPENROUTER_API_KEY` configured in the n8n runtime for OpenRouter calls
-- optional `LLM_API_KEY_HEADER` configured when the LLM provider expects the raw API key in a header other than `Authorization`
+- optional `LLM_API_KEY_HEADER` used before importing when the LLM provider expects the raw API key in a header other than `Authorization`
 - optional `OPENROUTER_MODEL` configured when you want to pin a model instead of using OpenRouter account defaults
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` configured when you want answer input/output and ingest logs over Telegram
 
@@ -19,6 +19,14 @@ If your paths differ, update the command strings and watched paths after importi
 The workflow command nodes use `node /app/dist/tools/<tool>.js ...` so stdout remains parseable JSON.
 
 For Docker Compose deployments, build the `n8n` service from the repository `Dockerfile`. The image installs n8n plus the compiled scripts into `/app`, so the workflows can find them without a bind mount over `/app`.
+
+The checked-in workflow JSON uses a static `Authorization: Bearer <OPENROUTER_API_KEY>` header for OpenRouter. If the provider needs a different API-key header, render the workflows before importing them:
+
+```sh
+LLM_API_KEY_HEADER=x-api-key npm run render-n8n-workflows
+```
+
+This keeps the header name static inside n8n and avoids runtime expression parsing issues in HTTP Request headers.
 
 The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/production-runbook.md).
 

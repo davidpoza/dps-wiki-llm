@@ -189,6 +189,29 @@ test("bot-lock serializes bot tasks with a vault filesystem lock", async () => {
   assert.notEqual(reacquired.json.lock_id, first.json.lock_id);
 });
 
+test("render-n8n-workflows renders LLM API key header names at import time", async () => {
+  const temp = await tempDir("dps-wiki-llm-workflow-render-");
+  const workflowPath = path.join(temp, "kb-answer-blueprint.json");
+  await writeFile(workflowPath, await readFile(repoPath("n8n/workflows/kb-answer-blueprint.json")));
+
+  const rendered = await runTool("render-n8n-workflows", [workflowPath], {
+    env: {
+      LLM_API_KEY_HEADER: "x-api-key"
+    }
+  });
+  assert.equal(rendered.json.status, "written");
+  assert.equal(rendered.json.header_name, "x-api-key");
+  assert.ok(rendered.json.workflows[0].updated_nodes.includes("Call OpenRouter Answer"));
+
+  const workflow = await readJson(workflowPath);
+  const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
+  const answerCall = nodes.get("Call OpenRouter Answer");
+  assert.equal(answerCall.type, "n8n-nodes-base.httpRequest");
+  assert.equal(answerCall.parameters.headerParameters.parameters[0].name, "x-api-key");
+  assert.equal(answerCall.parameters.headerParameters.parameters[0].value, "={{ $env.OPENROUTER_API_KEY }}");
+  assert.ok(!("jsonHeaders" in answerCall.parameters));
+});
+
 test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails", async () => {
   const workflow = JSON.parse(await fs.readFile(repoPath("n8n/workflows/kb-ingest-raw-blueprint.json"), "utf8"));
   const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
@@ -230,14 +253,19 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   assert.match(nodes.get("Build Telegram Ingest Log").parameters.jsCode, /KB ingest completed/);
   assert.equal(nodes.get("Call OpenRouter Source Note Cleaner").type, "n8n-nodes-base.httpRequest");
   assert.equal(nodes.get("Call OpenRouter Ingest Planner").type, "n8n-nodes-base.httpRequest");
-  assert.equal(nodes.get("Call OpenRouter Source Note Cleaner").parameters.specifyHeaders, "json");
-  assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /JSON\.stringify/);
-  assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
-  assert.match(nodes.get("Call OpenRouter Ingest Planner").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
-  assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /Authorization/);
-  assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /OPENROUTER_API_KEY/);
-  assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /apiKeyValue/);
-  assert.doesNotMatch(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /fetch/);
+  assert.equal(
+    nodes.get("Call OpenRouter Source Note Cleaner").parameters.headerParameters.parameters[0].name,
+    "Authorization"
+  );
+  assert.equal(
+    nodes.get("Call OpenRouter Source Note Cleaner").parameters.headerParameters.parameters[0].value,
+    "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
+  );
+  assert.deepEqual(
+    nodes.get("Call OpenRouter Source Note Cleaner").parameters.headerParameters.parameters.map((header) => header.name),
+    ["Authorization", "Content-Type", "HTTP-Referer", "X-OpenRouter-Title"]
+  );
+  assert.doesNotMatch(JSON.stringify(nodes.get("Call OpenRouter Source Note Cleaner").parameters), /fetch/);
 
   assert.equal(workflow.connections["Parse Source Payload"].main[0][0].node, "Build OpenRouter Source Note Request");
   assert.equal(workflow.connections["Build OpenRouter Source Note Request"].main[0][0].node, "Call OpenRouter Source Note Cleaner");
@@ -368,16 +396,16 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
   assert.equal(nodes.get("Call OpenRouter Feedback").type, "n8n-nodes-base.httpRequest");
   assert.equal(nodes.get("Call OpenRouter Ingest Planner").type, "n8n-nodes-base.httpRequest");
   assert.equal(nodes.get("Call OpenRouter Source Note Cleaner").type, "n8n-nodes-base.httpRequest");
-  assert.equal(nodes.get("Call OpenRouter Answer").parameters.specifyHeaders, "json");
-  assert.match(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /JSON\.stringify/);
-  assert.match(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
-  assert.match(nodes.get("Call OpenRouter Feedback").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
-  assert.match(nodes.get("Call OpenRouter Ingest Planner").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
-  assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
-  assert.match(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /Authorization/);
-  assert.match(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /OPENROUTER_API_KEY/);
-  assert.match(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /apiKeyValue/);
-  assert.doesNotMatch(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /fetch/);
+  assert.equal(nodes.get("Call OpenRouter Answer").parameters.headerParameters.parameters[0].name, "Authorization");
+  assert.equal(
+    nodes.get("Call OpenRouter Answer").parameters.headerParameters.parameters[0].value,
+    "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
+  );
+  assert.deepEqual(
+    nodes.get("Call OpenRouter Answer").parameters.headerParameters.parameters.map((header) => header.name),
+    ["Authorization", "Content-Type", "HTTP-Referer", "X-OpenRouter-Title"]
+  );
+  assert.doesNotMatch(JSON.stringify(nodes.get("Call OpenRouter Answer").parameters), /fetch/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /telegram_skip_reason/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /KB answer completed/);

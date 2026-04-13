@@ -39,6 +39,7 @@ The repo now includes the deterministic local toolchain plus importable n8n work
 | `init-db.ts` | Creates the SQLite schema and FTS tables. | `state/kb.db` |
 | `ingest-source.ts` | Normalizes a `raw/**` artifact into the canonical source payload. | stdout JSON |
 | `youtube-transcript.ts` | Calls `yt-dlp` to fetch YouTube subtitles and writes them as a raw transcript artifact. | `raw/web/**` plus stdout JSON |
+| `render-n8n-workflows.ts` | Renders importable n8n workflow JSON with a static LLM API-key header name. | updated `n8n/workflows/*.json` |
 | `plan-source-note.ts` | Builds a safe baseline Mutation Plan that creates the source note and root index entry, using an LLM-cleaned `source_note` when provided. | stdout JSON |
 | `apply-update.ts` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
 | `answer-context.ts` | Reads retrieved wiki notes and builds the LLM context packet plus Answer Record shell. | stdout JSON |

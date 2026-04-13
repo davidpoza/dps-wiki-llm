@@ -63,9 +63,15 @@ TELEGRAM_CHAT_ID=<allowed chat id>
 TELEGRAM_BOT_LOCK_TTL_MS=<optional stale-lock timeout; defaults to 1800000>
 ```
 
-`OPENROUTER_MODEL` is optional so the model can be changed outside the workflow. If it is not set, OpenRouter account defaults apply. `LLM_API_KEY_HEADER` changes the request header name that carries `OPENROUTER_API_KEY`; when unset, the workflows keep the current `Authorization: Bearer <key>` behavior. When `LLM_API_KEY_HEADER` is set to a non-`Authorization` header name, the workflows send the raw API key as that header value.
+`OPENROUTER_MODEL` is optional so the model can be changed outside the workflow. If it is not set, OpenRouter account defaults apply. The checked-in workflows use `Authorization: Bearer <OPENROUTER_API_KEY>` for LLM calls. If a provider needs a different API-key header, render the workflow JSON before importing it:
 
-Add the same OpenRouter and Telegram variables to the `n8n` service environment. The OpenRouter call nodes read `OPENROUTER_API_KEY` and `LLM_API_KEY_HEADER` from n8n HTTP Request expressions, while Code nodes still read values such as `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, `OPENROUTER_ANSWER_TEMPERATURE`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`. If your Code nodes run in the external `n8n-runner` service, pass the Code-node variables and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there as well. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `commit.ts` is run by an `Execute Command` node, so the main `n8n` service needs them.
+```sh
+LLM_API_KEY_HEADER=x-api-key npm run render-n8n-workflows
+```
+
+When `LLM_API_KEY_HEADER` is set to a non-`Authorization` header name, the renderer writes a static header with the raw `OPENROUTER_API_KEY` value expression. This avoids dynamic header-name expressions in n8n HTTP Request nodes.
+
+Add the same OpenRouter and Telegram variables to the `n8n` service environment. Code nodes still read values such as `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, `OPENROUTER_ANSWER_TEMPERATURE`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`. If your Code nodes run in the external `n8n-runner` service, pass the Code-node variables and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there as well. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `commit.ts` is run by an `Execute Command` node, so the main `n8n` service needs them.
 
 For Telegram bot input, `KB - Telegram Bot Polling` polls Telegram with `getUpdates`. `TELEGRAM_CHAT_ID` is used as the allowed incoming chat id and as the default output chat for logs.
 

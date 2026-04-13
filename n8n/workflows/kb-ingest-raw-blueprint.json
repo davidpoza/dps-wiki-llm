@@ -219,8 +219,26 @@
         "url": "={{ $json.openrouter_url }}",
         "authentication": "none",
         "sendHeaders": true,
-        "specifyHeaders": "json",
-        "jsonHeaders": "={{ JSON.stringify((() => { const headerName = String($env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization'; const apiKey = String($env.OPENROUTER_API_KEY || '').trim(); if (!apiKey) { throw new Error('Missing OpenRouter runtime configuration: OPENROUTER_API_KEY'); } const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey; return { [headerName]: apiKeyValue, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }; })()) }}",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.OPENROUTER_SITE_URL || 'https://localhost' }}"
+            },
+            {
+              "name": "X-OpenRouter-Title",
+              "value": "dps-wiki-llm"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
@@ -235,7 +253,7 @@
         16
       ],
       "notesInFlow": true,
-      "notes": "Calls the LLM API through n8n HTTP Request with a dynamic API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
+      "notes": "Calls the LLM API through n8n HTTP Request with a render-time API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
     },
     {
       "parameters": {
@@ -411,8 +429,26 @@
         "url": "={{ $json.openrouter_url }}",
         "authentication": "none",
         "sendHeaders": true,
-        "specifyHeaders": "json",
-        "jsonHeaders": "={{ JSON.stringify((() => { const headerName = String($env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization'; const apiKey = String($env.OPENROUTER_API_KEY || '').trim(); if (!apiKey) { throw new Error('Missing OpenRouter runtime configuration: OPENROUTER_API_KEY'); } const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey; return { [headerName]: apiKeyValue, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }; })()) }}",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "={{ $env.OPENROUTER_SITE_URL || 'https://localhost' }}"
+            },
+            {
+              "name": "X-OpenRouter-Title",
+              "value": "dps-wiki-llm"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
@@ -427,7 +463,7 @@
         16
       ],
       "notesInFlow": true,
-      "notes": "Calls the LLM API through n8n HTTP Request with a dynamic API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
+      "notes": "Calls the LLM API through n8n HTTP Request with a render-time API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
     },
     {
       "parameters": {

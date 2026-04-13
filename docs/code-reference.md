@@ -9,6 +9,7 @@ This document is the English reference for the repository's implementation. It e
 | `tools/init-db.ts` | Creates the SQLite database file and ensures the base schema exists. | CLI flags such as `--vault` and optional `--db`. | JSON with `db_path` and `initialized`. |
 | `tools/ingest-source.ts` | Normalizes a `raw/**` artifact into the canonical source payload. | Raw event JSON via `--input` or `stdin`. | Normalized Source Payload JSON. |
 | `tools/youtube-transcript.ts` | Calls `yt-dlp` to fetch YouTube subtitles and writes them as a raw web artifact. | JSON with `url` and optional `captured_at` via `--input` or `stdin`. | JSON with created `raw_path` or a handled failure reason. |
+| `tools/render-n8n-workflows.ts` | Renders importable n8n workflows with a static LLM API-key header name. | Optional workflow paths plus `LLM_API_KEY_HEADER`. | JSON render summary and updated workflow files when writing is enabled. |
 | `tools/plan-source-note.ts` | Builds the deterministic baseline ingestion plan for creating a source note. | Normalized Source Payload JSON via `--input` or `stdin`. | JSON containing `mutation_plan` and `commit_input`. |
 | `tools/reindex.ts` | Scans wiki markdown files and rebuilds the relational and FTS indexes. | CLI flags such as `--vault` and optional `--db`. | JSON with indexed document count and rebuilt status. |
 | `tools/search.ts` | Runs a full-text search query against `state/kb.db`. | Positional search query plus CLI flags. | JSON search result payload with ranked documents. |
