@@ -55,6 +55,11 @@ type SubtitleCandidate = {
   kind: SubtitleKind;
 };
 
+type LoadedSubtitle = {
+  candidate: SubtitleCandidate;
+  segments: TranscriptSegment[];
+};
+
 type YtDlpInfo = {
   id?: unknown;
   title?: unknown;
@@ -294,6 +299,42 @@ async function downloadSubtitle(url: string, candidate: SubtitleCandidate, outpu
     "%(id)s.%(ext)s",
     url
   ]);
+}
+
+async function loadFirstUsableSubtitle(url: string, candidates: SubtitleCandidate[]): Promise<LoadedSubtitle | null> {
+  let lastError: string | null = null;
+
+  for (const candidate of candidates) {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "dps-wiki-llm-ytdlp-"));
+
+    try {
+      await downloadSubtitle(url, candidate, tempDir);
+      const subtitleFiles = await listSubtitleFiles(tempDir);
+      const subtitleFile = selectDownloadedSubtitle(subtitleFiles, candidate);
+
+      if (!subtitleFile) {
+        lastError = `No subtitle file downloaded for ${candidate.language} (${candidate.kind})`;
+        continue;
+      }
+
+      const segments = await loadSubtitleSegments(subtitleFile);
+      if (segments.length > 0) {
+        return { candidate, segments };
+      }
+
+      lastError = `Downloaded subtitle file was empty for ${candidate.language} (${candidate.kind})`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  if (lastError) {
+    console.error(`yt-dlp subtitle extraction failed for all candidates: ${lastError}`);
+  }
+
+  return null;
 }
 
 async function listSubtitleFiles(root: string): Promise<string[]> {
@@ -601,31 +642,19 @@ async function main(): Promise<void> {
     return;
   }
 
-  const selectedSubtitle = orderSubtitleCandidates(candidates, normalizeLanguagePreferences(input.language_preferences))[0] ?? null;
-  if (!selectedSubtitle) {
+  const orderedSubtitles = orderSubtitleCandidates(candidates, normalizeLanguagePreferences(input.language_preferences));
+  if (orderedSubtitles.length === 0) {
     writeJsonStdout({ status: "failed", reason: "YouTube video has no usable caption track", url, video_id: videoId } satisfies Result, args.pretty);
     return;
   }
 
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "dps-wiki-llm-ytdlp-"));
-  let segments: TranscriptSegment[] = [];
-
-  try {
-    await downloadSubtitle(url, selectedSubtitle, tempDir);
-    const subtitleFiles = await listSubtitleFiles(tempDir);
-    const subtitleFile = selectDownloadedSubtitle(subtitleFiles, selectedSubtitle);
-
-    if (subtitleFile) {
-      segments = await loadSubtitleSegments(subtitleFile);
-    }
-  } finally {
-    await fs.rm(tempDir, { recursive: true, force: true });
-  }
-
-  if (segments.length === 0) {
+  const loadedSubtitle = await loadFirstUsableSubtitle(url, orderedSubtitles);
+  if (!loadedSubtitle) {
     writeJsonStdout({ status: "failed", reason: "YouTube caption tracks are empty or unavailable", url, video_id: videoId } satisfies Result, args.pretty);
     return;
   }
+  const selectedSubtitle = loadedSubtitle.candidate;
+  const segments = loadedSubtitle.segments;
 
   const capturedAt = normalizeCapturedAt(input.captured_at);
   const title = stringValue(input.title) || stringValue(info.title) || `YouTube video ${videoId}`;

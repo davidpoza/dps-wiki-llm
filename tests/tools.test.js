@@ -68,6 +68,11 @@ const pathsIndex = args.indexOf("--paths");
 const langIndex = args.indexOf("--sub-langs");
 const outputDir = pathsIndex >= 0 ? args[pathsIndex + 1] : process.cwd();
 const language = langIndex >= 0 ? args[langIndex + 1] : "en";
+const failLanguages = (process.env.FAKE_YTDLP_FAIL_LANGUAGES || "").split(",").map((entry) => entry.trim()).filter(Boolean);
+if (failLanguages.includes(language)) {
+  process.stderr.write("ERROR: Unable to download video subtitles for '" + language + "': HTTP Error 429: Too Many Requests\\n");
+  process.exit(1);
+}
 const extension = process.env.FAKE_YTDLP_SUBTITLE_EXT || "vtt";
 const subtitle = process.env.FAKE_YTDLP_SUBTITLE || "WEBVTT\\n\\n00:00:00.000 --> 00:00:01.000\\nFallback caption.\\n";
 const id = info.id || "fake-video";
@@ -440,6 +445,43 @@ test("youtube-transcript writes a raw YouTube transcript source", async () => {
   assert.match(raw, /youtube_video_id: "dQw4w9WgXcQ"/);
   assert.match(raw, /\[00:00:00\] First caption\./);
   assert.match(raw, /\[00:00:01\] Second caption\./);
+});
+
+test("youtube-transcript tries the next subtitle track when yt-dlp download fails", async () => {
+  const vault = await tempDir("dps-wiki-llm-youtube-fallback-vault-");
+  const fakeYtDlpArgs = fakeYtDlpBinaryArgs();
+  const inputPath = path.join(vault, "youtube-input.json");
+  await writeJson(inputPath, {
+    url: "https://www.youtube.com/watch?v=GOhMh__Z4xI",
+    captured_at: "2026-04-12T10:30:00Z",
+    language_preferences: ["en", "es"]
+  });
+
+  const result = await runTool("youtube-transcript", ["--vault", vault, "--input", inputPath], {
+    env: {
+      YTDLP_BINARY: process.execPath,
+      YTDLP_BINARY_ARGS: JSON.stringify(fakeYtDlpArgs),
+      FAKE_YTDLP_FAIL_LANGUAGES: "en",
+      FAKE_YTDLP_INFO_JSON: JSON.stringify({
+        id: "GOhMh__Z4xI",
+        title: "Fallback Captions",
+        subtitles: {
+          en: [{ ext: "vtt", name: "English" }],
+          es: [{ ext: "vtt", name: "Spanish" }]
+        },
+        automatic_captions: {}
+      }),
+      FAKE_YTDLP_SUBTITLE: "WEBVTT\n\n00:00:00.000 --> 00:00:01.500\nSpanish fallback line.\n"
+    }
+  });
+
+  assert.equal(result.json.status, "created");
+  assert.equal(result.json.caption_language, "es");
+  assert.equal(result.json.caption_name, "Spanish");
+
+  const raw = await readFile(path.join(vault, result.json.raw_path));
+  assert.match(raw, /language: "es"/);
+  assert.match(raw, /\[00:00:00\] Spanish fallback line\./);
 });
 
 test("youtube-transcript reports YouTube videos without subtitles", async () => {
