@@ -111,18 +111,27 @@
     },
     {
       "parameters": {
-        "jsCode": "return (async () => {\n  const env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\n  const headerName = String(env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization';\n  const apiKey = String(env.OPENROUTER_API_KEY || '').trim();\n  if (!apiKey) {\n    throw new Error('Missing OpenRouter runtime configuration: OPENROUTER_API_KEY');\n  }\n  const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey;\n  const response = await fetch($json.openrouter_url, {\n    method: 'POST',\n    headers: {\n      [headerName]: apiKeyValue,\n      'Content-Type': 'application/json',\n      'HTTP-Referer': env.OPENROUTER_SITE_URL || 'https://localhost',\n      'X-OpenRouter-Title': 'dps-wiki-llm'\n    },\n    body: JSON.stringify($json.openrouter_request)\n  });\n  const text = await response.text();\n  let body;\n  try {\n    body = text ? JSON.parse(text) : {};\n  } catch {\n    body = { raw_response: text };\n  }\n  if (!response.ok) {\n    const detail = typeof body?.error?.message === 'string' ? body.error.message : text.slice(0, 1000);\n    throw new Error('OpenRouter request failed with HTTP ' + response.status + ': ' + detail);\n  }\n  return [{ json: body }];\n})();"
+        "method": "POST",
+        "url": "={{ $json.openrouter_url }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify((() => { const headerName = String($env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization'; const apiKey = String($env.OPENROUTER_API_KEY || '').trim(); if (!apiKey) { throw new Error('Missing OpenRouter runtime configuration: OPENROUTER_API_KEY'); } const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey; return { [headerName]: apiKeyValue, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }; })()) }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
+        "options": {}
       },
       "id": "4031b912-0a1b-4e20-b96f-dbd60e47183f",
       "name": "Call OpenRouter Answer",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         2560,
         300
       ],
       "notesInFlow": true,
-      "notes": "Calls the LLM API with a dynamic API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
+      "notes": "Calls the LLM API through n8n HTTP Request with a dynamic API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
     },
     {
       "parameters": {
@@ -194,18 +203,27 @@
     },
     {
       "parameters": {
-        "jsCode": "return (async () => {\n  const env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\n  const headerName = String(env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization';\n  const apiKey = String(env.OPENROUTER_API_KEY || '').trim();\n  if (!apiKey) {\n    throw new Error('Missing OpenRouter runtime configuration: OPENROUTER_API_KEY');\n  }\n  const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey;\n  const response = await fetch($json.openrouter_url, {\n    method: 'POST',\n    headers: {\n      [headerName]: apiKeyValue,\n      'Content-Type': 'application/json',\n      'HTTP-Referer': env.OPENROUTER_SITE_URL || 'https://localhost',\n      'X-OpenRouter-Title': 'dps-wiki-llm'\n    },\n    body: JSON.stringify($json.openrouter_request)\n  });\n  const text = await response.text();\n  let body;\n  try {\n    body = text ? JSON.parse(text) : {};\n  } catch {\n    body = { raw_response: text };\n  }\n  if (!response.ok) {\n    const detail = typeof body?.error?.message === 'string' ? body.error.message : text.slice(0, 1000);\n    throw new Error('OpenRouter request failed with HTTP ' + response.status + ': ' + detail);\n  }\n  return [{ json: body }];\n})();"
+        "method": "POST",
+        "url": "={{ $json.openrouter_url }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify((() => { const headerName = String($env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization'; const apiKey = String($env.OPENROUTER_API_KEY || '').trim(); if (!apiKey) { throw new Error('Missing OpenRouter runtime configuration: OPENROUTER_API_KEY'); } const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey; return { [headerName]: apiKeyValue, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }; })()) }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
+        "options": {}
       },
       "id": "1aef9905-e1c9-4737-b8d5-53985dc98a59",
       "name": "Call OpenRouter Feedback",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         4240,
         300
       ],
       "notesInFlow": true,
-      "notes": "Calls the LLM API with a dynamic API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
+      "notes": "Calls the LLM API through n8n HTTP Request with a dynamic API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
     },
     {
       "parameters": {
@@ -812,18 +830,27 @@
     },
     {
       "parameters": {
-        "jsCode": "return (async () => {\n  const env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\n  const headerName = String(env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization';\n  const apiKey = String(env.OPENROUTER_API_KEY || '').trim();\n  if (!apiKey) {\n    throw new Error('Missing OpenRouter runtime configuration: OPENROUTER_API_KEY');\n  }\n  const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey;\n  const response = await fetch($json.openrouter_url, {\n    method: 'POST',\n    headers: {\n      [headerName]: apiKeyValue,\n      'Content-Type': 'application/json',\n      'HTTP-Referer': env.OPENROUTER_SITE_URL || 'https://localhost',\n      'X-OpenRouter-Title': 'dps-wiki-llm'\n    },\n    body: JSON.stringify($json.openrouter_request)\n  });\n  const text = await response.text();\n  let body;\n  try {\n    body = text ? JSON.parse(text) : {};\n  } catch {\n    body = { raw_response: text };\n  }\n  if (!response.ok) {\n    const detail = typeof body?.error?.message === 'string' ? body.error.message : text.slice(0, 1000);\n    throw new Error('OpenRouter request failed with HTTP ' + response.status + ': ' + detail);\n  }\n  return [{ json: body }];\n})();"
+        "method": "POST",
+        "url": "={{ $json.openrouter_url }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify((() => { const headerName = String($env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization'; const apiKey = String($env.OPENROUTER_API_KEY || '').trim(); if (!apiKey) { throw new Error('Missing OpenRouter runtime configuration: OPENROUTER_API_KEY'); } const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey; return { [headerName]: apiKeyValue, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }; })()) }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
+        "options": {}
       },
       "id": "0dec72b7-434f-4f3d-a724-cd56417cb72e",
       "name": "Call OpenRouter Ingest Planner",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         6480,
         -440
       ],
       "notesInFlow": true,
-      "notes": "Calls the LLM API with a dynamic API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
+      "notes": "Calls the LLM API through n8n HTTP Request with a dynamic API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
     },
     {
       "parameters": {
@@ -995,18 +1022,27 @@
     },
     {
       "parameters": {
-        "jsCode": "return (async () => {\n  const env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\n  const headerName = String(env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization';\n  const apiKey = String(env.OPENROUTER_API_KEY || '').trim();\n  if (!apiKey) {\n    throw new Error('Missing OpenRouter runtime configuration: OPENROUTER_API_KEY');\n  }\n  const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey;\n  const response = await fetch($json.openrouter_url, {\n    method: 'POST',\n    headers: {\n      [headerName]: apiKeyValue,\n      'Content-Type': 'application/json',\n      'HTTP-Referer': env.OPENROUTER_SITE_URL || 'https://localhost',\n      'X-OpenRouter-Title': 'dps-wiki-llm'\n    },\n    body: JSON.stringify($json.openrouter_request)\n  });\n  const text = await response.text();\n  let body;\n  try {\n    body = text ? JSON.parse(text) : {};\n  } catch {\n    body = { raw_response: text };\n  }\n  if (!response.ok) {\n    const detail = typeof body?.error?.message === 'string' ? body.error.message : text.slice(0, 1000);\n    throw new Error('OpenRouter request failed with HTTP ' + response.status + ': ' + detail);\n  }\n  return [{ json: body }];\n})();"
+        "method": "POST",
+        "url": "={{ $json.openrouter_url }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify((() => { const headerName = String($env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization'; const apiKey = String($env.OPENROUTER_API_KEY || '').trim(); if (!apiKey) { throw new Error('Missing OpenRouter runtime configuration: OPENROUTER_API_KEY'); } const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey; return { [headerName]: apiKeyValue, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }; })()) }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
+        "options": {}
       },
       "id": "5848180b-2059-4a01-af58-50599f2fed1d",
       "name": "Call OpenRouter Source Note Cleaner",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         3400,
         -440
       ],
       "notesInFlow": true,
-      "notes": "Calls the LLM API with a dynamic API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
+      "notes": "Calls the LLM API through n8n HTTP Request with a dynamic API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
     },
     {
       "parameters": {
