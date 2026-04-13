@@ -30,6 +30,7 @@ The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/pro
 - `workflows/kb-answer-blueprint.json`
   - runnable scheduled/manual Telegram bot workflow
   - polls Telegram with `getUpdates` and routes `/ask`, `/answer`, `/query`, and `/ingest`
+  - acquires a short-lived filesystem Telegram bot lock before routing a polled update, so overlapping schedule cycles do not process concurrent bot tasks
   - answer route runs `search.ts`, reads the top-k wiki markdown through `answer-context.ts`, calls OpenRouter for answer synthesis, and writes the answer via `answer-record.ts`
   - ingest route accepts `/ingest <youtube-url>`, extracts YouTube subtitles through `youtube-transcript.ts` backed by `yt-dlp`, creates a `raw/web/**` artifact, and runs the normal ingest pipeline
   - sends Telegram logs for answer output, completed ingest, and handled ingest failures such as videos without subtitles
@@ -69,6 +70,7 @@ Keep the orchestration split into small workflows instead of one large graph:
    - receives bot commands through outbound `getUpdates` polling
    - routes `/ask`, `/answer`, `/query`, and free text into the answer path
    - routes `/ingest <youtube-url>` into `yt-dlp`-backed YouTube subtitle extraction, raw artifact creation, and the normal ingest pipeline
+   - uses `state/locks/telegram-bot.lock` as a bot lock; set `TELEGRAM_BOT_LOCK_TTL_MS` to override the default 30 minute stale-lock timeout
    - sends answer, ingest success, and ingest failure logs back to Telegram when configured
 
 3. `KB - Apply Feedback`

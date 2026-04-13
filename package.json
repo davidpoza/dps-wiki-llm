@@ -13,6 +13,7 @@
     "init-db": "node dist/tools/init-db.js",
     "ingest-source": "node dist/tools/ingest-source.js",
     "youtube-transcript": "node dist/tools/youtube-transcript.js",
+    "bot-lock": "node dist/tools/bot-lock.js",
     "plan-source-note": "node dist/tools/plan-source-note.js",
     "apply-update": "node dist/tools/apply-update.js",
     "answer-context": "node dist/tools/answer-context.js",

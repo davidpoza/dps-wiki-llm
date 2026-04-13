@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst telegramMessage = body.message ?? body.edited_message ?? null;\nconst telegramChatId = telegramMessage?.chat?.id !== undefined ? String(telegramMessage.chat.id) : null;\nconst telegramText = typeof telegramMessage?.text === 'string' ? telegramMessage.text.trim() : '';\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nif (telegramChatId && allowedTelegramChatId && telegramChatId !== allowedTelegramChatId) {\n  throw new Error('Unauthorized Telegram chat id: ' + telegramChatId);\n}\nfunction stripTelegramCommand(text) {\n  return text.replace(/^\\/(?:ask|answer|query)(?:@\\w+)?\\s*/i, '').trim();\n}\nconst bodyQuestion = typeof body.question === 'string' ? body.question.trim() : '';\nconst question = telegramText\n  ? stripTelegramCommand(telegramText)\n  : bodyQuestion || 'What should I know from the current wiki state?';\nif (telegramText && !question) {\n  throw new Error('Telegram message did not include a question after the command');\n}\nconst limit = Number.isFinite(Number(body.limit)) && Number(body.limit) > 0 ? Number(body.limit) : 8;\nreturn [{\n  json: {\n    question,\n    limit,\n    telegram_chat_id: telegramChatId,\n    telegram_message_id: telegramMessage?.message_id ?? null,\n    telegram_update_id: body.update_id ?? null,\n    telegram_polled: Boolean(input.telegram_polled)\n  }\n}];"
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst telegramMessage = body.message ?? body.edited_message ?? null;\nconst telegramChatId = telegramMessage?.chat?.id !== undefined ? String(telegramMessage.chat.id) : null;\nconst telegramText = typeof telegramMessage?.text === 'string' ? telegramMessage.text.trim() : '';\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nif (telegramChatId && allowedTelegramChatId && telegramChatId !== allowedTelegramChatId) {\n  throw new Error('Unauthorized Telegram chat id: ' + telegramChatId);\n}\nfunction stripTelegramCommand(text) {\n  return text.replace(/^\\/(?:ask|answer|query)(?:@\\w+)?\\s*/i, '').trim();\n}\nconst bodyQuestion = typeof body.question === 'string' ? body.question.trim() : '';\nconst question = telegramText\n  ? stripTelegramCommand(telegramText)\n  : bodyQuestion || 'What should I know from the current wiki state?';\nif (telegramText && !question) {\n  throw new Error('Telegram message did not include a question after the command');\n}\nconst limit = Number.isFinite(Number(body.limit)) && Number(body.limit) > 0 ? Number(body.limit) : 8;\nreturn [{\n  json: {\n    question,\n    limit,\n    telegram_chat_id: telegramChatId,\n    telegram_message_id: telegramMessage?.message_id ?? null,\n    telegram_update_id: body.update_id ?? null,\n    telegram_polled: Boolean(input.telegram_polled),\n    telegram_lock_acquired: Boolean(input.telegram_lock_acquired),\n    telegram_lock_id: input.telegram_lock_id ?? null\n  }\n}];"
       },
       "id": "9bb85ad8-6020-4a97-9a2e-ad8f7f13cf1f",
       "name": "Prepare Query",
@@ -301,7 +301,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const feedback = $json.feedback_validation.record;\nreturn [{\n  json: {\n    status: 'answer_recorded_feedback_proposed',\n    question: $json.question,\n    answer: $json.answer,\n    answer_record: $json.answer_record,\n    output_path: $json.answer_record_result.output_path,\n    proposed_feedback: feedback,\n    approval_required: feedback.decision === 'propagate',\n    apply_feedback_workflow: 'KB - Apply Feedback',\n    approval_payload: {\n      approved: true,\n      feedback\n    },\n    openrouter_answer_meta: $json.openrouter_answer_meta,\n    openrouter_feedback_meta: $json.openrouter_feedback_meta,\n    telegram_chat_id: $json.telegram_chat_id ?? null,\n    telegram_message_id: $json.telegram_message_id ?? null,\n    telegram_update_id: $json.telegram_update_id ?? null,\n    telegram_polled: Boolean($json.telegram_polled),\n    telegram_command: $json.telegram_command ?? null\n  }\n}];"
+        "jsCode": "const feedback = $json.feedback_validation.record;\nreturn [{\n  json: {\n    status: 'answer_recorded_feedback_proposed',\n    question: $json.question,\n    answer: $json.answer,\n    answer_record: $json.answer_record,\n    output_path: $json.answer_record_result.output_path,\n    proposed_feedback: feedback,\n    approval_required: feedback.decision === 'propagate',\n    apply_feedback_workflow: 'KB - Apply Feedback',\n    approval_payload: {\n      approved: true,\n      feedback\n    },\n    openrouter_answer_meta: $json.openrouter_answer_meta,\n    openrouter_feedback_meta: $json.openrouter_feedback_meta,\n    telegram_chat_id: $json.telegram_chat_id ?? null,\n    telegram_message_id: $json.telegram_message_id ?? null,\n    telegram_update_id: $json.telegram_update_id ?? null,\n    telegram_polled: Boolean($json.telegram_polled),\n    telegram_command: $json.telegram_command ?? null,\n    telegram_lock_acquired: Boolean($json.telegram_lock_acquired),\n    telegram_lock_id: $json.telegram_lock_id ?? null\n  }\n}];"
       },
       "id": "e225f8ab-7f1e-45dd-b73f-1f34c0814f8e",
       "name": "Build Answer Response",
@@ -482,7 +482,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nif (response.ok === false) {\n  throw new Error('Telegram getUpdates failed: ' + (response.description ?? 'unknown error'));\n}\nconst updates = Array.isArray(response.result) ? response.result : [];\nif (!updates.length) {\n  return [];\n}\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst update = updates[0];\nconst message = update.message ?? update.edited_message ?? null;\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : '';\nconst text = typeof message?.text === 'string' ? message.text.trim() : '';\nfunction markProcessed() {\n  if (Number.isSafeInteger(Number(update.update_id))) {\n    staticData.telegram_last_update_id = Number(update.update_id);\n  }\n}\nfunction telegramCommand(value) {\n  const match = value.match(/^\\/(\\w+)(?:@\\w+)?(?:\\s|$)/);\n  return match ? match[1].toLowerCase() : 'ask';\n}\nif (!message || !text) {\n  markProcessed();\n  return [];\n}\nif (allowedTelegramChatId && chatId !== allowedTelegramChatId) {\n  markProcessed();\n  return [];\n}\nconst command = telegramCommand(text);\nif (!['ask', 'answer', 'query', 'ingest'].includes(command)) {\n  markProcessed();\n  return [];\n}\nmarkProcessed();\nreturn [{\n  json: {\n    body: update,\n    telegram_polled: true,\n    telegram_command: command\n  }\n}];"
+        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nif (response.ok === false) {\n  throw new Error('Telegram getUpdates failed: ' + (response.description ?? 'unknown error'));\n}\nconst updates = Array.isArray(response.result) ? response.result : [];\nif (!updates.length) {\n  return [];\n}\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst update = updates[0];\nconst message = update.message ?? update.edited_message ?? null;\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : '';\nconst text = typeof message?.text === 'string' ? message.text.trim() : '';\nfunction markProcessed() {\n  if (Number.isSafeInteger(Number(update.update_id))) {\n    staticData.telegram_last_update_id = Number(update.update_id);\n  }\n}\nfunction telegramCommand(value) {\n  const match = value.match(/^\\/(\\w+)(?:@\\w+)?(?:\\s|$)/);\n  return match ? match[1].toLowerCase() : 'ask';\n}\nif (!message || !text) {\n  markProcessed();\n  return [];\n}\nif (allowedTelegramChatId && chatId !== allowedTelegramChatId) {\n  markProcessed();\n  return [];\n}\nconst command = telegramCommand(text);\nif (!['ask', 'answer', 'query', 'ingest'].includes(command)) {\n  markProcessed();\n  return [];\n}\nreturn [{\n  json: {\n    body: update,\n    telegram_polled: true,\n    telegram_command: command\n  }\n}];"
       },
       "id": "282e25ff-dfc5-466d-97aa-44b06fe49cf4",
       "name": "Prepare Telegram Updates",
@@ -493,7 +493,7 @@
         120
       ],
       "notesInFlow": true,
-      "notes": "Routes one Telegram update. On first poll, offset=-1 drops old backlog. Supported commands: /ask, /answer, /query, /ingest."
+      "notes": "Routes one valid Telegram update. Supported bot tasks acquire an explicit filesystem lock before answer or ingest work starts; offset=-1 drops old backlog on first poll."
     },
     {
       "parameters": {
@@ -519,7 +519,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst message = body.message ?? body.edited_message ?? null;\nconst text = typeof message?.text === 'string' ? message.text.trim() : '';\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : null;\nconst messageId = message?.message_id ?? null;\nconst updateId = body.update_id ?? null;\nconst commandless = text.replace(/^\\/ingest(?:@\\w+)?\\s*/i, '').trim();\nconst url = commandless.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[),.;]+$/, '') ?? '';\nconst base = {\n  telegram_chat_id: chatId,\n  telegram_message_id: messageId,\n  telegram_update_id: updateId,\n  telegram_command: 'ingest',\n  telegram_polled: Boolean(input.telegram_polled),\n  youtube_ingest_url: url\n};\nif (!url) {\n  return [{\n    json: {\n      ...base,\n      youtube_ingest_status: 'failed',\n      youtube_ingest_error: 'Usage: /ingest <youtube-url>'\n    }\n  }];\n}\nconst payload = {\n  url,\n  captured_at: new Date().toISOString(),\n  language_preferences: ['en', 'es']\n};\nreturn [{\n  json: {\n    ...base,\n    youtube_ingest_status: 'pending',\n    youtube_payload: payload,\n    youtube_payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst message = body.message ?? body.edited_message ?? null;\nconst text = typeof message?.text === 'string' ? message.text.trim() : '';\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : null;\nconst messageId = message?.message_id ?? null;\nconst updateId = body.update_id ?? null;\nconst commandless = text.replace(/^\\/ingest(?:@\\w+)?\\s*/i, '').trim();\nconst url = commandless.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[),.;]+$/, '') ?? '';\nconst base = {\n  telegram_chat_id: chatId,\n  telegram_message_id: messageId,\n  telegram_update_id: updateId,\n  telegram_command: 'ingest',\n  telegram_polled: Boolean(input.telegram_polled),\n  telegram_lock_acquired: Boolean(input.telegram_lock_acquired),\n  telegram_lock_id: input.telegram_lock_id ?? null,\n  youtube_ingest_url: url\n};\nif (!url) {\n  return [{\n    json: {\n      ...base,\n      youtube_ingest_status: 'failed',\n      youtube_ingest_error: 'Usage: /ingest <youtube-url>'\n    }\n  }];\n}\nconst payload = {\n  url,\n  captured_at: new Date().toISOString(),\n  language_preferences: ['en', 'es']\n};\nreturn [{\n  json: {\n    ...base,\n    youtube_ingest_status: 'pending',\n    youtube_payload: payload,\n    youtube_payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
       },
       "id": "23b6125f-bda4-465d-96f5-98e86fa7a1bf",
       "name": "Prepare YouTube Ingest Request",
@@ -671,7 +671,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const fallback = $node['Build Telegram Ingest Failure Log'].json;\nconst telegramResponse = $json.ok !== undefined ? $json : null;\nreturn [{\n  json: {\n    ...fallback,\n    telegram_ingest_failure_log_sent: Boolean(telegramResponse?.ok),\n    telegram_ingest_failure_log_result: telegramResponse\n  }\n}];"
+        "jsCode": "const fallback = $node['Build Telegram Ingest Failure Log'].json;\nconst telegramResponse = $json.ok !== undefined ? $json : null;\nconst updateId = Number(fallback.telegram_update_id);\nif (fallback.telegram_polled && Number.isSafeInteger(updateId)) {\n  const staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\n  staticData.telegram_last_update_id = updateId;\n}\nreturn [{\n  json: {\n    ...fallback,\n    telegram_ingest_failure_log_sent: Boolean(telegramResponse?.ok),\n    telegram_ingest_failure_log_result: telegramResponse\n  }\n}];"
       },
       "id": "f6c8f464-81ba-410e-9345-d3213b404edc",
       "name": "Finalize Telegram Ingest Failure Log",
@@ -684,7 +684,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst detectedPath = body.raw_path || body.path || body.filePath || body.filename || 'raw/inbox/example.md';\nconst normalized = {\n  raw_path: detectedPath,\n  trigger_source: body.trigger_source || (body.path || body.filePath || body.filename ? 'local-file-trigger' : 'manual'),\n  captured_at: body.captured_at || new Date().toISOString(),\n  telegram_chat_id: body.telegram_chat_id ?? null,\n  telegram_message_id: body.telegram_message_id ?? null,\n  telegram_update_id: body.telegram_update_id ?? null,\n  telegram_command: body.telegram_command ?? null,\n  youtube_ingest_url: body.youtube_ingest_url ?? null,\n  youtube_transcript_result: body.youtube_transcript_result ?? null\n};\nreturn [{ json: normalized }];"
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst detectedPath = body.raw_path || body.path || body.filePath || body.filename || 'raw/inbox/example.md';\nconst normalized = {\n  raw_path: detectedPath,\n  trigger_source: body.trigger_source || (body.path || body.filePath || body.filename ? 'local-file-trigger' : 'manual'),\n  captured_at: body.captured_at || new Date().toISOString(),\n  telegram_chat_id: body.telegram_chat_id ?? null,\n  telegram_message_id: body.telegram_message_id ?? null,\n  telegram_update_id: body.telegram_update_id ?? null,\n  telegram_command: body.telegram_command ?? null,\n  telegram_lock_acquired: Boolean(body.telegram_lock_acquired),\n  telegram_lock_id: body.telegram_lock_id ?? null,\n  youtube_ingest_url: body.youtube_ingest_url ?? null,\n  youtube_transcript_result: body.youtube_transcript_result ?? null\n};\nreturn [{ json: normalized }];"
       },
       "id": "16635cb1-fc84-42dc-ba91-f5f5f996e0f3",
       "name": "Normalize Raw Event",
@@ -1042,7 +1042,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const llmApplied = Boolean($json.llm_mutation_result);\nconst rawEvent = $node['Normalize Raw Event'].json ?? {};\nreturn [{\n  json: {\n    status: llmApplied ? 'baseline_ingest_applied_llm_plan_applied' : 'baseline_ingest_applied_no_llm_changes',\n    source_payload: $json.source_payload,\n    baseline_mutation_plan: $json.baseline_mutation_plan,\n    baseline_mutation_result: $json.baseline_mutation_result,\n    baseline_reindex_result: $json.baseline_reindex_result,\n    baseline_commit_result: $json.baseline_commit_result,\n    openrouter_source_note_meta: $json.openrouter_source_note_meta,\n    llm_mutation_plan: $json.llm_mutation_plan,\n    llm_guardrail_rejections: $json.llm_guardrail_rejections ?? [],\n    llm_plan_approval_required: $json.llm_plan_approval_required,\n    llm_plan_auto_apply_required: $json.llm_plan_auto_apply_required,\n    llm_mutation_result: $json.llm_mutation_result ?? null,\n    llm_reindex_result: $json.llm_reindex_result ?? null,\n    llm_commit_result: $json.llm_commit_result ?? null,\n    openrouter_ingest_meta: $json.openrouter_ingest_meta,\n    telegram_chat_id: rawEvent.telegram_chat_id ?? null,\n    telegram_message_id: rawEvent.telegram_message_id ?? null,\n    telegram_update_id: rawEvent.telegram_update_id ?? null,\n    telegram_command: rawEvent.telegram_command ?? null,\n    youtube_ingest_url: rawEvent.youtube_ingest_url ?? null,\n    youtube_transcript_result: rawEvent.youtube_transcript_result ?? null\n  }\n}];"
+        "jsCode": "const llmApplied = Boolean($json.llm_mutation_result);\nconst rawEvent = $node['Normalize Raw Event'].json ?? {};\nreturn [{\n  json: {\n    status: llmApplied ? 'baseline_ingest_applied_llm_plan_applied' : 'baseline_ingest_applied_no_llm_changes',\n    source_payload: $json.source_payload,\n    baseline_mutation_plan: $json.baseline_mutation_plan,\n    baseline_mutation_result: $json.baseline_mutation_result,\n    baseline_reindex_result: $json.baseline_reindex_result,\n    baseline_commit_result: $json.baseline_commit_result,\n    openrouter_source_note_meta: $json.openrouter_source_note_meta,\n    llm_mutation_plan: $json.llm_mutation_plan,\n    llm_guardrail_rejections: $json.llm_guardrail_rejections ?? [],\n    llm_plan_approval_required: $json.llm_plan_approval_required,\n    llm_plan_auto_apply_required: $json.llm_plan_auto_apply_required,\n    llm_mutation_result: $json.llm_mutation_result ?? null,\n    llm_reindex_result: $json.llm_reindex_result ?? null,\n    llm_commit_result: $json.llm_commit_result ?? null,\n    openrouter_ingest_meta: $json.openrouter_ingest_meta,\n    telegram_chat_id: rawEvent.telegram_chat_id ?? null,\n    telegram_message_id: rawEvent.telegram_message_id ?? null,\n    telegram_update_id: rawEvent.telegram_update_id ?? null,\n    telegram_command: rawEvent.telegram_command ?? null,\n    telegram_lock_acquired: Boolean(rawEvent.telegram_lock_acquired),\n    telegram_lock_id: rawEvent.telegram_lock_id ?? null,\n    youtube_ingest_url: rawEvent.youtube_ingest_url ?? null,\n    youtube_transcript_result: rawEvent.youtube_transcript_result ?? null\n  }\n}];"
       },
       "id": "fc739fd6-07f2-41f4-919b-137ed8860fdb",
       "name": "Build Ingest Response",
@@ -1110,7 +1110,7 @@
     },
     {
       "parameters": {
-        "jsCode": "function extractJson(text) {\n  const fence = String.fromCharCode(96, 96, 96);\n  const stripped = text.trim().replace(new RegExp('^' + fence + '(?:json)?\\\\s*', 'i'), '').replace(new RegExp(fence + '$', 'i'), '').trim();\n  try {\n    return JSON.parse(stripped);\n  } catch (error) {\n    const match = stripped.match(/\\{[\\s\\S]*\\}/);\n    if (!match) throw error;\n    return JSON.parse(match[0]);\n  }\n}\nfunction assertRecord(value, label) {\n  if (!value || typeof value !== 'object' || Array.isArray(value)) {\n    throw new Error(label + ' must be an object');\n  }\n}\nfunction stringField(record, field) {\n  const value = record[field];\n  if (typeof value !== 'string' || !value.trim()) {\n    throw new Error('LLM source note must include non-empty ' + field);\n  }\n  return value.trim();\n}\nfunction stringArrayField(record, field, required) {\n  const value = record[field];\n  if (value === undefined && !required) {\n    return [];\n  }\n  if (!Array.isArray(value)) {\n    throw new Error('LLM source note must include ' + field + '[]');\n  }\n  if (value.some((item) => typeof item !== 'string')) {\n    throw new Error('LLM source note ' + field + '[] must contain only strings');\n  }\n  return value\n    .map((item) => item.trim())\n    .filter(Boolean);\n}\nconst raw = $input.first().json;\nconst response = raw.body ?? raw;\nconst choice = Array.isArray(response.choices) ? response.choices[0] : undefined;\nconst content = choice?.message?.content ?? choice?.text;\nconst text = Array.isArray(content)\n  ? content.map((part) => typeof part === 'string' ? part : part?.text ?? '').join('').trim()\n  : typeof content === 'string'\n    ? content.trim()\n    : '';\nif (!text) {\n  throw new Error('OpenRouter source note response did not include JSON content');\n}\nconst proposedSourceNote = extractJson(text);\nassertRecord(proposedSourceNote, 'LLM source note');\nconst packet = $node['Build OpenRouter Source Note Request'].json;\nconst sourceNote = {\n  summary: stringField(proposedSourceNote, 'summary'),\n  raw_context: stringField(proposedSourceNote, 'raw_context'),\n  extracted_claims: stringArrayField(proposedSourceNote, 'extracted_claims', true),\n  open_questions: stringArrayField(proposedSourceNote, 'open_questions', false),\n  generated_by: 'openrouter',\n  model: response.model ?? packet.openrouter_request.model ?? undefined\n};\nconst sourcePayload = {\n  ...packet.source_payload,\n  source_note: sourceNote\n};\nreturn [{\n  json: {\n    ...packet,\n    source_payload: sourcePayload,\n    source_note: sourceNote,\n    payload_b64: Buffer.from(JSON.stringify(sourcePayload), 'utf8').toString('base64'),\n    openrouter_source_note_meta: {\n      id: response.id ?? null,\n      model: response.model ?? packet.openrouter_request.model ?? null,\n      usage: response.usage ?? null,\n      finish_reason: choice?.finish_reason ?? null\n    }\n  }\n}];"
+        "jsCode": "function extractJson(text) {\n  const fence = String.fromCharCode(96, 96, 96);\n  const stripped = text.trim().replace(new RegExp('^' + fence + '(?:json)?\\\\s*', 'i'), '').replace(new RegExp(fence + '$', 'i'), '').trim();\n  try {\n    return JSON.parse(stripped);\n  } catch (error) {\n    const match = stripped.match(/\\{[\\s\\S]*\\}/);\n    if (!match) throw error;\n    return JSON.parse(match[0]);\n  }\n}\nfunction assertRecord(value, label) {\n  if (!value || typeof value !== 'object' || Array.isArray(value)) {\n    throw new Error(label + ' must be an object');\n  }\n}\nfunction stringField(record, field) {\n  const value = record[field];\n  if (typeof value !== 'string' || !value.trim()) {\n    throw new Error('LLM source note must include non-empty ' + field);\n  }\n  return value.trim();\n}\nfunction stringArrayField(record, field, required) {\n  const value = record[field];\n  if (value === undefined && !required) {\n    return [];\n  }\n  if (!Array.isArray(value)) {\n    throw new Error('LLM source note must include ' + field + '[]');\n  }\n  if (value.some((item) => typeof item !== 'string')) {\n    throw new Error('LLM source note ' + field + '[] must contain only strings');\n  }\n  return value\n    .map((item) => item.trim())\n    .filter(Boolean);\n}\nconst raw = $input.first().json;\nconst response = raw.body ?? raw;\nconst choice = Array.isArray(response.choices) ? response.choices[0] : undefined;\nconst content = choice?.message?.content ?? choice?.text;\nconst text = Array.isArray(content)\n  ? content.map((part) => typeof part === 'string' ? part : part?.text ?? '').join('').trim()\n  : typeof content === 'string'\n    ? content.trim()\n    : '';\nif (!text) {\n  throw new Error('OpenRouter source note response did not include JSON content');\n}\nconst proposedSourceNote = extractJson(text);\nassertRecord(proposedSourceNote, 'LLM source note');\nconst packet = $node['Build OpenRouter Source Note Request'].json;\nconst sourceNote = {\n  summary: stringField(proposedSourceNote, 'summary'),\n  raw_context: stringField(proposedSourceNote, 'raw_context'),\n  extracted_claims: stringArrayField(proposedSourceNote, 'extracted_claims', true),\n  open_questions: stringArrayField(proposedSourceNote, 'open_questions', false),\n  generated_by: 'openrouter',\n  model: response.model ?? packet.openrouter_request.model ?? undefined\n};\nconst sourcePayload = {\n  ...packet.source_payload,\n  content: '',\n  source_note: sourceNote\n};\nreturn [{\n  json: {\n    ...packet,\n    source_payload: sourcePayload,\n    source_note: sourceNote,\n    payload_b64: Buffer.from(JSON.stringify(sourcePayload), 'utf8').toString('base64'),\n    openrouter_source_note_meta: {\n      id: response.id ?? null,\n      model: response.model ?? packet.openrouter_request.model ?? null,\n      usage: response.usage ?? null,\n      finish_reason: choice?.finish_reason ?? null\n    }\n  }\n}];"
       },
       "id": "c0bef524-d050-47f7-a9b0-33387b2f6229",
       "name": "Parse LLM Source Note",
@@ -1191,7 +1191,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const fallback = $node['Build Telegram Ingest Log'].json;\nconst telegramResponse = $json.ok !== undefined ? $json : null;\nreturn [{\n  json: {\n    ...fallback,\n    telegram_ingest_log_sent: Boolean(telegramResponse?.ok),\n    telegram_ingest_log_result: telegramResponse\n  }\n}];"
+        "jsCode": "const fallback = $node['Build Telegram Ingest Log'].json;\nconst telegramResponse = $json.ok !== undefined ? $json : null;\nconst updateId = Number(fallback.telegram_update_id);\nif (fallback.telegram_polled && Number.isSafeInteger(updateId)) {\n  const staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\n  staticData.telegram_last_update_id = updateId;\n}\nreturn [{\n  json: {\n    ...fallback,\n    telegram_ingest_log_sent: Boolean(telegramResponse?.ok),\n    telegram_ingest_log_result: telegramResponse\n  }\n}];"
       },
       "id": "b38fe626-df5f-47d6-a1ad-b50707f49dc8",
       "name": "Finalize Ingest Response",
@@ -1201,6 +1201,83 @@
         10680,
         -440
       ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node /app/dist/tools/bot-lock.js acquire --vault /data/vault --name telegram-bot --owner \" + JSON.stringify(\"telegram-update-\" + $json.body.update_id) + \" --compact\" }}",
+        "executeOnce": true
+      },
+      "id": "4c8d7b13-5452-4a4f-b296-1d17d04f5b20",
+      "name": "Acquire Bot Lock",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        320,
+        120
+      ],
+      "notesInFlow": true,
+      "notes": "Uses bot-lock.ts to acquire an atomic filesystem lock under state/locks. If another task is running, the update is left unprocessed for a later poll."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('bot-lock acquire returned empty stdout');\n}\nconst lock = JSON.parse(stdout);\nif (!lock.acquired) {\n  return [];\n}\nconst update = $node['Prepare Telegram Updates'].json;\nreturn [{\n  json: {\n    ...update,\n    telegram_lock_acquired: true,\n    telegram_lock_id: lock.lock_id,\n    telegram_lock: lock\n  }\n}];"
+      },
+      "id": "1afc5df7-84f3-4b92-a5ea-c015606b0d47",
+      "name": "Parse Bot Lock Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id || \"\") + \" --compact\" }}",
+        "executeOnce": true
+      },
+      "id": "eb419d15-c43b-479f-851e-d9220272070d",
+      "name": "Release Bot Lock After Answer",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        6760,
+        300
+      ],
+      "notesInFlow": true,
+      "notes": "Releases the filesystem bot lock after the workflow has marked the Telegram update as processed."
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id || \"\") + \" --compact\" }}",
+        "executeOnce": true
+      },
+      "id": "cf84f653-36e0-4a85-9150-44f53c0cc485",
+      "name": "Release Bot Lock After Ingest Failure",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2840,
+        -40
+      ],
+      "notesInFlow": true,
+      "notes": "Releases the filesystem bot lock after the workflow has marked the Telegram update as processed."
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id || \"\") + \" --compact\" }}",
+        "executeOnce": true
+      },
+      "id": "c88c8131-3d01-4023-8275-0e936d757cca",
+      "name": "Release Bot Lock After Ingest",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        10960,
+        -440
+      ],
+      "notesInFlow": true,
+      "notes": "Releases the filesystem bot lock after the workflow has marked the Telegram update as processed."
     }
   ],
   "connections": {
@@ -1502,7 +1579,7 @@
       "main": [
         [
           {
-            "node": "Is Telegram Ingest Command?",
+            "node": "Acquire Bot Lock",
             "type": "main",
             "index": 0
           }
@@ -1985,6 +2062,61 @@
         [
           {
             "node": "Finalize Ingest Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acquire Bot Lock": {
+      "main": [
+        [
+          {
+            "node": "Parse Bot Lock Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Bot Lock Result": {
+      "main": [
+        [
+          {
+            "node": "Is Telegram Ingest Command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Answer Response": {
+      "main": [
+        [
+          {
+            "node": "Release Bot Lock After Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Telegram Ingest Failure Log": {
+      "main": [
+        [
+          {
+            "node": "Release Bot Lock After Ingest Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Ingest Response": {
+      "main": [
+        [
+          {
+            "node": "Release Bot Lock After Ingest",
             "type": "main",
             "index": 0
           }

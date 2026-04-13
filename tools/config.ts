@@ -9,6 +9,7 @@ export const SYSTEM_CONFIG = {
     dbPath: "state/kb.db",
     rootIndexPath: "INDEX.md",
     runtimeDir: "state/runtime",
+    lockDir: "state/locks",
     idempotencyLedgerPath: "state/runtime/idempotency-keys.json",
     feedbackDir: "state/feedback",
     maintenanceDir: "state/maintenance",

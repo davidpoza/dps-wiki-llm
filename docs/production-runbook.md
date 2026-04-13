@@ -58,6 +58,7 @@ OPENROUTER_ANSWER_TEMPERATURE=0.2
 N8N_BLOCK_ENV_ACCESS_IN_NODE=false
 TELEGRAM_BOT_TOKEN=<secret>
 TELEGRAM_CHAT_ID=<allowed chat id>
+TELEGRAM_BOT_LOCK_TTL_MS=<optional stale-lock timeout; defaults to 1800000>
 ```
 
 `OPENROUTER_MODEL` is optional so the model can be changed outside the workflow. If it is not set, OpenRouter account defaults apply.
@@ -127,6 +128,7 @@ Run `KB - Telegram Bot Polling` manually with a question payload or activate it 
 The workflow:
 
 - accepts manual input or one Telegram `getUpdates` item
+- acquires an atomic filesystem lock under `state/locks/` before processing a polled Telegram update, preventing overlapping schedule cycles from running multiple bot tasks concurrently
 - routes `/ask`, `/answer`, `/query`, and free text to the answer path
 - runs `search.ts`, `answer-context.ts`, `answer-record.ts`, and feedback validation for answers
 - routes `/ingest <youtube-url>` to `youtube-transcript.ts`
@@ -134,6 +136,7 @@ The workflow:
 - sends Telegram logs for answer output, completed ingest, and handled ingest failures such as videos without subtitles
 
 The answer path does not update `wiki/`. The `/ingest` path mutates `raw/**` first, then runs the controlled ingest pipeline that updates `wiki/**`, reindexes, and commits.
+If an execution crashes before releasing the bot lock, the next poll will resume after `TELEGRAM_BOT_LOCK_TTL_MS` expires. The default is 30 minutes.
 
 ## Feedback Application
 

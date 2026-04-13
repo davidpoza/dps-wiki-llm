@@ -115,6 +115,80 @@ test("init-db, reindex, and search work together", async () => {
   assert.ok(spanishSearch.json.results.some((item) => item.path === "wiki/sources/productivity-guide.md"));
 });
 
+test("bot-lock serializes bot tasks with a vault filesystem lock", async () => {
+  const vault = await tempDir("dps-wiki-llm-lock-vault-");
+
+  const first = await runTool("bot-lock", [
+    "acquire",
+    "--vault",
+    vault,
+    "--name",
+    "telegram-test",
+    "--owner",
+    "test-run-1",
+    "--ttl-ms",
+    "60000"
+  ]);
+  assert.equal(first.json.status, "acquired");
+  assert.equal(first.json.acquired, true);
+  assert.match(first.json.lock_id, /^telegram-test-/);
+  assert.equal(first.json.lock_path, "state/locks/telegram-test.lock");
+
+  const second = await runTool("bot-lock", [
+    "acquire",
+    "--vault",
+    vault,
+    "--name",
+    "telegram-test",
+    "--owner",
+    "test-run-2",
+    "--ttl-ms",
+    "60000"
+  ]);
+  assert.equal(second.json.status, "locked");
+  assert.equal(second.json.acquired, false);
+  assert.equal(second.json.lock_id, first.json.lock_id);
+
+  const wrongRelease = await runTool("bot-lock", [
+    "release",
+    "--vault",
+    vault,
+    "--name",
+    "telegram-test",
+    "--lock-id",
+    "wrong-lock-id"
+  ]);
+  assert.equal(wrongRelease.json.status, "not_owner");
+  assert.equal(wrongRelease.json.released, false);
+
+  const release = await runTool("bot-lock", [
+    "release",
+    "--vault",
+    vault,
+    "--name",
+    "telegram-test",
+    "--lock-id",
+    first.json.lock_id
+  ]);
+  assert.equal(release.json.status, "released");
+  assert.equal(release.json.released, true);
+
+  const reacquired = await runTool("bot-lock", [
+    "acquire",
+    "--vault",
+    vault,
+    "--name",
+    "telegram-test",
+    "--owner",
+    "test-run-3",
+    "--ttl-ms",
+    "60000"
+  ]);
+  assert.equal(reacquired.json.status, "acquired");
+  assert.equal(reacquired.json.acquired, true);
+  assert.notEqual(reacquired.json.lock_id, first.json.lock_id);
+});
+
 test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails", async () => {
   const workflow = JSON.parse(await fs.readFile(repoPath("n8n/workflows/kb-ingest-raw-blueprint.json"), "utf8"));
   const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
@@ -130,6 +204,7 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   assert.match(nodes.get("Build OpenRouter Source Note Request").parameters.jsCode, /Do not invent facts/);
   assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /LLM source note must include non-empty/);
   assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /payload_b64/);
+  assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /content: ''/);
   assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Never write directly under wiki/);
   assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /wiki\/topics\/productivity\.md/);
   assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /allowed_page_path_prefixes/);
@@ -238,26 +313,47 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
   assert.ok(nodes.has("Should Poll Telegram?"));
   assert.ok(nodes.has("Call Telegram getUpdates"));
   assert.ok(nodes.has("Prepare Telegram Updates"));
+  assert.ok(nodes.has("Acquire Bot Lock"));
+  assert.ok(nodes.has("Parse Bot Lock Result"));
   assert.ok(nodes.has("Is Telegram Ingest Command?"));
   assert.ok(nodes.has("Prepare YouTube Ingest Request"));
   assert.ok(nodes.has("Run youtube-transcript.ts"));
   assert.ok(nodes.has("Parse YouTube Transcript Result"));
   assert.ok(nodes.has("Should Ingest YouTube Transcript?"));
+  assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /content: ''/);
   assert.ok(nodes.has("Build Telegram Ingest Failure Log"));
   assert.ok(nodes.has("Build Telegram Answer Log"));
   assert.ok(nodes.has("Should Send Telegram Answer Log?"));
   assert.ok(nodes.has("Send Telegram Answer Log"));
   assert.ok(nodes.has("Finalize Answer Response"));
+  assert.ok(nodes.has("Release Bot Lock After Answer"));
+  assert.ok(nodes.has("Release Bot Lock After Ingest Failure"));
+  assert.ok(nodes.has("Release Bot Lock After Ingest"));
   assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /getWorkflowStaticData/);
   assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
   assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /offset = -1/);
   assert.match(nodes.get("Prepare Telegram Updates").parameters.jsCode, /telegram_last_update_id/);
   assert.match(nodes.get("Prepare Telegram Updates").parameters.jsCode, /ingest/);
+  assert.doesNotMatch(nodes.get("Prepare Telegram Updates").parameters.jsCode, /telegram_bot_lock/);
+  assert.match(nodes.get("Acquire Bot Lock").parameters.command, /bot-lock\.js acquire/);
+  assert.match(nodes.get("Acquire Bot Lock").parameters.command, /telegram-update-/);
+  assert.match(nodes.get("Parse Bot Lock Result").parameters.jsCode, /telegram_lock_id/);
+  assert.match(nodes.get("Release Bot Lock After Answer").parameters.command, /bot-lock\.js release/);
+  assert.match(nodes.get("Release Bot Lock After Ingest Failure").parameters.command, /bot-lock\.js release/);
+  assert.match(nodes.get("Release Bot Lock After Ingest").parameters.command, /bot-lock\.js release/);
+  assert.doesNotMatch(nodes.get("Finalize Answer Response").parameters.jsCode, /delete staticData\.telegram_bot_lock/);
+  assert.doesNotMatch(nodes.get("Finalize Telegram Ingest Failure Log").parameters.jsCode, /delete staticData\.telegram_bot_lock/);
+  assert.doesNotMatch(nodes.get("Finalize Ingest Response").parameters.jsCode, /delete staticData\.telegram_bot_lock/);
   assert.match(nodes.get("Run youtube-transcript.ts").parameters.command, /youtube-transcript/);
   assert.match(nodes.get("Run youtube-transcript.ts").notes, /yt-dlp/);
   assert.match(nodes.get("Prepare Query").parameters.jsCode, /telegram_chat_id/);
   assert.match(nodes.get("Prepare Query").parameters.jsCode, /Unauthorized Telegram chat id/);
+  assert.match(nodes.get("Prepare Query").parameters.jsCode, /telegram_lock_id/);
   assert.match(nodes.get("Build Answer Response").parameters.jsCode, /telegram_update_id/);
+  assert.match(nodes.get("Build Answer Response").parameters.jsCode, /telegram_lock_id/);
+  assert.match(nodes.get("Prepare YouTube Ingest Request").parameters.jsCode, /telegram_lock_id/);
+  assert.match(nodes.get("Normalize Raw Event").parameters.jsCode, /telegram_lock_id/);
+  assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /telegram_lock_id/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /telegram_skip_reason/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /KB answer completed/);
@@ -273,7 +369,9 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
             text: "/ask What does MCP connect?"
           }
         },
-        telegram_polled: true
+        telegram_polled: true,
+        telegram_lock_acquired: true,
+        telegram_lock_id: "lock-123"
       }
     })
   };
@@ -285,6 +383,8 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
   assert.equal(prepared.telegram_message_id, 456);
   assert.equal(prepared.telegram_polled, true);
   assert.equal(prepared.telegram_update_id, 123);
+  assert.equal(prepared.telegram_lock_acquired, true);
+  assert.equal(prepared.telegram_lock_id, "lock-123");
 
   const staticData = {};
   const polled = new Function(
@@ -316,9 +416,44 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
   assert.equal(polled.body.update_id, 123);
   assert.equal(polled.telegram_polled, true);
   assert.equal(polled.telegram_command, "ask");
-  assert.equal(staticData.telegram_last_update_id, 123);
+  assert.equal(polled.telegram_lock_acquired, undefined);
+  assert.equal(staticData.telegram_last_update_id, undefined);
 
-  const ingestCommand = new Function(
+  const lockId = "telegram-bot-lock-123";
+  const locked = new Function("$input", "$node", nodes.get("Parse Bot Lock Result").parameters.jsCode)(
+    {
+      first: () => ({
+        json: {
+          stdout: JSON.stringify({
+            status: "locked",
+            acquired: false,
+            lock_id: "existing-lock"
+          })
+        }
+      })
+    },
+    { "Prepare Telegram Updates": { json: polled } }
+  );
+  assert.deepEqual(locked, []);
+
+  const lockedPolled = new Function("$input", "$node", nodes.get("Parse Bot Lock Result").parameters.jsCode)(
+    {
+      first: () => ({
+        json: {
+          stdout: JSON.stringify({
+            status: "acquired",
+            acquired: true,
+            lock_id: lockId
+          })
+        }
+      })
+    },
+    { "Prepare Telegram Updates": { json: polled } }
+  )[0].json;
+  assert.equal(lockedPolled.telegram_lock_acquired, true);
+  assert.equal(lockedPolled.telegram_lock_id, lockId);
+
+  const nextPoll = new Function(
     "$input",
     "$env",
     "$getWorkflowStaticData",
@@ -344,21 +479,84 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
     { TELEGRAM_CHAT_ID: "789" },
     () => staticData
   )[0].json;
+  assert.equal(nextPoll.telegram_command, "ingest");
+  assert.equal(staticData.telegram_last_update_id, undefined);
+
+  new Function("$json", "$node", "$getWorkflowStaticData", nodes.get("Finalize Answer Response").parameters.jsCode)(
+    {},
+    {
+      "Build Telegram Answer Log": {
+        json: {
+          telegram_polled: true,
+          telegram_update_id: 123,
+          telegram_lock_acquired: true,
+          telegram_lock_id: lockId
+        }
+      }
+    },
+    () => staticData
+  );
+  assert.equal(staticData.telegram_last_update_id, 123);
+
+  const ingestPoll = new Function(
+    "$input",
+    "$env",
+    "$getWorkflowStaticData",
+    nodes.get("Prepare Telegram Updates").parameters.jsCode
+  )(
+    {
+      first: () => ({
+        json: {
+          ok: true,
+          result: [
+            {
+              update_id: 124,
+              message: {
+                message_id: 457,
+                chat: { id: 789 },
+                text: "/ingest https://youtu.be/dQw4w9WgXcQ"
+              }
+            }
+          ]
+        }
+      })
+    },
+    { TELEGRAM_CHAT_ID: "789" },
+    () => staticData
+  )[0].json;
+  const ingestCommand = new Function("$input", "$node", nodes.get("Parse Bot Lock Result").parameters.jsCode)(
+    {
+      first: () => ({
+        json: {
+          stdout: JSON.stringify({
+            status: "acquired",
+            acquired: true,
+            lock_id: "telegram-bot-lock-124"
+          })
+        }
+      })
+    },
+    { "Prepare Telegram Updates": { json: ingestPoll } }
+  )[0].json;
   assert.equal(ingestCommand.telegram_command, "ingest");
-  assert.equal(staticData.telegram_last_update_id, 124);
+  assert.equal(staticData.telegram_last_update_id, 123);
 
   const ingestRequest = new Function("$input", nodes.get("Prepare YouTube Ingest Request").parameters.jsCode)({
     first: () => ({ json: ingestCommand })
   })[0].json;
   assert.equal(ingestRequest.youtube_ingest_status, "pending");
   assert.equal(ingestRequest.youtube_ingest_url, "https://youtu.be/dQw4w9WgXcQ");
+  assert.equal(ingestRequest.telegram_lock_acquired, true);
+  assert.equal(ingestRequest.telegram_lock_id, ingestCommand.telegram_lock_id);
   assert.ok(ingestRequest.youtube_payload_b64);
 
   assert.equal(workflow.connections["Schedule Trigger"].main[0][0].node, "Build Telegram Poll Request");
   assert.equal(workflow.connections["Build Telegram Poll Request"].main[0][0].node, "Should Poll Telegram?");
   assert.equal(workflow.connections["Should Poll Telegram?"].main[0][0].node, "Call Telegram getUpdates");
   assert.equal(workflow.connections["Call Telegram getUpdates"].main[0][0].node, "Prepare Telegram Updates");
-  assert.equal(workflow.connections["Prepare Telegram Updates"].main[0][0].node, "Is Telegram Ingest Command?");
+  assert.equal(workflow.connections["Prepare Telegram Updates"].main[0][0].node, "Acquire Bot Lock");
+  assert.equal(workflow.connections["Acquire Bot Lock"].main[0][0].node, "Parse Bot Lock Result");
+  assert.equal(workflow.connections["Parse Bot Lock Result"].main[0][0].node, "Is Telegram Ingest Command?");
   assert.equal(workflow.connections["Is Telegram Ingest Command?"].main[0][0].node, "Prepare YouTube Ingest Request");
   assert.equal(workflow.connections["Is Telegram Ingest Command?"].main[1][0].node, "Prepare Query");
   assert.equal(workflow.connections["Should Ingest YouTube Transcript?"].main[0][0].node, "Normalize Raw Event");
@@ -368,6 +566,12 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
   assert.equal(workflow.connections["Should Send Telegram Answer Log?"].main[0][0].node, "Send Telegram Answer Log");
   assert.equal(workflow.connections["Should Send Telegram Answer Log?"].main[1][0].node, "Finalize Answer Response");
   assert.equal(workflow.connections["Send Telegram Answer Log"].main[0][0].node, "Finalize Answer Response");
+  assert.equal(workflow.connections["Finalize Answer Response"].main[0][0].node, "Release Bot Lock After Answer");
+  assert.equal(
+    workflow.connections["Finalize Telegram Ingest Failure Log"].main[0][0].node,
+    "Release Bot Lock After Ingest Failure"
+  );
+  assert.equal(workflow.connections["Finalize Ingest Response"].main[0][0].node, "Release Bot Lock After Ingest");
 });
 
 test("ingest-source and plan-source-note produce canonical ingestion contracts", async () => {
