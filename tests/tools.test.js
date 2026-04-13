@@ -817,6 +817,118 @@ test("ingest-run applies the baseline ingest pipeline and skips empty LLM mutati
   }
 });
 
+test("ingest-run extracts Telegram /ingest YouTube URLs before source normalization", async () => {
+  const vault = await tempDir("dps-wiki-llm-telegram-ingest-run-vault-");
+  const fakeYtDlpArgs = fakeYtDlpBinaryArgs();
+  await runCommand("git", ["init"], { cwd: vault });
+  await runCommand("git", ["config", "user.name", "Test User"], { cwd: vault });
+  await runCommand("git", ["config", "user.email", "test@example.com"], { cwd: vault });
+  await writeFile(path.join(vault, "INDEX.md"), "# Index\n\n## Entries\n");
+
+  const mock = await startMockOpenRouter([
+    {
+      body: {
+        id: "chat-source-note",
+        model: "mock/model",
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                summary: "A source about a YouTube transcript.",
+                raw_context: "The transcript says Telegram ingest should preserve the YouTube source.",
+                extracted_claims: ["Telegram ingest should preserve the YouTube source."],
+                open_questions: []
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { total_tokens: 10 }
+      }
+    },
+    {
+      body: {
+        id: "chat-ingest-plan",
+        model: "mock/model",
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                plan_id: "plan-telegram-youtube-noop",
+                operation: "ingest",
+                summary: "No reusable changes beyond the source note.",
+                source_refs: ["raw/web/telegram-youtube.md"],
+                page_actions: [],
+                index_updates: [],
+                post_actions: { reindex: true, commit: true }
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { total_tokens: 9 }
+      }
+    }
+  ]);
+
+  try {
+    const inputPath = path.join(vault, "telegram-ingest-run-input.json");
+    await writeJson(inputPath, {
+      update_id: 123,
+      message: {
+        message_id: 456,
+        chat: { id: 789 },
+        text: "/ingest https://www.youtube.com/watch?v=XfpMkf4rD6E"
+      },
+      captured_at: "2026-04-13T12:00:00Z",
+      telegram_polled: true,
+      telegram_command: "ingest",
+      telegram_lock_acquired: true,
+      telegram_lock_id: "telegram-bot-lock-123"
+    });
+
+    const result = await runTool("ingest-run", ["--vault", vault, "--input", inputPath], {
+      env: {
+        OPENROUTER_API_KEY: "test-key",
+        LLM_API_KEY_HEADER: "x-api-key",
+        OPENROUTER_BASE_URL: mock.baseUrl,
+        OPENROUTER_MODEL: "mock/model",
+        TELEGRAM_BOT_TOKEN: "",
+        TELEGRAM_CHAT_ID: "789",
+        YTDLP_BINARY: process.execPath,
+        YTDLP_BINARY_ARGS: JSON.stringify(fakeYtDlpArgs),
+        FAKE_YTDLP_INFO_JSON: JSON.stringify({
+          id: "XfpMkf4rD6E",
+          title: "Telegram YouTube Ingest",
+          webpage_url: "https://www.youtube.com/watch?v=XfpMkf4rD6E",
+          subtitles: {
+            en: [{ ext: "vtt", name: "English" }]
+          },
+          automatic_captions: {}
+        }),
+        FAKE_YTDLP_SUBTITLE: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nTelegram ingest transcript line.\n"
+      }
+    });
+
+    assert.equal(result.json.status, "baseline_ingest_applied_no_llm_changes");
+    assert.equal(result.json.youtube_ingest_url, "https://www.youtube.com/watch?v=XfpMkf4rD6E");
+    assert.equal(result.json.telegram_chat_id, "789");
+    assert.equal(result.json.telegram_message_id, 456);
+    assert.equal(result.json.telegram_update_id, 123);
+    assert.equal(result.json.telegram_polled, true);
+    assert.equal(result.json.telegram_lock_id, "telegram-bot-lock-123");
+    assert.equal(result.json.youtube_transcript_result.status, "created");
+    assert.match(result.json.source_payload.raw_path, /^raw\/web\/2026-04-13-youtube-telegram-youtube-ingest-/);
+    assert.doesNotMatch(result.json.source_payload.raw_path, /raw\/inbox\/example\.md/);
+
+    const raw = await readFile(path.join(vault, result.json.source_payload.raw_path));
+    assert.match(raw, /Telegram ingest transcript line\./);
+    assert.equal(mock.requests.length, 2);
+  } finally {
+    await mock.close();
+  }
+});
+
 test("new JSON-driven entrypoints reject unsafe paths", async () => {
   const vault = await createVault();
   const ingestInputPath = path.join(vault, "unsafe-ingest.json");

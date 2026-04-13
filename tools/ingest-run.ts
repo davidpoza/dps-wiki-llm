@@ -53,6 +53,7 @@ type IngestRunOutput = {
   telegram_chat_id: unknown;
   telegram_message_id: unknown;
   telegram_update_id: unknown;
+  telegram_polled: boolean;
   telegram_command: unknown;
   telegram_lock_acquired: boolean;
   telegram_lock_id: unknown;
@@ -75,27 +76,60 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function telegramMessageFromBody(body: Record<string, unknown>): Record<string, unknown> | null {
+  return isRecord(body.message) ? body.message : isRecord(body.edited_message) ? body.edited_message : null;
+}
+
+function telegramCommandFromText(text: string): string | undefined {
+  const match = text.match(/^\/(\w+)(?:@\w+)?(?:\s|$)/);
+  return match ? match[1].toLowerCase() : undefined;
+}
+
+function telegramIngestUrlFromText(text: string): string | undefined {
+  const match = text.match(/^\/ingest(?:@\w+)?(?:\s+(.+))?$/i);
+  const rest = match?.[1]?.trim();
+  return rest ? rest.split(/\s+/)[0] : undefined;
+}
+
 function normalizeRawEvent(input: IngestRunInput): IngestRunInput {
   const body = isRecord(input.body) ? input.body : input;
+  const telegramMessage = telegramMessageFromBody(body);
+  const telegramChat = isRecord(telegramMessage?.chat) ? telegramMessage.chat : null;
+  const telegramChatId = telegramChat?.id !== undefined ? String(telegramChat.id) : null;
+  const telegramText = typeof telegramMessage?.text === "string" ? telegramMessage.text.trim() : "";
+  const allowedTelegramChatId = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+
+  if (telegramChatId && allowedTelegramChatId && telegramChatId !== allowedTelegramChatId) {
+    throw new Error(`Unauthorized Telegram chat id: ${telegramChatId}`);
+  }
+
   const explicitRawPath =
     stringValue(body.raw_path) || stringValue(body.path) || stringValue(body.filePath) || stringValue(body.filename);
-  const youtubeUrl = stringValue(body.youtube_ingest_url) || stringValue(body.youtube_url) || stringValue(body.url);
-  const detectedPath =
-    explicitRawPath ||
-    (youtubeUrl ? undefined : "raw/inbox/example.md");
+  const youtubeUrl =
+    stringValue(body.youtube_ingest_url) ||
+    stringValue(body.youtube_url) ||
+    stringValue(body.url) ||
+    telegramIngestUrlFromText(telegramText);
+  const telegramCommand =
+    stringValue(input.telegram_command) || stringValue(body.telegram_command) || telegramCommandFromText(telegramText) || null;
 
   return {
-    ...(detectedPath ? { raw_path: detectedPath } : {}),
+    ...(explicitRawPath ? { raw_path: explicitRawPath } : {}),
     trigger_source:
       stringValue(body.trigger_source) ||
-      (stringValue(body.path) || stringValue(body.filePath) || stringValue(body.filename) ? "local-file-trigger" : "manual"),
+      (stringValue(body.path) || stringValue(body.filePath) || stringValue(body.filename)
+        ? "local-file-trigger"
+        : telegramMessage
+          ? "telegram"
+          : "manual"),
     captured_at: stringValue(body.captured_at) || new Date().toISOString(),
-    telegram_chat_id: body.telegram_chat_id ?? null,
-    telegram_message_id: body.telegram_message_id ?? null,
-    telegram_update_id: body.telegram_update_id ?? null,
-    telegram_command: body.telegram_command ?? null,
-    telegram_lock_acquired: Boolean(body.telegram_lock_acquired),
-    telegram_lock_id: body.telegram_lock_id ?? null,
+    telegram_chat_id: body.telegram_chat_id ?? telegramChatId,
+    telegram_message_id: body.telegram_message_id ?? telegramMessage?.message_id ?? null,
+    telegram_update_id: body.telegram_update_id ?? body.update_id ?? null,
+    telegram_polled: Boolean(input.telegram_polled ?? body.telegram_polled),
+    telegram_command: telegramCommand,
+    telegram_lock_acquired: Boolean(input.telegram_lock_acquired ?? body.telegram_lock_acquired),
+    telegram_lock_id: input.telegram_lock_id ?? body.telegram_lock_id ?? null,
     youtube_ingest_url: youtubeUrl ?? null,
     youtube_transcript_result: body.youtube_transcript_result ?? null
   };
@@ -547,7 +581,11 @@ async function ensureRawEvent(args: ReturnType<typeof parseArgs>, rawEvent: Inge
 
   const url = stringValue(rawEvent.youtube_ingest_url);
   if (!url) {
-    return { rawEvent: { ...rawEvent, raw_path: "raw/inbox/example.md" }, handledFailure: null };
+    if (stringValue(rawEvent.telegram_command) === "ingest") {
+      throw new Error("Telegram /ingest requires a YouTube URL after the command");
+    }
+
+    throw new Error("ingest-run requires raw_path, path, filePath, filename, youtube_ingest_url, youtube_url, or url");
   }
 
   const youtubeResult = await runToolJson<Record<string, unknown>>("youtube-transcript", {
@@ -574,6 +612,7 @@ async function ensureRawEvent(args: ReturnType<typeof parseArgs>, rawEvent: Inge
         telegram_chat_id: rawEvent.telegram_chat_id ?? null,
         telegram_message_id: rawEvent.telegram_message_id ?? null,
         telegram_update_id: rawEvent.telegram_update_id ?? null,
+        telegram_polled: Boolean(rawEvent.telegram_polled),
         telegram_command: rawEvent.telegram_command ?? null,
         telegram_lock_acquired: Boolean(rawEvent.telegram_lock_acquired),
         telegram_lock_id: rawEvent.telegram_lock_id ?? null,
@@ -672,6 +711,7 @@ async function main(): Promise<void> {
     telegram_chat_id: rawEvent.telegram_chat_id ?? null,
     telegram_message_id: rawEvent.telegram_message_id ?? null,
     telegram_update_id: rawEvent.telegram_update_id ?? null,
+    telegram_polled: Boolean(rawEvent.telegram_polled),
     telegram_command: rawEvent.telegram_command ?? null,
     telegram_lock_acquired: Boolean(rawEvent.telegram_lock_acquired),
     telegram_lock_id: rawEvent.telegram_lock_id ?? null,
