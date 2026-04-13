@@ -63,15 +63,17 @@ TELEGRAM_CHAT_ID=<allowed chat id>
 TELEGRAM_BOT_LOCK_TTL_MS=<optional stale-lock timeout; defaults to 1800000>
 ```
 
-`OPENROUTER_MODEL` is optional so the model can be changed outside the workflow. If it is not set, OpenRouter account defaults apply. The checked-in workflows use `Authorization: Bearer <OPENROUTER_API_KEY>` for LLM calls. If a provider needs a different API-key header, render the workflow JSON before importing it:
+`OPENROUTER_MODEL` is optional so the model can be changed outside the workflow. If it is not set, OpenRouter account defaults apply. The compact workflows do not contain n8n OpenRouter HTTP Request nodes; `answer-run.ts` and `ingest-run.ts` call the LLM from Node.js.
+
+If a provider needs a different API-key header, set `LLM_API_KEY_HEADER` in the runtime that executes the command nodes:
 
 ```sh
-LLM_API_KEY_HEADER=x-api-key npm run render-n8n-workflows
+LLM_API_KEY_HEADER=x-api-key
 ```
 
-When `LLM_API_KEY_HEADER` is set to a non-`Authorization` header name, the renderer writes a static header with the raw `OPENROUTER_API_KEY` value expression. This avoids dynamic header-name expressions in n8n HTTP Request nodes.
+When `LLM_API_KEY_HEADER` is unset or `Authorization`, the scripts send `Authorization: Bearer <OPENROUTER_API_KEY>`. When it is set to a different header name, the scripts send the raw API key in that header.
 
-Add the same OpenRouter and Telegram variables to the `n8n` service environment. Code nodes still read values such as `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, `OPENROUTER_ANSWER_TEMPERATURE`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`. If your Code nodes run in the external `n8n-runner` service, pass the Code-node variables and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there as well. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `commit.ts` is run by an `Execute Command` node, so the main `n8n` service needs them.
+Add the same OpenRouter and Telegram variables to the service environment that runs `Execute Command`. Code nodes still read Telegram variables such as `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. If your Code nodes run in the external `n8n-runner` service, pass the Code-node variables and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there as well. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `ingest-run.ts` and `commit.ts` are run by `Execute Command` nodes, so that service needs them.
 
 For Telegram bot input, `KB - Telegram Bot Polling` polls Telegram with `getUpdates`. `TELEGRAM_CHAT_ID` is used as the allowed incoming chat id and as the default output chat for logs.
 
@@ -103,6 +105,8 @@ services:
       - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
       - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - LLM_API_KEY_HEADER=${LLM_API_KEY_HEADER}
       - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
       - OPENROUTER_MODEL=${OPENROUTER_MODEL}
       - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
@@ -138,9 +142,9 @@ The workflow:
 - accepts manual input or one Telegram `getUpdates` item
 - acquires an atomic filesystem lock under `state/locks/` before processing a polled Telegram update, preventing overlapping schedule cycles from running multiple bot tasks concurrently
 - routes `/ask`, `/answer`, `/query`, and free text to the answer path
-- runs `search.ts`, `answer-context.ts`, `answer-record.ts`, and feedback validation for answers
-- routes `/ingest <youtube-url>` to `youtube-transcript.ts`
-- writes `yt-dlp`-fetched YouTube subtitles to `raw/web/**` before running the normal ingest pipeline
+- delegates retrieval, answer synthesis, answer persistence, and feedback validation to `answer-run.ts`
+- routes `/ingest <youtube-url>` to `ingest-run.ts`
+- lets `ingest-run.ts` write `yt-dlp`-fetched YouTube subtitles to `raw/web/**` before running the normal ingest pipeline
 - sends Telegram logs for answer output, completed ingest, and handled ingest failures such as videos without subtitles
 
 The answer path does not update `wiki/`. The `/ingest` path mutates `raw/**` first, then runs the controlled ingest pipeline that updates `wiki/**`, reindexes, and commits.
@@ -184,17 +188,18 @@ Run `KB - Ingest Raw OpenRouter Manual` manually while V1 is stabilizing.
 
 The workflow:
 
-- normalizes a `raw/**` path with `ingest-source.ts`
-- calls OpenRouter to clean the source content into a structured `source_note`
-- validates that the LLM source note includes non-empty `summary` and `raw_context`
-- builds the baseline source note plan with `plan-source-note.ts`
-- applies and commits that LLM-cleaned source note baseline
-- calls OpenRouter for an optional richer Mutation Plan
-- validates the LLM plan with guardrails
-- links grounded concept/entity/topic/analysis updates back to the baseline source note through `Sources`
-- allows only a narrow backlink update to the exact baseline source note `Linked Notes` section
-- applies non-empty LLM plans with `apply-update.ts`
-- reindexes and creates a second commit for applied LLM changes
+- passes the raw event to `ingest-run.ts` from a single command node
+- `ingest-run.ts` normalizes a `raw/**` path with `ingest-source.ts`
+- `ingest-run.ts` calls OpenRouter to clean the source content into a structured `source_note`
+- `ingest-run.ts` validates that the LLM source note includes non-empty `summary` and `raw_context`
+- `ingest-run.ts` builds the baseline source note plan with `plan-source-note.ts`
+- `ingest-run.ts` applies and commits that LLM-cleaned source note baseline
+- `ingest-run.ts` calls OpenRouter for an optional richer Mutation Plan
+- `ingest-run.ts` validates the LLM plan with guardrails
+- `ingest-run.ts` links grounded concept/entity/topic/analysis updates back to the baseline source note through `Sources`
+- `ingest-run.ts` allows only a narrow backlink update to the exact baseline source note `Linked Notes` section
+- `ingest-run.ts` applies non-empty LLM plans with `apply-update.ts`
+- `ingest-run.ts` reindexes and creates a second commit for applied LLM changes
 - sends a Telegram ingest log when Telegram env is configured
 - returns `openrouter_source_note_meta`, `llm_mutation_plan`, `llm_guardrail_rejections`, `llm_plan_auto_apply_required`, `llm_mutation_result`, and `llm_commit_result`
 

@@ -8,391 +8,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        40,
+        -1080,
         360
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst telegramMessage = body.message ?? body.edited_message ?? null;\nconst telegramChatId = telegramMessage?.chat?.id !== undefined ? String(telegramMessage.chat.id) : null;\nconst telegramText = typeof telegramMessage?.text === 'string' ? telegramMessage.text.trim() : '';\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nif (telegramChatId && allowedTelegramChatId && telegramChatId !== allowedTelegramChatId) {\n  throw new Error('Unauthorized Telegram chat id: ' + telegramChatId);\n}\nfunction stripTelegramCommand(text) {\n  return text.replace(/^\\/(?:ask|answer|query)(?:@\\w+)?\\s*/i, '').trim();\n}\nconst bodyQuestion = typeof body.question === 'string' ? body.question.trim() : '';\nconst question = telegramText\n  ? stripTelegramCommand(telegramText)\n  : bodyQuestion || 'What should I know from the current wiki state?';\nif (telegramText && !question) {\n  throw new Error('Telegram message did not include a question after the command');\n}\nconst limit = Number.isFinite(Number(body.limit)) && Number(body.limit) > 0 ? Number(body.limit) : 8;\nreturn [{\n  json: {\n    question,\n    limit,\n    telegram_chat_id: telegramChatId,\n    telegram_message_id: telegramMessage?.message_id ?? null,\n    telegram_update_id: body.update_id ?? null,\n    telegram_polled: Boolean(input.telegram_polled),\n    telegram_lock_acquired: Boolean(input.telegram_lock_acquired),\n    telegram_lock_id: input.telegram_lock_id ?? null\n  }\n}];"
-      },
-      "id": "9bb85ad8-6020-4a97-9a2e-ad8f7f13cf1f",
-      "name": "Prepare Query",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        600,
-        300
-      ],
-      "notesInFlow": true,
-      "notes": "Accepts { question, limit? } or one Telegram getUpdates item. Telegram commands /ask, /answer, and /query are stripped."
-    },
-    {
-      "parameters": {
-        "command": "={{ \"node /app/dist/tools/search.js --vault /data/vault --limit \" + $json.limit + \" \" + JSON.stringify($json.question) }}",
-        "executeOnce": true
-      },
-      "id": "531c1047-7162-4cac-8177-eb1fa83139ad",
-      "name": "Run search.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        880,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('search.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
-      },
-      "id": "af188e0a-55a2-42f8-a4d5-0a1c21f8e4c5",
-      "name": "Parse Search Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1160,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const payload = {\n  question: $node[\"Prepare Query\"].json.question,\n  retrieval: $input.first().json\n};\nreturn [{\n  json: {\n    payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
-      },
-      "id": "f573919b-907d-4b4f-99c6-dbe0763bf0dd",
-      "name": "Build Context Payload",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1440,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/answer-context.js --vault /data/vault\" }}",
-        "executeOnce": true
-      },
-      "id": "3d221ee4-2cf9-4125-a2f2-c85562433903",
-      "name": "Run answer-context.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        1720,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('answer-context.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
-      },
-      "id": "629110e8-df91-4d95-a93c-cd39a3ba9029",
-      "name": "Parse Answer Context",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2000,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const packet = $input.first().json;\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst baseUrl = (env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/+$/, '');\nconst model = (env.OPENROUTER_MODEL || '').trim();\nconst temperature = Number.isFinite(Number(env.OPENROUTER_ANSWER_TEMPERATURE))\n  ? Number(env.OPENROUTER_ANSWER_TEMPERATURE)\n  : 0.2;\nconst contextDocs = Array.isArray(packet.context_docs) ? packet.context_docs : [];\nconst requestBody = {\n  ...(model ? { model } : {}),\n  stream: false,\n  temperature,\n  messages: [\n    {\n      role: 'system',\n      content: [\n        'You answer questions using only the provided markdown wiki context.',\n        'If the context is insufficient, say what is missing instead of inventing facts.',\n        'Do not mutate the wiki and do not claim to have updated files.',\n        'Return concise markdown suitable for an answer artifact.'\n      ].join(' ')\n    },\n    {\n      role: 'user',\n      content: JSON.stringify({\n        question: packet.question,\n        evidence_used: packet.answer_record?.evidence_used ?? [],\n        context_docs: contextDocs.map((doc) => ({\n          path: doc.path,\n          title: doc.title,\n          doc_type: doc.doc_type,\n          body: doc.body\n        }))\n      }, null, 2)\n    }\n  ]\n};\nreturn [{\n  json: {\n    ...packet,\n    openrouter_url: baseUrl + '/chat/completions',\n    openrouter_request: requestBody\n  }\n}];"
-      },
-      "id": "a2f6c7db-ef1b-4e08-aea8-f3d0f88211a1",
-      "name": "Build OpenRouter Answer Request",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2280,
-        300
-      ],
-      "notesInFlow": true,
-      "notes": "Builds an OpenAI-compatible chat completion request. Set OPENROUTER_API_KEY in n8n; render workflows before import when the provider needs a non-Authorization API-key header."
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $json.openrouter_url }}",
-        "authentication": "none",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "HTTP-Referer",
-              "value": "={{ $env.OPENROUTER_SITE_URL || 'https://localhost' }}"
-            },
-            {
-              "name": "X-OpenRouter-Title",
-              "value": "dps-wiki-llm"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
-        "options": {}
-      },
-      "id": "4031b912-0a1b-4e20-b96f-dbd60e47183f",
-      "name": "Call OpenRouter Answer",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2560,
-        300
-      ],
-      "notesInFlow": true,
-      "notes": "Calls the LLM API through n8n HTTP Request with a render-time API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
-    },
-    {
-      "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nconst choice = Array.isArray(response.choices) ? response.choices[0] : undefined;\nconst content = choice?.message?.content ?? choice?.text;\nconst answer = Array.isArray(content)\n  ? content.map((part) => typeof part === 'string' ? part : part?.text ?? '').join('').trim()\n  : typeof content === 'string'\n    ? content.trim()\n    : '';\nif (!answer) {\n  throw new Error('OpenRouter answer response did not include choices[0].message.content');\n}\nconst packet = $node['Build OpenRouter Answer Request'].json;\nreturn [{\n  json: {\n    ...packet,\n    answer,\n    openrouter_answer_meta: {\n      id: response.id ?? null,\n      model: response.model ?? null,\n      usage: response.usage ?? null,\n      finish_reason: choice?.finish_reason ?? null\n    }\n  }\n}];"
-      },
-      "id": "fa80dd97-7355-4cc3-9007-c240d5dcbec8",
-      "name": "Parse OpenRouter Answer",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2840,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const payload = {\n  answer_record: $json.answer_record,\n  answer: $json.answer\n};\nreturn [{\n  json: {\n    ...$json,\n    answer_record_payload: payload,\n    answer_record_payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
-      },
-      "id": "be2ba4b0-5bbf-4d5e-92d6-09c21ce4d38d",
-      "name": "Build Answer Record Payload",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3120,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.answer_record_payload_b64) + \" | node /app/dist/tools/answer-record.js --vault /data/vault\" }}",
-        "executeOnce": true
-      },
-      "id": "3599503b-c7c4-46d7-8536-bbb3475f08e9",
-      "name": "Run answer-record.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        3400,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('answer-record.ts returned empty stdout');\n}\nconst parsed = JSON.parse(stdout);\nreturn [{\n  json: {\n    ...$node['Build Answer Record Payload'].json,\n    answer_record_result: parsed,\n    answer_record: parsed.record\n  }\n}];"
-      },
-      "id": "a0a042e6-f9bd-49f4-a96e-b879667d5eb9",
-      "name": "Parse Answer Record",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3680,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const packet = $json;\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst baseUrl = (env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/+$/, '');\nconst model = (env.OPENROUTER_MODEL || '').trim();\nconst contextDocs = Array.isArray(packet.context_docs) ? packet.context_docs : [];\nconst requestBody = {\n  ...(model ? { model } : {}),\n  stream: false,\n  temperature: 0,\n  messages: [\n    {\n      role: 'system',\n      content: [\n        'You produce only valid JSON matching the Feedback Record contract.',\n        'Valid decision values are none, output_only, and propagate.',\n        'Use propagate only for small reusable wiki changes grounded in the evidence_used paths.',\n        'Every candidate item must include item_id, target_note, change_type, novelty, source_support, proposed_content, and outcome.',\n        'Use outcome applied only for changes you recommend a human approve; otherwise use deferred or rejected.',\n        'Do not copy the whole answer into the wiki.'\n      ].join(' ')\n    },\n    {\n      role: 'user',\n      content: JSON.stringify({\n        output_id: packet.answer_record.output_id,\n        answer_record: packet.answer_record,\n        answer: packet.answer,\n        source_refs: packet.answer_record.evidence_used ?? [],\n        context_docs: contextDocs.map((doc) => ({\n          path: doc.path,\n          title: doc.title,\n          doc_type: doc.doc_type,\n          body: doc.body\n        })),\n        required_json_shape: {\n          output_id: packet.answer_record.output_id,\n          decision: 'none|output_only|propagate',\n          reason: 'short reason',\n          source_refs: packet.answer_record.evidence_used ?? [],\n          candidate_items: [],\n          affected_notes: []\n        }\n      }, null, 2)\n    }\n  ]\n};\nreturn [{\n  json: {\n    ...packet,\n    openrouter_url: baseUrl + '/chat/completions',\n    openrouter_request: requestBody\n  }\n}];"
-      },
-      "id": "d0157ec0-96ad-4083-a815-0fc3252eb053",
-      "name": "Build OpenRouter Feedback Request",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3960,
-        300
-      ],
-      "notesInFlow": true,
-      "notes": "Produces a proposed Feedback Record. The workflow validates it but does not apply wiki changes."
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $json.openrouter_url }}",
-        "authentication": "none",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "HTTP-Referer",
-              "value": "={{ $env.OPENROUTER_SITE_URL || 'https://localhost' }}"
-            },
-            {
-              "name": "X-OpenRouter-Title",
-              "value": "dps-wiki-llm"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
-        "options": {}
-      },
-      "id": "1aef9905-e1c9-4737-b8d5-53985dc98a59",
-      "name": "Call OpenRouter Feedback",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        4240,
-        300
-      ],
-      "notesInFlow": true,
-      "notes": "Calls the LLM API through n8n HTTP Request with a render-time API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
-    },
-    {
-      "parameters": {
-        "jsCode": "function extractJson(text) {\n  const stripped = text.trim().replace(/^```(?:json)?\\s*/i, '').replace(/```$/i, '').trim();\n  try {\n    return JSON.parse(stripped);\n  } catch (error) {\n    const match = stripped.match(/\\{[\\s\\S]*\\}/);\n    if (!match) throw error;\n    return JSON.parse(match[0]);\n  }\n}\nconst raw = $input.first().json;\nconst response = raw.body ?? raw;\nconst choice = Array.isArray(response.choices) ? response.choices[0] : undefined;\nconst content = choice?.message?.content ?? choice?.text;\nconst text = Array.isArray(content)\n  ? content.map((part) => typeof part === 'string' ? part : part?.text ?? '').join('').trim()\n  : typeof content === 'string'\n    ? content.trim()\n    : '';\nif (!text) {\n  throw new Error('OpenRouter feedback response did not include JSON content');\n}\nconst proposedFeedback = extractJson(text);\nif (!proposedFeedback.output_id) {\n  proposedFeedback.output_id = $node['Parse Answer Record'].json.answer_record.output_id;\n}\nif (!Array.isArray(proposedFeedback.source_refs)) {\n  proposedFeedback.source_refs = $node['Parse Answer Record'].json.answer_record.evidence_used ?? [];\n}\nif (!Array.isArray(proposedFeedback.candidate_items)) {\n  proposedFeedback.candidate_items = [];\n}\nif (!Array.isArray(proposedFeedback.affected_notes)) {\n  proposedFeedback.affected_notes = proposedFeedback.candidate_items\n    .filter((item) => item.outcome === 'applied')\n    .map((item) => item.target_note)\n    .filter(Boolean);\n}\nconst packet = $node['Build OpenRouter Feedback Request'].json;\nreturn [{\n  json: {\n    ...packet,\n    proposed_feedback: proposedFeedback,\n    proposed_feedback_payload_b64: Buffer.from(JSON.stringify(proposedFeedback), 'utf8').toString('base64'),\n    openrouter_feedback_meta: {\n      id: response.id ?? null,\n      model: response.model ?? null,\n      usage: response.usage ?? null,\n      finish_reason: choice?.finish_reason ?? null\n    }\n  }\n}];"
-      },
-      "id": "48bfc6d5-6df4-4d97-95f2-af85f745967e",
-      "name": "Parse Proposed Feedback",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        4520,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.proposed_feedback_payload_b64) + \" | node /app/dist/tools/feedback-record.js --vault /data/vault --no-write\" }}",
-        "executeOnce": true
-      },
-      "id": "e17953a6-0f44-4956-aeb3-f130dbf91218",
-      "name": "Validate feedback-record.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        4800,
-        300
-      ],
-      "notesInFlow": true,
-      "notes": "Validates the proposed Feedback Record without writing state/feedback or mutating wiki."
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('feedback-record.ts --no-write returned empty stdout');\n}\nconst validation = JSON.parse(stdout);\nreturn [{\n  json: {\n    ...$node['Parse Proposed Feedback'].json,\n    feedback_validation: validation\n  }\n}];"
-      },
-      "id": "1e3ec54d-42c9-4af0-9a75-34fca9787490",
-      "name": "Parse Feedback Validation",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        5080,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const feedback = $json.feedback_validation.record;\nreturn [{\n  json: {\n    status: 'answer_recorded_feedback_proposed',\n    question: $json.question,\n    answer: $json.answer,\n    answer_record: $json.answer_record,\n    output_path: $json.answer_record_result.output_path,\n    proposed_feedback: feedback,\n    approval_required: feedback.decision === 'propagate',\n    apply_feedback_workflow: 'KB - Apply Feedback',\n    approval_payload: {\n      approved: true,\n      feedback\n    },\n    openrouter_answer_meta: $json.openrouter_answer_meta,\n    openrouter_feedback_meta: $json.openrouter_feedback_meta,\n    telegram_chat_id: $json.telegram_chat_id ?? null,\n    telegram_message_id: $json.telegram_message_id ?? null,\n    telegram_update_id: $json.telegram_update_id ?? null,\n    telegram_polled: Boolean($json.telegram_polled),\n    telegram_command: $json.telegram_command ?? null,\n    telegram_lock_acquired: Boolean($json.telegram_lock_acquired),\n    telegram_lock_id: $json.telegram_lock_id ?? null\n  }\n}];"
-      },
-      "id": "e225f8ab-7f1e-45dd-b73f-1f34c0814f8e",
-      "name": "Build Answer Response",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        5360,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "function truncate(value, maxLength) {\n  const text = String(value ?? '');\n  return text.length > maxLength ? text.slice(0, maxLength - 3) + '...' : text;\n}\nfunction compactLines(values) {\n  return values.filter((value) => typeof value === 'string' && value.trim()).join(String.fromCharCode(10));\n}\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst chatId = String($json.telegram_chat_id ?? env.TELEGRAM_CHAT_ID ?? '').trim();\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst missingConfig = [];\nif (!token) missingConfig.push('TELEGRAM_BOT_TOKEN');\nif (!chatId) missingConfig.push('telegram_chat_id or TELEGRAM_CHAT_ID');\nconst evidence = Array.isArray($json.answer_record?.evidence_used) ? $json.answer_record.evidence_used : [];\nconst text = compactLines([\n  'KB answer completed',\n  'Question: ' + truncate($json.question, 500),\n  'Answer:',\n  truncate($json.answer, 2600),\n  $json.output_path ? 'Output: ' + $json.output_path : '',\n  evidence.length ? 'Evidence: ' + evidence.slice(0, 6).join(', ') : '',\n  'Feedback decision: ' + ($json.proposed_feedback?.decision ?? 'unknown'),\n  $json.approval_required ? 'Feedback approval required: yes' : 'Feedback approval required: no'\n]);\nreturn [{\n  json: {\n    ...$json,\n    telegram_enabled: missingConfig.length === 0,\n    telegram_skip_reason: missingConfig.length ? 'Missing Telegram runtime configuration: ' + missingConfig.join(', ') : null,\n    telegram_bot_token: token,\n    telegram_answer_message: {\n      chat_id: chatId,\n      text,\n      disable_web_page_preview: true\n    }\n  }\n}];"
-      },
-      "id": "9426129b-4f0f-43b5-b91e-b59ec27da8f5",
-      "name": "Build Telegram Answer Log",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        5640,
-        300
-      ],
-      "notesInFlow": true,
-      "notes": "Builds a Telegram answer log. It keeps the main answer response intact and only sends when Telegram env/chat id is present."
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "value1": "={{ String($json.telegram_enabled) }}",
-              "value2": "true"
-            }
-          ]
-        }
-      },
-      "id": "f5dbf588-eac5-45e9-9bb0-4f10d13a3482",
-      "name": "Should Send Telegram Answer Log?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [
-        5920,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
-        "authentication": "none",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.telegram_answer_message) }}",
-        "options": {}
-      },
-      "id": "60c6afb5-f107-4461-9288-6a600803b157",
-      "name": "Send Telegram Answer Log",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        6200,
-        180
-      ],
-      "notesInFlow": true,
-      "notes": "Sends a plain-text Telegram message through Bot API. Requires TELEGRAM_BOT_TOKEN and a chat id.",
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "jsCode": "const fallback = $node['Build Telegram Answer Log'].json;\nconst telegramResponse = $json.ok !== undefined ? $json : null;\nconst updateId = Number(fallback.telegram_update_id);\nif (fallback.telegram_polled && Number.isSafeInteger(updateId)) {\n  const staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\n  staticData.telegram_last_update_id = updateId;\n}\nreturn [{\n  json: {\n    ...fallback,\n    telegram_answer_log_sent: Boolean(telegramResponse?.ok),\n    telegram_answer_log_result: telegramResponse\n  }\n}];"
-      },
-      "id": "9839b6f2-0c6a-41cb-bd81-010eba613464",
-      "name": "Finalize Answer Response",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        6480,
-        300
       ]
     },
     {
@@ -412,25 +29,23 @@
       "typeVersion": 1.2,
       "position": [
         -1080,
-        120
+        80
       ],
       "notesInFlow": true,
       "notes": "Polls Telegram once per minute. getUpdates does not require public inbound access to n8n."
     },
     {
       "parameters": {
-        "jsCode": "const env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst lastUpdateId = Number(staticData.telegram_last_update_id);\nconst request = {\n  limit: 1,\n  timeout: 0,\n  allowed_updates: ['message', 'edited_message']\n};\nif (Number.isSafeInteger(lastUpdateId) && lastUpdateId >= 0) {\n  request.offset = lastUpdateId + 1;\n} else {\n  request.offset = -1;\n}\nreturn [{\n  json: {\n    telegram_poll_enabled: Boolean(token),\n    telegram_skip_reason: token ? null : 'Missing Telegram runtime configuration: TELEGRAM_BOT_TOKEN',\n    telegram_bot_token: token,\n    telegram_poll_request: request,\n    telegram_first_poll_drops_backlog: request.offset === -1\n  }\n}];"
+        "jsCode": "const env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst lastUpdateId = Number(staticData.telegram_last_update_id);\nconst request = { limit: 1, timeout: 0, allowed_updates: ['message', 'edited_message'] };\nif (Number.isSafeInteger(lastUpdateId) && lastUpdateId >= 0) {\n  request.offset = lastUpdateId + 1;\n} else {\n  request.offset = -1;\n}\nreturn [{ json: { telegram_poll_enabled: Boolean(token), telegram_skip_reason: token ? null : 'Missing Telegram runtime configuration: TELEGRAM_BOT_TOKEN', telegram_bot_token: token, telegram_poll_request: request, telegram_first_poll_drops_backlog: request.offset === -1 } }];"
       },
-      "id": "bcb12b11-a2e0-4578-9d65-a22bfe67d9d0",
+      "id": "telegram-build-poll",
       "name": "Build Telegram Poll Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -800,
-        120
-      ],
-      "notesInFlow": true,
-      "notes": "Builds a Telegram Bot API getUpdates request using workflow static data as the offset store."
+        -780,
+        80
+      ]
     },
     {
       "parameters": {
@@ -443,16 +58,14 @@
           ]
         }
       },
-      "id": "974601cf-c807-4063-a0f3-df59b753c0a8",
+      "id": "telegram-should-poll",
       "name": "Should Poll Telegram?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        -520,
-        120
-      ],
-      "notesInFlow": true,
-      "notes": "Skips polling when the Telegram bot token is not available to the Code node runtime."
+        -500,
+        80
+      ]
     },
     {
       "parameters": {
@@ -478,26 +91,51 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -240,
-        120
+        -220,
+        80
       ],
       "notesInFlow": true,
       "notes": "Uses outbound polling, so n8n does not need to be reachable from the public internet. Delete any Telegram webhook for this bot first."
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nif (response.ok === false) {\n  throw new Error('Telegram getUpdates failed: ' + (response.description ?? 'unknown error'));\n}\nconst updates = Array.isArray(response.result) ? response.result : [];\nif (!updates.length) {\n  return [];\n}\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst update = updates[0];\nconst message = update.message ?? update.edited_message ?? null;\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : '';\nconst text = typeof message?.text === 'string' ? message.text.trim() : '';\nfunction markProcessed() {\n  if (Number.isSafeInteger(Number(update.update_id))) {\n    staticData.telegram_last_update_id = Number(update.update_id);\n  }\n}\nfunction telegramCommand(value) {\n  const match = value.match(/^\\/(\\w+)(?:@\\w+)?(?:\\s|$)/);\n  return match ? match[1].toLowerCase() : 'ask';\n}\nif (!message || !text) {\n  markProcessed();\n  return [];\n}\nif (allowedTelegramChatId && chatId !== allowedTelegramChatId) {\n  markProcessed();\n  return [];\n}\nconst command = telegramCommand(text);\nif (!['ask', 'answer', 'query', 'ingest'].includes(command)) {\n  markProcessed();\n  return [];\n}\nreturn [{\n  json: {\n    body: update,\n    telegram_polled: true,\n    telegram_command: command\n  }\n}];"
+        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nif (response.ok === false) {\n  throw new Error('Telegram getUpdates failed: ' + (response.description ?? 'unknown error'));\n}\nconst updates = Array.isArray(response.result) ? response.result : [];\nif (!updates.length) return [];\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst update = updates[0];\nconst message = update.message ?? update.edited_message ?? null;\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : '';\nconst text = typeof message?.text === 'string' ? message.text.trim() : '';\nfunction markProcessed() { if (Number.isSafeInteger(Number(update.update_id))) staticData.telegram_last_update_id = Number(update.update_id); }\nfunction telegramCommand(value) { const match = value.match(/^\\/(\\w+)(?:@\\w+)?(?:\\s|$)/); return match ? match[1].toLowerCase() : 'ask'; }\nif (!message || !text) { markProcessed(); return []; }\nif (allowedTelegramChatId && chatId !== allowedTelegramChatId) { markProcessed(); return []; }\nconst command = telegramCommand(text);\nif (!['ask', 'answer', 'query', 'ingest'].includes(command)) { markProcessed(); return []; }\nreturn [{ json: { body: update, telegram_polled: true, telegram_command: command } }];"
       },
-      "id": "282e25ff-dfc5-466d-97aa-44b06fe49cf4",
+      "id": "telegram-prepare-updates",
       "name": "Prepare Telegram Updates",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        40,
-        120
-      ],
-      "notesInFlow": true,
-      "notes": "Routes one valid Telegram update. Supported bot tasks acquire an explicit filesystem lock before answer or ingest work starts; offset=-1 drops old backlog on first poll."
+        60,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node /app/dist/tools/bot-lock.js acquire --vault /data/vault --name telegram-bot --owner \" + JSON.stringify(\"telegram-update-\" + $json.body.update_id) + \" --ttl-ms \" + JSON.stringify($env.TELEGRAM_BOT_LOCK_TTL_MS || \"1800000\") }}",
+        "executeOnce": true
+      },
+      "id": "telegram-acquire-lock",
+      "name": "Acquire Bot Lock",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        340,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) throw new Error('bot-lock acquire returned empty stdout');\nconst lock = JSON.parse(stdout);\nif (!lock.acquired) return [];\nconst update = $node['Prepare Telegram Updates'].json;\nreturn [{ json: { ...update, telegram_lock_acquired: true, telegram_lock_id: lock.lock_id, telegram_lock: lock } }];"
+      },
+      "id": "telegram-parse-lock",
+      "name": "Parse Bot Lock Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        80
+      ]
     },
     {
       "parameters": {
@@ -510,119 +148,56 @@
           ]
         }
       },
-      "id": "4f58ac63-f4f3-4f08-8a5f-9a87e1e61c43",
+      "id": "telegram-is-ingest",
       "name": "Is Telegram Ingest Command?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        320,
-        120
-      ],
-      "notesInFlow": true,
-      "notes": "Routes /ingest commands to the YouTube ingestion branch. /ask, /answer, /query, and free text continue to the answer branch."
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst message = body.message ?? body.edited_message ?? null;\nconst text = typeof message?.text === 'string' ? message.text.trim() : '';\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : null;\nconst messageId = message?.message_id ?? null;\nconst updateId = body.update_id ?? null;\nconst commandless = text.replace(/^\\/ingest(?:@\\w+)?\\s*/i, '').trim();\nconst url = commandless.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[),.;]+$/, '') ?? '';\nconst base = {\n  telegram_chat_id: chatId,\n  telegram_message_id: messageId,\n  telegram_update_id: updateId,\n  telegram_command: 'ingest',\n  telegram_polled: Boolean(input.telegram_polled),\n  telegram_lock_acquired: Boolean(input.telegram_lock_acquired),\n  telegram_lock_id: input.telegram_lock_id ?? null,\n  youtube_ingest_url: url\n};\nif (!url) {\n  return [{\n    json: {\n      ...base,\n      youtube_ingest_status: 'failed',\n      youtube_ingest_error: 'Usage: /ingest <youtube-url>'\n    }\n  }];\n}\nconst payload = {\n  url,\n  captured_at: new Date().toISOString(),\n  language_preferences: ['en', 'es']\n};\nreturn [{\n  json: {\n    ...base,\n    youtube_ingest_status: 'pending',\n    youtube_payload: payload,\n    youtube_payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
-      },
-      "id": "23b6125f-bda4-465d-96f5-98e86fa7a1bf",
-      "name": "Prepare YouTube Ingest Request",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        600,
-        -160
-      ],
-      "notesInFlow": true,
-      "notes": "Extracts the URL from /ingest <url> and builds the youtube-transcript.ts payload."
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "value1": "={{ $json.youtube_ingest_status }}",
-              "value2": "pending"
-            }
-          ]
-        }
-      },
-      "id": "d11cd87a-4f95-45d4-9a79-712fa9690ca2",
-      "name": "Should Extract YouTube Transcript?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [
-        880,
-        -160
-      ],
-      "notesInFlow": true,
-      "notes": "Skips extraction and logs usage errors when the /ingest command does not include a URL."
-    },
-    {
-      "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.youtube_payload_b64) + \" | node /app/dist/tools/youtube-transcript.js --vault /data/vault\" }}",
-        "executeOnce": true
-      },
-      "id": "6559f161-6ef6-42ed-bb1a-e8d49ad1c834",
-      "name": "Run youtube-transcript.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        1160,
-        -260
-      ],
-      "notesInFlow": true,
-      "notes": "Calls youtube-transcript.ts, which delegates YouTube subtitle metadata and subtitle download to yt-dlp, then writes a raw/web markdown artifact. Expected no-caption failures return JSON with status=failed."
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('youtube-transcript.ts returned empty stdout');\n}\nconst result = JSON.parse(stdout);\nconst request = $node['Prepare YouTube Ingest Request'].json;\nreturn [{\n  json: {\n    ...request,\n    youtube_transcript_result: result,\n    raw_path: result.raw_path ?? null,\n    captured_at: result.captured_at ?? request.youtube_payload?.captured_at ?? new Date().toISOString()\n  }\n}];"
-      },
-      "id": "c82e8a6f-3cd4-42f2-93e8-a1e3f4ef00d6",
-      "name": "Parse YouTube Transcript Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1440,
-        -260
+        900,
+        80
       ]
     },
     {
       "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "value1": "={{ $json.youtube_transcript_result.status }}",
-              "value2": "created"
-            }
-          ]
-        }
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst payload = {\n  ...body,\n  telegram_polled: Boolean(input.telegram_polled),\n  telegram_command: input.telegram_command ?? body.telegram_command ?? null,\n  telegram_lock_acquired: Boolean(input.telegram_lock_acquired),\n  telegram_lock_id: input.telegram_lock_id ?? body.telegram_lock_id ?? null\n};\nreturn [{\n  json: {\n    ...payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
       },
-      "id": "f691f31b-d588-42de-913d-77eabfaefae5",
-      "name": "Should Ingest YouTube Transcript?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [
-        1720,
-        -260
-      ],
-      "notesInFlow": true,
-      "notes": "Only the created raw transcript path continues into the normal ingest pipeline."
-    },
-    {
-      "parameters": {
-        "jsCode": "function truncate(value, maxLength) {\n  const text = String(value ?? '');\n  return text.length > maxLength ? text.slice(0, maxLength - 3) + '...' : text;\n}\nfunction compactLines(values) {\n  return values.filter((value) => typeof value === 'string' && value.trim()).join(String.fromCharCode(10));\n}\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst chatId = String($json.telegram_chat_id ?? env.TELEGRAM_CHAT_ID ?? '').trim();\nconst missingConfig = [];\nif (!token) missingConfig.push('TELEGRAM_BOT_TOKEN');\nif (!chatId) missingConfig.push('telegram_chat_id or TELEGRAM_CHAT_ID');\nconst result = $json.youtube_transcript_result ?? {};\nconst reason = $json.youtube_ingest_error ?? result.reason ?? 'Unknown ingest failure';\nconst text = compactLines([\n  'KB ingest failed',\n  'Command: /ingest',\n  $json.youtube_ingest_url ? 'URL: ' + truncate($json.youtube_ingest_url, 500) : '',\n  'Reason: ' + truncate(reason, 1000),\n  result.video_id ? 'YouTube video ID: ' + result.video_id : ''\n]);\nreturn [{\n  json: {\n    ...$json,\n    telegram_enabled: missingConfig.length === 0,\n    telegram_skip_reason: missingConfig.length ? 'Missing Telegram runtime configuration: ' + missingConfig.join(', ') : null,\n    telegram_bot_token: token,\n    telegram_ingest_failure_message: {\n      chat_id: chatId,\n      text,\n      disable_web_page_preview: true\n    }\n  }\n}];"
-      },
-      "id": "bcd52c54-193c-4ca8-a8fb-83d160da338e",
-      "name": "Build Telegram Ingest Failure Log",
+      "id": "answer-build-payload",
+      "name": "Build Answer Run Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1720,
-        -40
+        1180,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/answer-run.js --vault /data/vault --compact\" }}",
+        "executeOnce": true
+      },
+      "id": "answer-run",
+      "name": "Run answer-run.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        260
       ],
       "notesInFlow": true,
-      "notes": "Builds a Telegram log for /ingest failures such as missing URL or no YouTube captions."
+      "notes": "Runs the answer macro: search, context, LLM answer, answer record, and feedback proposal."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('answer-run.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "answer-parse-run",
+      "name": "Parse Answer Run Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        260
+      ]
     },
     {
       "parameters": {
@@ -635,13 +210,13 @@
           ]
         }
       },
-      "id": "dab7bddc-4bbf-43d3-ac0b-caf207d47ea6",
-      "name": "Should Send Telegram Ingest Failure Log?",
+      "id": "answer-should-send",
+      "name": "Should Send Telegram Answer Log?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        2000,
-        -40
+        2080,
+        260
       ]
     },
     {
@@ -660,538 +235,16 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.telegram_ingest_failure_message) }}",
+        "jsonBody": "={{ JSON.stringify($json.telegram_message) }}",
         "options": {}
       },
-      "id": "080a3cbc-e70f-44f4-8327-b7ba61b806d5",
-      "name": "Send Telegram Ingest Failure Log",
+      "id": "answer-send-telegram",
+      "name": "Send Telegram Answer Log",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2280,
-        -160
-      ],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "jsCode": "const fallback = $node['Build Telegram Ingest Failure Log'].json;\nconst telegramResponse = $json.ok !== undefined ? $json : null;\nconst updateId = Number(fallback.telegram_update_id);\nif (fallback.telegram_polled && Number.isSafeInteger(updateId)) {\n  const staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\n  staticData.telegram_last_update_id = updateId;\n}\nreturn [{\n  json: {\n    ...fallback,\n    telegram_ingest_failure_log_sent: Boolean(telegramResponse?.ok),\n    telegram_ingest_failure_log_result: telegramResponse\n  }\n}];"
-      },
-      "id": "f6c8f464-81ba-410e-9345-d3213b404edc",
-      "name": "Finalize Telegram Ingest Failure Log",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2560,
-        -40
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst detectedPath = body.raw_path || body.path || body.filePath || body.filename || 'raw/inbox/example.md';\nconst normalized = {\n  raw_path: detectedPath,\n  trigger_source: body.trigger_source || (body.path || body.filePath || body.filename ? 'local-file-trigger' : 'manual'),\n  captured_at: body.captured_at || new Date().toISOString(),\n  telegram_chat_id: body.telegram_chat_id ?? null,\n  telegram_message_id: body.telegram_message_id ?? null,\n  telegram_update_id: body.telegram_update_id ?? null,\n  telegram_command: body.telegram_command ?? null,\n  telegram_lock_acquired: Boolean(body.telegram_lock_acquired),\n  telegram_lock_id: body.telegram_lock_id ?? null,\n  youtube_ingest_url: body.youtube_ingest_url ?? null,\n  youtube_transcript_result: body.youtube_transcript_result ?? null\n};\nreturn [{ json: normalized }];"
-      },
-      "id": "16635cb1-fc84-42dc-ba91-f5f5f996e0f3",
-      "name": "Normalize Raw Event",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2000,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const payload = $input.first().json;\nreturn [{\n  json: {\n    payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
-      },
-      "id": "328e079d-24c2-4044-b3f5-9d8b242cb433",
-      "name": "Encode Raw Event Payload",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2280,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/ingest-source.js --vault /data/vault\" }}",
-        "executeOnce": true
-      },
-      "id": "cf7714bb-0496-44f8-a0ce-93d25fdac957",
-      "name": "Run ingest-source.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        2560,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('ingest-source.ts returned empty stdout');\n}\nconst source_payload = JSON.parse(stdout);\nreturn [{\n  json: {\n    source_payload,\n    payload_b64: Buffer.from(JSON.stringify(source_payload), 'utf8').toString('base64')\n  }\n}];"
-      },
-      "id": "83cc9134-fb95-42a2-8272-f64d788a9dd7",
-      "name": "Parse Source Payload",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2840,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/plan-source-note.js --vault /data/vault\" }}",
-        "executeOnce": true
-      },
-      "id": "df743684-4018-4c72-9eb2-94bc267ad44a",
-      "name": "Run plan-source-note.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        3960,
-        -440
-      ],
-      "notesInFlow": true,
-      "notes": "Creates the source note and root index Mutation Plan. In the n8n ingest flow its input is the mandatory LLM-cleaned source_note payload."
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('plan-source-note.ts returned empty stdout');\n}\nconst parsed = JSON.parse(stdout);\nif (!parsed.mutation_plan || !parsed.commit_input) {\n  throw new Error('plan-source-note.ts must return mutation_plan and commit_input');\n}\nreturn [{\n  json: {\n    source_payload: parsed.source_payload,\n    mutation_plan: parsed.mutation_plan,\n    commit_input: parsed.commit_input,\n    plan_b64: Buffer.from(JSON.stringify(parsed.mutation_plan), 'utf8').toString('base64'),\n    commit_b64: Buffer.from(JSON.stringify(parsed.commit_input), 'utf8').toString('base64')\n  }\n}];"
-      },
-      "id": "3e447c22-d49a-4468-8545-78777d1f7f28",
-      "name": "Parse Source Note Plan",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        4240,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.plan_b64) + \" | node /app/dist/tools/apply-update.js --vault /data/vault\" }}",
-        "executeOnce": true
-      },
-      "id": "779d37d9-3079-4e75-99dc-092929af9df7",
-      "name": "Run apply-update.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        4520,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('apply-update.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
-      },
-      "id": "bc9ef6af-a5fe-4e88-8f59-fc4e2caf863f",
-      "name": "Parse Mutation Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        4800,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "command": "node /app/dist/tools/reindex.js --vault /data/vault",
-        "executeOnce": true
-      },
-      "id": "1f8f0d2f-6193-4687-b8cc-1fc6eea2b7f4",
-      "name": "Run reindex.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        5080,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('reindex.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
-      },
-      "id": "33bd8d14-1673-4ddf-91d0-af6461ac01dd",
-      "name": "Parse Reindex Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        5360,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($node[\"Parse Source Note Plan\"].json.commit_b64) + \" | node /app/dist/tools/commit.js --vault /data/vault\" }}",
-        "executeOnce": true
-      },
-      "id": "db6f28cf-7ded-420b-8a4c-78ddd9129115",
-      "name": "Run commit.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        5640,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('commit.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
-      },
-      "id": "4db62253-f389-40ed-b318-cd5488d85eb7",
-      "name": "Parse Commit Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        5920,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const sourcePayload = $node['Parse Source Note Plan'].json.source_payload;\nconst baselinePlan = $node['Parse Source Note Plan'].json.mutation_plan;\nconst baselineSourceNotePath = baselinePlan.page_actions?.[0]?.path;\nconst baselineSourceNoteTitle = baselinePlan.page_actions?.[0]?.payload?.title || sourcePayload.title;\nconst baselineSourceNoteLink = baselineSourceNoteTitle ? '[[' + baselineSourceNoteTitle + ']]' : null;\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst baseUrl = (env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/+$/, '');\nconst model = (env.OPENROUTER_MODEL || '').trim();\nconst sourceRefs = [sourcePayload.raw_path, baselineSourceNotePath].filter(Boolean);\nconst allowedPagePathPrefixes = ['wiki/concepts/', 'wiki/entities/', 'wiki/topics/', 'wiki/analyses/'];\nconst requestBody = {\n  ...(model ? { model } : {}),\n  stream: false,\n  temperature: 0,\n  messages: [\n    {\n      role: 'system',\n      content: [\n        'You produce only valid JSON matching the Mutation Plan contract.',\n        'This plan may be applied automatically and must not include a create action for the baseline source note.',\n        'Every page_actions[].path must start exactly with one of: wiki/concepts/, wiki/entities/, wiki/topics/, or wiki/analyses/, except for one narrow update to the exact baseline source note path provided by source_note_update_allowed_path.',\n        'Never write directly under wiki/, for example use wiki/concepts/lean-server.md instead of wiki/lean-server.md.',\n        'Only propose small grounded changes under those allowed page path prefixes.',\n        'When the source has a clear reusable domain or theme, create or update a topic under wiki/topics/ for that domain and link it to the baseline source note and relevant concepts.',\n        'For example, a source primarily about productivity should normally create or update wiki/topics/productivity.md unless an equivalent topic already exists.',\n        'Every created or updated concept, entity, topic, or analysis must include the baseline source note link in its Sources section when the change is grounded in this source.',\n        'When you create or update reusable notes, also update the exact baseline source note with Linked Notes pointing back to those notes.',\n        'The baseline source note update may only use action update and payload.sections.Linked Notes; do not modify Summary, Raw Context, Extracted Claims, frontmatter, title, or other sections.',\n        'Do not write raw content dumps. Prefer noop or empty page_actions when the source lacks reusable knowledge.',\n        'Every write action must include an idempotency_key and source_refs must include the raw_path and baseline source note path when available.'\n      ].join(' ')\n    },\n    {\n      role: 'user',\n      content: JSON.stringify({\n        source_payload: sourcePayload,\n        baseline_mutation_plan: baselinePlan,\n        allowed_page_path_prefixes: allowedPagePathPrefixes,\n        source_note_update_allowed_path: baselineSourceNotePath,\n        source_note_update_allowed_sections: ['Linked Notes'],\n        baseline_source_note_link: baselineSourceNoteLink,\n        invalid_page_path_examples: ['wiki/lean-server.md', 'wiki/example.md', 'wiki/sources/other-source.md'],\n        required_json_shape: {\n          plan_id: 'plan-' + sourcePayload.source_id + '-llm-ingest-review',\n          operation: 'ingest',\n          summary: 'Auto-applied LLM plan for reusable wiki updates',\n          source_refs: sourceRefs,\n          page_actions: [\n            {\n              path: 'wiki/concepts/example-concept.md',\n              action: 'noop',\n              doc_type: 'concept',\n              change_type: 'fact',\n              idempotency_key: sourcePayload.source_id + ':wiki/concepts/example-concept.md',\n              payload: {\n                sections: {\n                  Facts: ['Grounded reusable fact from the source.'],\n                  Sources: baselineSourceNoteLink ? [baselineSourceNoteLink] : []\n                },\n                related_links: []\n              }\n            },\n            {\n              path: baselineSourceNotePath,\n              action: 'noop',\n              doc_type: 'source',\n              change_type: 'new_link',\n              idempotency_key: sourcePayload.source_id + ':source-linked-notes',\n              payload: {\n                sections: {\n                  'Linked Notes': ['[[Example Concept]]']\n                }\n              }\n            }\n          ],\n          index_updates: [],\n          post_actions: { reindex: true, commit: true }\n        }\n      }, null, 2)\n    }\n  ]\n};\nreturn [{\n  json: {\n    source_payload: sourcePayload,\n    baseline_mutation_plan: baselinePlan,\n    baseline_mutation_result: $node['Parse Mutation Result'].json,\n    baseline_reindex_result: $node['Parse Reindex Result'].json,\n    baseline_commit_result: $node['Parse Commit Result'].json,\n    openrouter_source_note_meta: $node['Parse LLM Source Note'].json.openrouter_source_note_meta,\n    openrouter_url: baseUrl + '/chat/completions',\n    openrouter_request: requestBody\n  }\n}];"
-      },
-      "id": "20ce5d16-07b4-45d2-ad64-91bb5108b8f0",
-      "name": "Build OpenRouter Ingest Plan Request",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        6200,
-        -440
-      ],
-      "notesInFlow": true,
-      "notes": "Produces an optional richer ingest Mutation Plan. The workflow validates and auto-applies non-empty plans with guardrails."
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $json.openrouter_url }}",
-        "authentication": "none",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "HTTP-Referer",
-              "value": "={{ $env.OPENROUTER_SITE_URL || 'https://localhost' }}"
-            },
-            {
-              "name": "X-OpenRouter-Title",
-              "value": "dps-wiki-llm"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
-        "options": {}
-      },
-      "id": "0dec72b7-434f-4f3d-a724-cd56417cb72e",
-      "name": "Call OpenRouter Ingest Planner",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        6480,
-        -440
-      ],
-      "notesInFlow": true,
-      "notes": "Calls the LLM API through n8n HTTP Request with a render-time API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
-    },
-    {
-      "parameters": {
-        "jsCode": "function extractJson(text) {\n  const fence = String.fromCharCode(96, 96, 96);\n  const stripped = text.trim().replace(new RegExp('^' + fence + '(?:json)?\\\\s*', 'i'), '').replace(new RegExp(fence + '$', 'i'), '').trim();\n  try {\n    return JSON.parse(stripped);\n  } catch (error) {\n    const match = stripped.match(/\\{[\\s\\S]*\\}/);\n    if (!match) throw error;\n    return JSON.parse(match[0]);\n  }\n}\nfunction assertRecord(value, label) {\n  if (!value || typeof value !== 'object' || Array.isArray(value)) {\n    throw new Error(label + ' must be an object');\n  }\n}\nfunction isRecord(value) {\n  return value && typeof value === 'object' && !Array.isArray(value);\n}\nfunction isSafeRelativePath(value) {\n  return typeof value === 'string' && !value.startsWith('/') && !value.includes('..') && !value.includes('\\\\');\n}\nfunction rejectAction(collection, item, reason) {\n  collection.push({ path: item?.path ?? null, action: item?.action ?? null, reason });\n  if (item && typeof item === 'object') {\n    item.action = 'noop';\n  }\n}\nfunction hasOnlyLinkedNotesSection(action) {\n  if (!isRecord(action.payload)) {\n    return false;\n  }\n  const payloadKeys = Object.keys(action.payload).filter((key) => action.payload[key] !== undefined);\n  if (payloadKeys.some((key) => key !== 'sections')) {\n    return false;\n  }\n  const sections = action.payload.sections;\n  if (!isRecord(sections)) {\n    return false;\n  }\n  const sectionKeys = Object.keys(sections).filter((key) => sections[key] !== undefined);\n  if (sectionKeys.length !== 1 || sectionKeys[0] !== 'Linked Notes') {\n    return false;\n  }\n  const linkedNotes = sections['Linked Notes'];\n  if (typeof linkedNotes === 'string') {\n    return Boolean(linkedNotes.trim());\n  }\n  return Array.isArray(linkedNotes) && linkedNotes.length > 0 && linkedNotes.every((item) => typeof item === 'string' && item.trim());\n}\nconst raw = $input.first().json;\nconst response = raw.body ?? raw;\nconst choice = Array.isArray(response.choices) ? response.choices[0] : undefined;\nconst content = choice?.message?.content ?? choice?.text;\nconst text = Array.isArray(content)\n  ? content.map((part) => typeof part === 'string' ? part : part?.text ?? '').join('').trim()\n  : typeof content === 'string'\n    ? content.trim()\n    : '';\nif (!text) {\n  throw new Error('OpenRouter ingest planner response did not include JSON content');\n}\nconst plan = extractJson(text);\nassertRecord(plan, 'LLM ingest plan');\nif (typeof plan.plan_id !== 'string' || !plan.plan_id.trim()) {\n  throw new Error('LLM ingest plan must include plan_id');\n}\nif (!Array.isArray(plan.source_refs) || plan.source_refs.length === 0) {\n  throw new Error('LLM ingest plan must include source_refs[]');\n}\nif (!Array.isArray(plan.page_actions)) {\n  throw new Error('LLM ingest plan must include page_actions[]');\n}\nif (!Array.isArray(plan.index_updates)) {\n  plan.index_updates = [];\n}\nconst guardrailRejections = [];\nconst packet = $node['Build OpenRouter Ingest Plan Request'].json;\nconst baselineSourceNotePath = packet.baseline_mutation_plan?.page_actions?.[0]?.path;\nconst allowedPagePrefixes = ['wiki/concepts/', 'wiki/entities/', 'wiki/topics/', 'wiki/analyses/'];\nconst validPageActions = new Set(['create', 'update', 'noop']);\nfor (const action of plan.page_actions) {\n  assertRecord(action, 'LLM page action');\n  if (!isSafeRelativePath(action.path)) {\n    rejectAction(guardrailRejections, action, 'unsafe page path');\n    continue;\n  }\n  if (!validPageActions.has(action.action)) {\n    rejectAction(guardrailRejections, action, 'unsupported page action');\n    continue;\n  }\n  if (!action.path.endsWith('.md')) {\n    rejectAction(guardrailRejections, action, 'page path is not markdown');\n    continue;\n  }\n  const isBaselineSourceNoteUpdate = Boolean(baselineSourceNotePath) && action.path === baselineSourceNotePath;\n  if (isBaselineSourceNoteUpdate) {\n    if (action.action === 'noop') {\n      continue;\n    }\n    if (action.action !== 'update') {\n      rejectAction(guardrailRejections, action, 'source note backlink action must be update');\n      continue;\n    }\n    if (!hasOnlyLinkedNotesSection(action)) {\n      rejectAction(guardrailRejections, action, 'source note updates may only write Linked Notes');\n      continue;\n    }\n    if (typeof action.idempotency_key !== 'string' || !action.idempotency_key.trim()) {\n      rejectAction(guardrailRejections, action, 'missing idempotency_key');\n    }\n    continue;\n  }\n  if (!allowedPagePrefixes.some((prefix) => action.path.startsWith(prefix))) {\n    rejectAction(guardrailRejections, action, 'page path outside allowed wiki areas');\n    continue;\n  }\n  if ((action.action === 'create' || action.action === 'update') && (typeof action.idempotency_key !== 'string' || !action.idempotency_key.trim())) {\n    rejectAction(guardrailRejections, action, 'missing idempotency_key');\n  }\n}\nconst validIndexActions = new Set(['create', 'update', 'noop', undefined]);\nfor (const update of plan.index_updates) {\n  assertRecord(update, 'LLM index update');\n  if (!isSafeRelativePath(update.path)) {\n    rejectAction(guardrailRejections, update, 'unsafe index path');\n    continue;\n  }\n  if (!validIndexActions.has(update.action)) {\n    rejectAction(guardrailRejections, update, 'unsupported index action');\n    continue;\n  }\n  if (!(update.path === 'INDEX.md' || (update.path.startsWith('wiki/indexes/') && update.path.endsWith('.md')))) {\n    rejectAction(guardrailRejections, update, 'index path outside allowed index areas');\n  }\n}\nconst hasLlmChanges = plan.page_actions.some((action) => action.action !== 'noop') || plan.index_updates.some((update) => (update.action ?? 'update') !== 'noop');\nreturn [{\n  json: {\n    ...packet,\n    llm_mutation_plan: plan,\n    llm_guardrail_rejections: guardrailRejections,\n    llm_plan_approval_required: false,\n    llm_plan_auto_apply_required: hasLlmChanges,\n    openrouter_ingest_meta: {\n      id: response.id ?? null,\n      model: response.model ?? null,\n      usage: response.usage ?? null,\n      finish_reason: choice?.finish_reason ?? null\n    }\n  }\n}];"
-      },
-      "id": "7376e6a7-432e-4f83-8c3c-c190f8308210",
-      "name": "Parse LLM Ingest Plan",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        6760,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "value1": "={{ String($json.llm_plan_auto_apply_required) }}",
-              "value2": "true"
-            }
-          ]
-        }
-      },
-      "id": "59ef9d01-f3f7-4304-bd27-1120e6470b48",
-      "name": "Should Apply LLM Plan?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [
-        7040,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const plan = $json.llm_mutation_plan;\nreturn [{\n  json: {\n    ...$json,\n    llm_plan_payload_b64: Buffer.from(JSON.stringify(plan), 'utf8').toString('base64')\n  }\n}];"
-      },
-      "id": "8e017b1b-08a0-4db5-a34b-4605ca0e8e0b",
-      "name": "Prepare LLM Plan Application",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        7320,
-        -560
-      ]
-    },
-    {
-      "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.llm_plan_payload_b64) + \" | node /app/dist/tools/apply-update.js --vault /data/vault\" }}",
-        "executeOnce": true
-      },
-      "id": "0be2f2a7-4042-43e1-89fe-e7910af5cb1b",
-      "name": "Run LLM apply-update.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        7600,
-        -560
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('LLM apply-update.ts returned empty stdout');\n}\nreturn [{ json: { ...$node['Prepare LLM Plan Application'].json, llm_mutation_result: JSON.parse(stdout) } }];"
-      },
-      "id": "4ba558c1-14ef-46e9-bce4-c5c6756c092f",
-      "name": "Parse LLM Mutation Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        7880,
-        -560
-      ]
-    },
-    {
-      "parameters": {
-        "command": "node /app/dist/tools/reindex.js --vault /data/vault",
-        "executeOnce": true
-      },
-      "id": "725de576-dbf3-4855-8b5f-e4732dccd6e0",
-      "name": "Run LLM reindex.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        8160,
-        -560
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('LLM reindex.ts returned empty stdout');\n}\nreturn [{ json: { ...$node['Parse LLM Mutation Result'].json, llm_reindex_result: JSON.parse(stdout) } }];"
-      },
-      "id": "243c3a18-389d-4a33-9b53-0df2e272870a",
-      "name": "Parse LLM Reindex Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        8440,
-        -560
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "function unique(values) {\n  return [...new Set(values.filter((item) => typeof item === 'string' && item.trim()))];\n}\nfunction truncate(value, maxLength) {\n  return value.length > maxLength ? value.slice(0, maxLength - 3) + '...' : value;\n}\nconst plan = $json.llm_mutation_plan;\nconst mutation = $json.llm_mutation_result;\nconst title = $json.source_payload?.title || $json.source_payload?.source_id || 'source';\nconst indexPaths = Array.isArray(plan.index_updates) ? plan.index_updates.map((update) => update.path) : [];\nconst affected = unique([...(mutation.created ?? []), ...(mutation.updated ?? []), ...indexPaths]);\nconst payload = {\n  operation: 'ingest',\n  summary: 'Apply LLM ingest plan for ' + title,\n  source_refs: Array.isArray(plan.source_refs) ? plan.source_refs : [],\n  affected_notes: affected,\n  paths_to_stage: unique([...affected, 'state/runtime/idempotency-keys.json', 'state/kb.db']),\n  feedback_record_ref: null,\n  mutation_result_ref: null,\n  commit_message: 'ingest: apply LLM plan for ' + truncate(title, 60)\n};\nreturn [{\n  json: {\n    ...$json,\n    llm_commit_payload: payload,\n    llm_commit_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
-      },
-      "id": "e75f92b0-38ae-4956-9d18-95300562e533",
-      "name": "Build LLM Commit Payload",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        8720,
-        -560
-      ]
-    },
-    {
-      "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.llm_commit_b64) + \" | node /app/dist/tools/commit.js --vault /data/vault\" }}",
-        "executeOnce": true
-      },
-      "id": "21c4e54e-2ae8-486e-8382-2732860d40a0",
-      "name": "Run LLM commit.ts",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        9000,
-        -560
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('LLM commit.ts returned empty stdout');\n}\nreturn [{ json: { ...$node['Build LLM Commit Payload'].json, llm_commit_result: JSON.parse(stdout) } }];"
-      },
-      "id": "bb7977a0-a235-4534-94ae-e6ea7edc8b51",
-      "name": "Parse LLM Commit Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        9280,
-        -560
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const llmApplied = Boolean($json.llm_mutation_result);\nconst rawEvent = $node['Normalize Raw Event'].json ?? {};\nreturn [{\n  json: {\n    status: llmApplied ? 'baseline_ingest_applied_llm_plan_applied' : 'baseline_ingest_applied_no_llm_changes',\n    source_payload: $json.source_payload,\n    baseline_mutation_plan: $json.baseline_mutation_plan,\n    baseline_mutation_result: $json.baseline_mutation_result,\n    baseline_reindex_result: $json.baseline_reindex_result,\n    baseline_commit_result: $json.baseline_commit_result,\n    openrouter_source_note_meta: $json.openrouter_source_note_meta,\n    llm_mutation_plan: $json.llm_mutation_plan,\n    llm_guardrail_rejections: $json.llm_guardrail_rejections ?? [],\n    llm_plan_approval_required: $json.llm_plan_approval_required,\n    llm_plan_auto_apply_required: $json.llm_plan_auto_apply_required,\n    llm_mutation_result: $json.llm_mutation_result ?? null,\n    llm_reindex_result: $json.llm_reindex_result ?? null,\n    llm_commit_result: $json.llm_commit_result ?? null,\n    openrouter_ingest_meta: $json.openrouter_ingest_meta,\n    telegram_chat_id: rawEvent.telegram_chat_id ?? null,\n    telegram_message_id: rawEvent.telegram_message_id ?? null,\n    telegram_update_id: rawEvent.telegram_update_id ?? null,\n    telegram_command: rawEvent.telegram_command ?? null,\n    telegram_lock_acquired: Boolean(rawEvent.telegram_lock_acquired),\n    telegram_lock_id: rawEvent.telegram_lock_id ?? null,\n    youtube_ingest_url: rawEvent.youtube_ingest_url ?? null,\n    youtube_transcript_result: rawEvent.youtube_transcript_result ?? null\n  }\n}];"
-      },
-      "id": "fc739fd6-07f2-41f4-919b-137ed8860fdb",
-      "name": "Build Ingest Response",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        9560,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const sourcePayload = $node['Parse Source Payload'].json.source_payload;\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst baseUrl = (env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\\/+$/, '');\nconst model = (env.OPENROUTER_MODEL || '').trim();\nconst requestBody = {\n  ...(model ? { model } : {}),\n  stream: false,\n  temperature: 0,\n  messages: [\n    {\n      role: 'system',\n      content: [\n        'You produce only valid JSON for a cleaned source note.',\n        'Clean and normalize the source content without losing materially useful information.',\n        'Do not invent facts, links, names, dates, numbers, or claims not present in the source.',\n        'Remove only boilerplate, navigation, ads, duplicated text, formatting noise, and irrelevant wrapper text.',\n        'Do not propose wiki mutations. This step only prepares the wiki/sources note content.',\n        'Return a JSON object with summary, raw_context, extracted_claims, and open_questions.'\n      ].join(' ')\n    },\n    {\n      role: 'user',\n      content: JSON.stringify({\n        source_payload: sourcePayload,\n        required_json_shape: {\n          summary: 'Faithful concise summary of the source.',\n          raw_context: 'Cleaned normalized source content preserving all materially useful information.',\n          extracted_claims: ['Grounded claim from the source.'],\n          open_questions: ['Optional unresolved ambiguity from the source.']\n        },\n        constraints: [\n          'Preserve concrete names, dates, numbers, URLs, tool names, decisions, and caveats from the source.',\n          'Use extracted_claims only for claims directly supported by the source.',\n          'Use open_questions only for unresolved gaps present in or implied by the source.',\n          'If the source is thin, keep raw_context short but still faithful.'\n        ]\n      }, null, 2)\n    }\n  ]\n};\nreturn [{\n  json: {\n    source_payload: sourcePayload,\n    openrouter_url: baseUrl + '/chat/completions',\n    openrouter_request: requestBody\n  }\n}];"
-      },
-      "id": "15a7f63e-5014-4c8e-a4c9-5950a0e7a2aa",
-      "name": "Build OpenRouter Source Note Request",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3120,
-        -440
-      ],
-      "notesInFlow": true,
-      "notes": "Builds the mandatory OpenRouter request that cleans the source content for the wiki/sources note before any wiki mutation."
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $json.openrouter_url }}",
-        "authentication": "none",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "HTTP-Referer",
-              "value": "={{ $env.OPENROUTER_SITE_URL || 'https://localhost' }}"
-            },
-            {
-              "name": "X-OpenRouter-Title",
-              "value": "dps-wiki-llm"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
-        "options": {}
-      },
-      "id": "5848180b-2059-4a01-af58-50599f2fed1d",
-      "name": "Call OpenRouter Source Note Cleaner",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        3400,
-        -440
-      ],
-      "notesInFlow": true,
-      "notes": "Calls the LLM API through n8n HTTP Request with a render-time API-key header. LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value."
-    },
-    {
-      "parameters": {
-        "jsCode": "function extractJson(text) {\n  const fence = String.fromCharCode(96, 96, 96);\n  const stripped = text.trim().replace(new RegExp('^' + fence + '(?:json)?\\\\s*', 'i'), '').replace(new RegExp(fence + '$', 'i'), '').trim();\n  try {\n    return JSON.parse(stripped);\n  } catch (error) {\n    const match = stripped.match(/\\{[\\s\\S]*\\}/);\n    if (!match) throw error;\n    return JSON.parse(match[0]);\n  }\n}\nfunction assertRecord(value, label) {\n  if (!value || typeof value !== 'object' || Array.isArray(value)) {\n    throw new Error(label + ' must be an object');\n  }\n}\nfunction stringField(record, field) {\n  const value = record[field];\n  if (typeof value !== 'string' || !value.trim()) {\n    throw new Error('LLM source note must include non-empty ' + field);\n  }\n  return value.trim();\n}\nfunction stringArrayField(record, field, required) {\n  const value = record[field];\n  if (value === undefined && !required) {\n    return [];\n  }\n  if (!Array.isArray(value)) {\n    throw new Error('LLM source note must include ' + field + '[]');\n  }\n  if (value.some((item) => typeof item !== 'string')) {\n    throw new Error('LLM source note ' + field + '[] must contain only strings');\n  }\n  return value\n    .map((item) => item.trim())\n    .filter(Boolean);\n}\nconst raw = $input.first().json;\nconst response = raw.body ?? raw;\nconst choice = Array.isArray(response.choices) ? response.choices[0] : undefined;\nconst content = choice?.message?.content ?? choice?.text;\nconst text = Array.isArray(content)\n  ? content.map((part) => typeof part === 'string' ? part : part?.text ?? '').join('').trim()\n  : typeof content === 'string'\n    ? content.trim()\n    : '';\nif (!text) {\n  throw new Error('OpenRouter source note response did not include JSON content');\n}\nconst proposedSourceNote = extractJson(text);\nassertRecord(proposedSourceNote, 'LLM source note');\nconst packet = $node['Build OpenRouter Source Note Request'].json;\nconst sourceNote = {\n  summary: stringField(proposedSourceNote, 'summary'),\n  raw_context: stringField(proposedSourceNote, 'raw_context'),\n  extracted_claims: stringArrayField(proposedSourceNote, 'extracted_claims', true),\n  open_questions: stringArrayField(proposedSourceNote, 'open_questions', false),\n  generated_by: 'openrouter',\n  model: response.model ?? packet.openrouter_request.model ?? undefined\n};\nconst sourcePayload = {\n  ...packet.source_payload,\n  content: '',\n  source_note: sourceNote\n};\nreturn [{\n  json: {\n    ...packet,\n    source_payload: sourcePayload,\n    source_note: sourceNote,\n    payload_b64: Buffer.from(JSON.stringify(sourcePayload), 'utf8').toString('base64'),\n    openrouter_source_note_meta: {\n      id: response.id ?? null,\n      model: response.model ?? packet.openrouter_request.model ?? null,\n      usage: response.usage ?? null,\n      finish_reason: choice?.finish_reason ?? null\n    }\n  }\n}];"
-      },
-      "id": "c0bef524-d050-47f7-a9b0-33387b2f6229",
-      "name": "Parse LLM Source Note",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3680,
-        -440
-      ],
-      "notesInFlow": true,
-      "notes": "Validates the mandatory cleaned source-note JSON. Invalid or empty responses fail ingestion before wiki mutation."
-    },
-    {
-      "parameters": {
-        "jsCode": "function truncate(value, maxLength) {\n  const text = String(value ?? '');\n  return text.length > maxLength ? text.slice(0, maxLength - 3) + '...' : text;\n}\nfunction count(values) {\n  return Array.isArray(values) ? values.length : 0;\n}\nfunction compactLines(values) {\n  return values.filter((value) => typeof value === 'string' && value.trim()).join(String.fromCharCode(10));\n}\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst chatId = String($json.telegram_chat_id ?? env.TELEGRAM_CHAT_ID ?? '').trim();\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst missingConfig = [];\nif (!token) missingConfig.push('TELEGRAM_BOT_TOKEN');\nif (!chatId) missingConfig.push('telegram_chat_id or TELEGRAM_CHAT_ID');\nconst source = $json.source_payload ?? {};\nconst baseline = $json.baseline_mutation_result ?? {};\nconst llm = $json.llm_mutation_result ?? null;\nconst guardrails = Array.isArray($json.llm_guardrail_rejections) ? $json.llm_guardrail_rejections : [];\nconst baselineCommit = $json.baseline_commit_result?.commit_sha ? 'Baseline commit: ' + $json.baseline_commit_result.commit_sha : '';\nconst llmCommit = $json.llm_commit_result?.commit_sha ? 'LLM commit: ' + $json.llm_commit_result.commit_sha : '';\nconst text = compactLines([\n  'KB ingest completed',\n  'Status: ' + ($json.status ?? 'unknown'),\n  'Source: ' + truncate(source.title || source.source_id || 'unknown', 500),\n  source.raw_path ? 'Raw: ' + source.raw_path : '',\n  'Baseline created/updated/skipped: ' + count(baseline.created) + '/' + count(baseline.updated) + '/' + count(baseline.skipped),\n  llm ? 'LLM created/updated/skipped: ' + count(llm.created) + '/' + count(llm.updated) + '/' + count(llm.skipped) : 'LLM changes: none',\n  guardrails.length ? 'Guardrail rejections: ' + guardrails.length : '',\n  baselineCommit,\n  llmCommit\n]);\nreturn [{\n  json: {\n    ...$json,\n    telegram_enabled: missingConfig.length === 0,\n    telegram_skip_reason: missingConfig.length ? 'Missing Telegram runtime configuration: ' + missingConfig.join(', ') : null,\n    telegram_bot_token: token,\n    telegram_ingest_message: {\n      chat_id: chatId,\n      text,\n      disable_web_page_preview: true\n    }\n  }\n}];"
-      },
-      "id": "158ba25d-c43d-484a-893d-aa5220202c64",
-      "name": "Build Telegram Ingest Log",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        9840,
-        -440
-      ],
-      "notesInFlow": true,
-      "notes": "Builds a plain-text Telegram ingest log after the ingest response is available."
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "value1": "={{ String($json.telegram_enabled) }}",
-              "value2": "true"
-            }
-          ]
-        }
-      },
-      "id": "6f2ae5ba-14b1-4bfa-92ce-57ce5127469d",
-      "name": "Should Send Telegram Ingest Log?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [
-        10120,
-        -440
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
-        "authentication": "none",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.telegram_ingest_message) }}",
-        "options": {}
-      },
-      "id": "e3e12c4d-2cfa-4ce0-80a1-250585a3dc94",
-      "name": "Send Telegram Ingest Log",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        10400,
-        -560
+        2360,
+        160
       ],
       "notesInFlow": true,
       "notes": "Sends a plain-text Telegram message through Bot API. Requires TELEGRAM_BOT_TOKEN and a chat id.",
@@ -1199,93 +252,150 @@
     },
     {
       "parameters": {
-        "jsCode": "const fallback = $node['Build Telegram Ingest Log'].json;\nconst telegramResponse = $json.ok !== undefined ? $json : null;\nconst updateId = Number(fallback.telegram_update_id);\nif (fallback.telegram_polled && Number.isSafeInteger(updateId)) {\n  const staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\n  staticData.telegram_last_update_id = updateId;\n}\nreturn [{\n  json: {\n    ...fallback,\n    telegram_ingest_log_sent: Boolean(telegramResponse?.ok),\n    telegram_ingest_log_result: telegramResponse\n  }\n}];"
+        "jsCode": "const data = ($node['Parse Answer Run Result'] && $node['Parse Answer Run Result'].json) ? $node['Parse Answer Run Result'].json : $json;\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nif (data.telegram_polled && Number.isSafeInteger(Number(data.telegram_update_id))) {\n  staticData.telegram_last_update_id = Number(data.telegram_update_id);\n}\nreturn [{ json: data }];"
       },
-      "id": "b38fe626-df5f-47d6-a1ad-b50707f49dc8",
-      "name": "Finalize Ingest Response",
+      "id": "answer-finalize",
+      "name": "Finalize Answer Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        10680,
-        -440
+        2640,
+        260
       ]
     },
     {
       "parameters": {
-        "command": "={{ \"node /app/dist/tools/bot-lock.js acquire --vault /data/vault --name telegram-bot --owner \" + JSON.stringify(\"telegram-update-\" + $json.body.update_id) + \" --compact\" }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
-      "id": "4c8d7b13-5452-4a4f-b296-1d17d04f5b20",
-      "name": "Acquire Bot Lock",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        320,
-        120
-      ],
-      "notesInFlow": true,
-      "notes": "Uses bot-lock.ts to acquire an atomic filesystem lock under state/locks. If another task is running, the update is left unprocessed for a later poll."
-    },
-    {
-      "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('bot-lock acquire returned empty stdout');\n}\nconst lock = JSON.parse(stdout);\nif (!lock.acquired) {\n  return [];\n}\nconst update = $node['Prepare Telegram Updates'].json;\nreturn [{\n  json: {\n    ...update,\n    telegram_lock_acquired: true,\n    telegram_lock_id: lock.lock_id,\n    telegram_lock: lock\n  }\n}];"
-      },
-      "id": "1afc5df7-84f3-4b92-a5ea-c015606b0d47",
-      "name": "Parse Bot Lock Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        600,
-        120
-      ]
-    },
-    {
-      "parameters": {
-        "command": "={{ \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id || \"\") + \" --compact\" }}",
-        "executeOnce": true
-      },
-      "id": "eb419d15-c43b-479f-851e-d9220272070d",
+      "id": "answer-release-lock",
       "name": "Release Bot Lock After Answer",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        6760,
-        300
-      ],
-      "notesInFlow": true,
-      "notes": "Releases the filesystem bot lock after the workflow has marked the Telegram update as processed."
+        2920,
+        260
+      ]
     },
     {
       "parameters": {
-        "command": "={{ \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id || \"\") + \" --compact\" }}",
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst payload = {\n  ...body,\n  telegram_polled: Boolean(input.telegram_polled),\n  telegram_command: input.telegram_command ?? body.telegram_command ?? null,\n  telegram_lock_acquired: Boolean(input.telegram_lock_acquired),\n  telegram_lock_id: input.telegram_lock_id ?? body.telegram_lock_id ?? null\n};\nreturn [{\n  json: {\n    ...payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
+      },
+      "id": "ingest-build-payload",
+      "name": "Build Ingest Run Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/ingest-run.js --vault /data/vault --compact\" }}",
         "executeOnce": true
       },
-      "id": "cf84f653-36e0-4a85-9150-44f53c0cc485",
-      "name": "Release Bot Lock After Ingest Failure",
+      "id": "ingest-run",
+      "name": "Run ingest-run.ts",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        2840,
-        -40
+        1480,
+        -100
       ],
       "notesInFlow": true,
-      "notes": "Releases the filesystem bot lock after the workflow has marked the Telegram update as processed."
+      "notes": "Runs the ingest macro, including YouTube transcript extraction for /ingest commands."
     },
     {
       "parameters": {
-        "command": "={{ \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id || \"\") + \" --compact\" }}",
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('ingest-run.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "ingest-parse-run",
+      "name": "Parse Ingest Run Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.telegram_enabled) }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "ingest-should-send",
+      "name": "Should Send Telegram Ingest Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.telegram_message) }}",
+        "options": {}
+      },
+      "id": "ingest-send-telegram",
+      "name": "Send Telegram Ingest Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2360,
+        -200
+      ],
+      "notesInFlow": true,
+      "notes": "Sends a plain-text Telegram message through Bot API. Requires TELEGRAM_BOT_TOKEN and a chat id.",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = ($node['Parse Ingest Run Result'] && $node['Parse Ingest Run Result'].json) ? $node['Parse Ingest Run Result'].json : $json;\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nif (data.telegram_polled && Number.isSafeInteger(Number(data.telegram_update_id))) {\n  staticData.telegram_last_update_id = Number(data.telegram_update_id);\n}\nreturn [{ json: data }];"
+      },
+      "id": "ingest-finalize",
+      "name": "Finalize Ingest Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
-      "id": "c88c8131-3d01-4023-8275-0e936d757cca",
+      "id": "ingest-release-lock",
       "name": "Release Bot Lock After Ingest",
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        10960,
-        -440
-      ],
-      "notesInFlow": true,
-      "notes": "Releases the filesystem bot lock after the workflow has marked the Telegram update as processed."
+        2920,
+        -100
+      ]
     }
   ],
   "connections": {
@@ -1293,245 +403,7 @@
       "main": [
         [
           {
-            "node": "Prepare Query",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Query": {
-      "main": [
-        [
-          {
-            "node": "Run search.ts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run search.ts": {
-      "main": [
-        [
-          {
-            "node": "Parse Search Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Search Result": {
-      "main": [
-        [
-          {
-            "node": "Build Context Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Context Payload": {
-      "main": [
-        [
-          {
-            "node": "Run answer-context.ts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run answer-context.ts": {
-      "main": [
-        [
-          {
-            "node": "Parse Answer Context",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Answer Context": {
-      "main": [
-        [
-          {
-            "node": "Build OpenRouter Answer Request",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build OpenRouter Answer Request": {
-      "main": [
-        [
-          {
-            "node": "Call OpenRouter Answer",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Call OpenRouter Answer": {
-      "main": [
-        [
-          {
-            "node": "Parse OpenRouter Answer",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse OpenRouter Answer": {
-      "main": [
-        [
-          {
-            "node": "Build Answer Record Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Answer Record Payload": {
-      "main": [
-        [
-          {
-            "node": "Run answer-record.ts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run answer-record.ts": {
-      "main": [
-        [
-          {
-            "node": "Parse Answer Record",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Answer Record": {
-      "main": [
-        [
-          {
-            "node": "Build OpenRouter Feedback Request",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build OpenRouter Feedback Request": {
-      "main": [
-        [
-          {
-            "node": "Call OpenRouter Feedback",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Call OpenRouter Feedback": {
-      "main": [
-        [
-          {
-            "node": "Parse Proposed Feedback",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Proposed Feedback": {
-      "main": [
-        [
-          {
-            "node": "Validate feedback-record.ts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Validate feedback-record.ts": {
-      "main": [
-        [
-          {
-            "node": "Parse Feedback Validation",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Feedback Validation": {
-      "main": [
-        [
-          {
-            "node": "Build Answer Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Answer Response": {
-      "main": [
-        [
-          {
-            "node": "Build Telegram Answer Log",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Telegram Answer Log": {
-      "main": [
-        [
-          {
-            "node": "Should Send Telegram Answer Log?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Should Send Telegram Answer Log?": {
-      "main": [
-        [
-          {
-            "node": "Send Telegram Answer Log",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Finalize Answer Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send Telegram Answer Log": {
-      "main": [
-        [
-          {
-            "node": "Finalize Answer Response",
+            "node": "Build Answer Run Payload",
             "type": "main",
             "index": 0
           }
@@ -1594,449 +466,142 @@
         ]
       ]
     },
+    "Acquire Bot Lock": {
+      "main": [
+        [
+          {
+            "node": "Parse Bot Lock Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Bot Lock Result": {
+      "main": [
+        [
+          {
+            "node": "Is Telegram Ingest Command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Is Telegram Ingest Command?": {
       "main": [
         [
           {
-            "node": "Prepare YouTube Ingest Request",
+            "node": "Build Ingest Run Payload",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Prepare Query",
+            "node": "Build Answer Run Payload",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Prepare YouTube Ingest Request": {
+    "Build Answer Run Payload": {
       "main": [
         [
           {
-            "node": "Should Extract YouTube Transcript?",
+            "node": "Run answer-run.ts",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Should Extract YouTube Transcript?": {
+    "Run answer-run.ts": {
       "main": [
         [
           {
-            "node": "Run youtube-transcript.ts",
+            "node": "Parse Answer Run Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Answer Run Result": {
+      "main": [
+        [
+          {
+            "node": "Should Send Telegram Answer Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Send Telegram Answer Log?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Answer Log",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Build Telegram Ingest Failure Log",
+            "node": "Finalize Answer Response",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Run youtube-transcript.ts": {
+    "Send Telegram Answer Log": {
       "main": [
         [
           {
-            "node": "Parse YouTube Transcript Result",
+            "node": "Finalize Answer Response",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parse YouTube Transcript Result": {
+    "Finalize Answer Response": {
       "main": [
         [
           {
-            "node": "Should Ingest YouTube Transcript?",
+            "node": "Release Bot Lock After Answer",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Should Ingest YouTube Transcript?": {
+    "Build Ingest Run Payload": {
       "main": [
         [
           {
-            "node": "Normalize Raw Event",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Build Telegram Ingest Failure Log",
+            "node": "Run ingest-run.ts",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build Telegram Ingest Failure Log": {
+    "Run ingest-run.ts": {
       "main": [
         [
           {
-            "node": "Should Send Telegram Ingest Failure Log?",
+            "node": "Parse Ingest Run Result",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Should Send Telegram Ingest Failure Log?": {
-      "main": [
-        [
-          {
-            "node": "Send Telegram Ingest Failure Log",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Finalize Telegram Ingest Failure Log",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send Telegram Ingest Failure Log": {
-      "main": [
-        [
-          {
-            "node": "Finalize Telegram Ingest Failure Log",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Normalize Raw Event": {
-      "main": [
-        [
-          {
-            "node": "Encode Raw Event Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Encode Raw Event Payload": {
-      "main": [
-        [
-          {
-            "node": "Run ingest-source.ts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run ingest-source.ts": {
-      "main": [
-        [
-          {
-            "node": "Parse Source Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Source Payload": {
-      "main": [
-        [
-          {
-            "node": "Build OpenRouter Source Note Request",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run plan-source-note.ts": {
-      "main": [
-        [
-          {
-            "node": "Parse Source Note Plan",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Source Note Plan": {
-      "main": [
-        [
-          {
-            "node": "Run apply-update.ts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run apply-update.ts": {
-      "main": [
-        [
-          {
-            "node": "Parse Mutation Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Mutation Result": {
-      "main": [
-        [
-          {
-            "node": "Run reindex.ts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run reindex.ts": {
-      "main": [
-        [
-          {
-            "node": "Parse Reindex Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Reindex Result": {
-      "main": [
-        [
-          {
-            "node": "Run commit.ts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run commit.ts": {
-      "main": [
-        [
-          {
-            "node": "Parse Commit Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Commit Result": {
-      "main": [
-        [
-          {
-            "node": "Build OpenRouter Ingest Plan Request",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build OpenRouter Ingest Plan Request": {
-      "main": [
-        [
-          {
-            "node": "Call OpenRouter Ingest Planner",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Call OpenRouter Ingest Planner": {
-      "main": [
-        [
-          {
-            "node": "Parse LLM Ingest Plan",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse LLM Ingest Plan": {
-      "main": [
-        [
-          {
-            "node": "Should Apply LLM Plan?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Should Apply LLM Plan?": {
-      "main": [
-        [
-          {
-            "node": "Prepare LLM Plan Application",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Build Ingest Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare LLM Plan Application": {
-      "main": [
-        [
-          {
-            "node": "Run LLM apply-update.ts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run LLM apply-update.ts": {
-      "main": [
-        [
-          {
-            "node": "Parse LLM Mutation Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse LLM Mutation Result": {
-      "main": [
-        [
-          {
-            "node": "Run LLM reindex.ts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run LLM reindex.ts": {
-      "main": [
-        [
-          {
-            "node": "Parse LLM Reindex Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse LLM Reindex Result": {
-      "main": [
-        [
-          {
-            "node": "Build LLM Commit Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build LLM Commit Payload": {
-      "main": [
-        [
-          {
-            "node": "Run LLM commit.ts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run LLM commit.ts": {
-      "main": [
-        [
-          {
-            "node": "Parse LLM Commit Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse LLM Commit Result": {
-      "main": [
-        [
-          {
-            "node": "Build Ingest Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build OpenRouter Source Note Request": {
-      "main": [
-        [
-          {
-            "node": "Call OpenRouter Source Note Cleaner",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Call OpenRouter Source Note Cleaner": {
-      "main": [
-        [
-          {
-            "node": "Parse LLM Source Note",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse LLM Source Note": {
-      "main": [
-        [
-          {
-            "node": "Run plan-source-note.ts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Ingest Response": {
-      "main": [
-        [
-          {
-            "node": "Build Telegram Ingest Log",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Telegram Ingest Log": {
+    "Parse Ingest Run Result": {
       "main": [
         [
           {
@@ -2076,50 +641,6 @@
         ]
       ]
     },
-    "Acquire Bot Lock": {
-      "main": [
-        [
-          {
-            "node": "Parse Bot Lock Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Bot Lock Result": {
-      "main": [
-        [
-          {
-            "node": "Is Telegram Ingest Command?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Finalize Answer Response": {
-      "main": [
-        [
-          {
-            "node": "Release Bot Lock After Answer",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Finalize Telegram Ingest Failure Log": {
-      "main": [
-        [
-          {
-            "node": "Release Bot Lock After Ingest Failure",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Finalize Ingest Response": {
       "main": [
         [
@@ -2132,13 +653,7 @@
       ]
     }
   },
-  "active": false,
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "pinData": {},
-  "meta": {
-    "templateCredsSetupCompleted": true
-  },
-  "tags": []
+  "settings": {},
+  "staticData": null,
+  "pinData": {}
 }

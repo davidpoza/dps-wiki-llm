@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import http from "node:http";
 import path from "node:path";
 import test from "node:test";
 
@@ -82,6 +83,41 @@ fs.writeFileSync(path.join(outputDir, id + "." + language + "." + extension), su
 `;
 
   return ["--eval", code, "--"];
+}
+
+async function startMockOpenRouter(responses) {
+  const requests = [];
+  const server = http.createServer(async (request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    for await (const chunk of request) {
+      body += chunk;
+    }
+
+    requests.push({
+      method: request.method,
+      url: request.url,
+      headers: request.headers,
+      body: body ? JSON.parse(body) : null
+    });
+
+    const next = responses.shift() || {
+      status: 500,
+      body: { error: { message: "unexpected mock OpenRouter request" } }
+    };
+    response.writeHead(next.status || 200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(next.body));
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}/api/v1`,
+    requests,
+    close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+  };
 }
 
 test("init-db, reindex, and search work together", async () => {
@@ -189,254 +225,55 @@ test("bot-lock serializes bot tasks with a vault filesystem lock", async () => {
   assert.notEqual(reacquired.json.lock_id, first.json.lock_id);
 });
 
-test("render-n8n-workflows renders LLM API key header names at import time", async () => {
-  const temp = await tempDir("dps-wiki-llm-workflow-render-");
-  const workflowPath = path.join(temp, "kb-answer-blueprint.json");
-  await writeFile(workflowPath, await readFile(repoPath("n8n/workflows/kb-answer-blueprint.json")));
-
-  const rendered = await runTool("render-n8n-workflows", [workflowPath], {
-    env: {
-      LLM_API_KEY_HEADER: "x-api-key"
-    }
-  });
-  assert.equal(rendered.json.status, "written");
-  assert.equal(rendered.json.header_name, "x-api-key");
-  assert.ok(rendered.json.workflows[0].updated_nodes.includes("Call OpenRouter Answer"));
-
-  const workflow = await readJson(workflowPath);
-  const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
-  const answerCall = nodes.get("Call OpenRouter Answer");
-  assert.equal(answerCall.type, "n8n-nodes-base.httpRequest");
-  assert.equal(answerCall.parameters.headerParameters.parameters[0].name, "x-api-key");
-  assert.equal(answerCall.parameters.headerParameters.parameters[0].value, "={{ $env.OPENROUTER_API_KEY }}");
-  assert.ok(!("jsonHeaders" in answerCall.parameters));
-});
-
-test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails", async () => {
+test("ingest workflow delegates the full ingest pipeline to ingest-run", async () => {
   const workflow = JSON.parse(await fs.readFile(repoPath("n8n/workflows/kb-ingest-raw-blueprint.json"), "utf8"));
   const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
 
-  assert.ok(nodes.has("Should Apply LLM Plan?"));
-  assert.ok(nodes.has("Build OpenRouter Source Note Request"));
-  assert.ok(nodes.has("Call OpenRouter Source Note Cleaner"));
-  assert.ok(nodes.has("Parse LLM Source Note"));
-  assert.ok(nodes.has("Run LLM apply-update.ts"));
-  assert.ok(nodes.has("Run LLM reindex.ts"));
-  assert.ok(nodes.has("Run LLM commit.ts"));
-  assert.match(nodes.get("Build OpenRouter Source Note Request").parameters.jsCode, /without losing materially useful information/);
-  assert.match(nodes.get("Build OpenRouter Source Note Request").parameters.jsCode, /Do not invent facts/);
-  assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /LLM source note must include non-empty/);
-  assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /payload_b64/);
-  assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /content: ''/);
-  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Never write directly under wiki/);
-  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /wiki\/topics\/productivity\.md/);
-  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /allowed_page_path_prefixes/);
-  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /source_note_update_allowed_path/);
-  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Linked Notes/);
-  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Sources/);
-  assert.match(nodes.get("Build OpenRouter Ingest Plan Request").parameters.jsCode, /Parse Source Note Plan/);
-  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /guardrailRejections/);
-  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /idempotency_key/);
-  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /baselineSourceNotePath/);
-  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /hasOnlyLinkedNotesSection/);
-  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /source note updates may only write Linked Notes/);
-  assert.match(nodes.get("Parse LLM Ingest Plan").parameters.jsCode, /page path outside allowed wiki areas/);
-  assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /openrouter_source_note_meta/);
-  assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /baseline_ingest_applied_llm_plan_applied/);
-  assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /llm_guardrail_rejections/);
-  assert.ok(nodes.has("Build Telegram Ingest Log"));
+  assert.equal(workflow.nodes.length, 8);
+  assert.ok(nodes.has("Build Ingest Run Payload"));
+  assert.ok(nodes.has("Run ingest-run.ts"));
+  assert.ok(nodes.has("Parse Ingest Run Result"));
   assert.ok(nodes.has("Should Send Telegram Ingest Log?"));
   assert.ok(nodes.has("Send Telegram Ingest Log"));
-  assert.ok(nodes.has("Finalize Ingest Response"));
-  assert.match(nodes.get("Build Telegram Ingest Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
-  assert.match(nodes.get("Build Telegram Ingest Log").parameters.jsCode, /telegram_skip_reason/);
-  assert.match(nodes.get("Build Telegram Ingest Log").parameters.jsCode, /KB ingest completed/);
-  assert.equal(nodes.get("Call OpenRouter Source Note Cleaner").type, "n8n-nodes-base.httpRequest");
-  assert.equal(nodes.get("Call OpenRouter Ingest Planner").type, "n8n-nodes-base.httpRequest");
-  assert.equal(
-    nodes.get("Call OpenRouter Source Note Cleaner").parameters.headerParameters.parameters[0].name,
-    "Authorization"
-  );
-  assert.equal(
-    nodes.get("Call OpenRouter Source Note Cleaner").parameters.headerParameters.parameters[0].value,
-    "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
-  );
-  assert.deepEqual(
-    nodes.get("Call OpenRouter Source Note Cleaner").parameters.headerParameters.parameters.map((header) => header.name),
-    ["Authorization", "Content-Type", "HTTP-Referer", "X-OpenRouter-Title"]
-  );
-  assert.doesNotMatch(JSON.stringify(nodes.get("Call OpenRouter Source Note Cleaner").parameters), /fetch/);
+  assert.ok(!workflow.nodes.some((node) => node.name.includes("OpenRouter")));
+  assert.match(nodes.get("Run ingest-run.ts").parameters.command, /ingest-run.js/);
+  assert.match(nodes.get("Build Ingest Run Payload").parameters.jsCode, /payload_b64/);
+  assert.match(nodes.get("Finalize Ingest Response").parameters.jsCode, /telegram_last_update_id/);
 
-  assert.equal(workflow.connections["Parse Source Payload"].main[0][0].node, "Build OpenRouter Source Note Request");
-  assert.equal(workflow.connections["Build OpenRouter Source Note Request"].main[0][0].node, "Call OpenRouter Source Note Cleaner");
-  assert.equal(workflow.connections["Call OpenRouter Source Note Cleaner"].main[0][0].node, "Parse LLM Source Note");
-  assert.equal(workflow.connections["Parse LLM Source Note"].main[0][0].node, "Run plan-source-note.ts");
-  assert.equal(workflow.connections["Parse LLM Ingest Plan"].main[0][0].node, "Should Apply LLM Plan?");
-  assert.equal(workflow.connections["Should Apply LLM Plan?"].main[0][0].node, "Prepare LLM Plan Application");
-  assert.equal(workflow.connections["Should Apply LLM Plan?"].main[1][0].node, "Build Ingest Response");
-  assert.equal(workflow.connections["Parse LLM Commit Result"].main[0][0].node, "Build Ingest Response");
-  assert.equal(workflow.connections["Build Ingest Response"].main[0][0].node, "Build Telegram Ingest Log");
-  assert.equal(workflow.connections["Build Telegram Ingest Log"].main[0][0].node, "Should Send Telegram Ingest Log?");
+  assert.equal(workflow.connections["Local File Trigger"].main[0][0].node, "Build Ingest Run Payload");
+  assert.equal(workflow.connections["Manual Trigger"].main[0][0].node, "Build Ingest Run Payload");
+  assert.equal(workflow.connections["Build Ingest Run Payload"].main[0][0].node, "Run ingest-run.ts");
+  assert.equal(workflow.connections["Run ingest-run.ts"].main[0][0].node, "Parse Ingest Run Result");
+  assert.equal(workflow.connections["Parse Ingest Run Result"].main[0][0].node, "Should Send Telegram Ingest Log?");
   assert.equal(workflow.connections["Should Send Telegram Ingest Log?"].main[0][0].node, "Send Telegram Ingest Log");
   assert.equal(workflow.connections["Should Send Telegram Ingest Log?"].main[1][0].node, "Finalize Ingest Response");
-  assert.equal(workflow.connections["Send Telegram Ingest Log"].main[0][0].node, "Finalize Ingest Response");
-
-  const parseLlmPlan = (plan) => {
-    const $input = {
-      first: () => ({
-        json: {
-          choices: [
-            {
-              message: {
-                content: JSON.stringify(plan)
-              }
-            }
-          ]
-        }
-      })
-    };
-    const $node = {
-      "Build OpenRouter Ingest Plan Request": {
-        json: {
-          baseline_mutation_plan: {
-            page_actions: [{ path: "wiki/sources/source-a.md" }]
-          }
-        }
-      }
-    };
-
-    return new Function("$input", "$node", nodes.get("Parse LLM Ingest Plan").parameters.jsCode)($input, $node)[0].json;
-  };
-  const guarded = parseLlmPlan({
-    plan_id: "plan-guardrail-test",
-    source_refs: ["raw/inbox/source-a.md", "wiki/sources/source-a.md"],
-    page_actions: [
-      {
-        path: "wiki/sources/source-a.md",
-        action: "update",
-        idempotency_key: "src-a:linked-notes",
-        payload: { sections: { "Linked Notes": ["[[Model Context Protocol]]"] } }
-      },
-      {
-        path: "wiki/sources/other-source.md",
-        action: "update",
-        idempotency_key: "src-a:other",
-        payload: { sections: { "Linked Notes": ["[[Other]]"] } }
-      },
-      {
-        path: "wiki/sources/source-a.md",
-        action: "update",
-        idempotency_key: "src-a:summary",
-        payload: { sections: { Summary: ["Do not rewrite source summary."] } }
-      }
-    ],
-    index_updates: []
-  });
-  assert.equal(guarded.llm_mutation_plan.page_actions[0].action, "update");
-  assert.equal(guarded.llm_mutation_plan.page_actions[1].action, "noop");
-  assert.equal(guarded.llm_mutation_plan.page_actions[2].action, "noop");
-  assert.deepEqual(
-    guarded.llm_guardrail_rejections.map((item) => item.reason),
-    ["page path outside allowed wiki areas", "source note updates may only write Linked Notes"]
-  );
 });
 
-test("telegram bot workflow routes answer and ingest commands", async () => {
+test("telegram bot workflow delegates answer and ingest work to macro scripts", async () => {
   const workflow = JSON.parse(await fs.readFile(repoPath("n8n/workflows/kb-answer-blueprint.json"), "utf8"));
   const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
 
+  assert.equal(workflow.nodes.length, 23);
   assert.ok(!nodes.has("Webhook"));
   assert.ok(nodes.has("Schedule Trigger"));
-  assert.ok(nodes.has("Build Telegram Poll Request"));
-  assert.ok(nodes.has("Should Poll Telegram?"));
   assert.ok(nodes.has("Call Telegram getUpdates"));
-  assert.ok(nodes.has("Prepare Telegram Updates"));
   assert.ok(nodes.has("Acquire Bot Lock"));
   assert.ok(nodes.has("Parse Bot Lock Result"));
   assert.ok(nodes.has("Is Telegram Ingest Command?"));
-  assert.ok(nodes.has("Prepare YouTube Ingest Request"));
-  assert.ok(nodes.has("Run youtube-transcript.ts"));
-  assert.ok(nodes.has("Parse YouTube Transcript Result"));
-  assert.ok(nodes.has("Should Ingest YouTube Transcript?"));
-  assert.match(nodes.get("Parse LLM Source Note").parameters.jsCode, /content: ''/);
-  assert.ok(nodes.has("Build Telegram Ingest Failure Log"));
-  assert.ok(nodes.has("Build Telegram Answer Log"));
-  assert.ok(nodes.has("Should Send Telegram Answer Log?"));
+  assert.ok(nodes.has("Run answer-run.ts"));
+  assert.ok(nodes.has("Run ingest-run.ts"));
   assert.ok(nodes.has("Send Telegram Answer Log"));
-  assert.ok(nodes.has("Finalize Answer Response"));
+  assert.ok(nodes.has("Send Telegram Ingest Log"));
   assert.ok(nodes.has("Release Bot Lock After Answer"));
-  assert.ok(nodes.has("Release Bot Lock After Ingest Failure"));
   assert.ok(nodes.has("Release Bot Lock After Ingest"));
+  assert.ok(!workflow.nodes.some((node) => node.name.includes("OpenRouter")));
+  assert.ok(!workflow.nodes.some((node) => node.name === "Run youtube-transcript.ts"));
+  assert.match(nodes.get("Run answer-run.ts").parameters.command, /answer-run.js/);
+  assert.match(nodes.get("Run ingest-run.ts").parameters.command, /ingest-run.js/);
+  assert.match(nodes.get("Acquire Bot Lock").parameters.command, /bot-lock.js acquire/);
+  assert.match(nodes.get("Release Bot Lock After Answer").parameters.command, /bot-lock.js release/);
   assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /getWorkflowStaticData/);
-  assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
-  assert.match(nodes.get("Build Telegram Poll Request").parameters.jsCode, /offset = -1/);
   assert.match(nodes.get("Prepare Telegram Updates").parameters.jsCode, /telegram_last_update_id/);
-  assert.match(nodes.get("Prepare Telegram Updates").parameters.jsCode, /ingest/);
-  assert.doesNotMatch(nodes.get("Prepare Telegram Updates").parameters.jsCode, /telegram_bot_lock/);
-  assert.match(nodes.get("Acquire Bot Lock").parameters.command, /bot-lock\.js acquire/);
-  assert.match(nodes.get("Acquire Bot Lock").parameters.command, /telegram-update-/);
-  assert.match(nodes.get("Parse Bot Lock Result").parameters.jsCode, /telegram_lock_id/);
-  assert.match(nodes.get("Release Bot Lock After Answer").parameters.command, /bot-lock\.js release/);
-  assert.match(nodes.get("Release Bot Lock After Ingest Failure").parameters.command, /bot-lock\.js release/);
-  assert.match(nodes.get("Release Bot Lock After Ingest").parameters.command, /bot-lock\.js release/);
-  assert.doesNotMatch(nodes.get("Finalize Answer Response").parameters.jsCode, /delete staticData\.telegram_bot_lock/);
-  assert.doesNotMatch(nodes.get("Finalize Telegram Ingest Failure Log").parameters.jsCode, /delete staticData\.telegram_bot_lock/);
-  assert.doesNotMatch(nodes.get("Finalize Ingest Response").parameters.jsCode, /delete staticData\.telegram_bot_lock/);
-  assert.match(nodes.get("Run youtube-transcript.ts").parameters.command, /youtube-transcript/);
-  assert.match(nodes.get("Run youtube-transcript.ts").notes, /yt-dlp/);
-  assert.match(nodes.get("Prepare Query").parameters.jsCode, /telegram_chat_id/);
-  assert.match(nodes.get("Prepare Query").parameters.jsCode, /Unauthorized Telegram chat id/);
-  assert.match(nodes.get("Prepare Query").parameters.jsCode, /telegram_lock_id/);
-  assert.match(nodes.get("Build Answer Response").parameters.jsCode, /telegram_update_id/);
-  assert.match(nodes.get("Build Answer Response").parameters.jsCode, /telegram_lock_id/);
-  assert.match(nodes.get("Prepare YouTube Ingest Request").parameters.jsCode, /telegram_lock_id/);
-  assert.match(nodes.get("Normalize Raw Event").parameters.jsCode, /telegram_lock_id/);
-  assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /telegram_lock_id/);
-  assert.equal(nodes.get("Call OpenRouter Answer").type, "n8n-nodes-base.httpRequest");
-  assert.equal(nodes.get("Call OpenRouter Feedback").type, "n8n-nodes-base.httpRequest");
-  assert.equal(nodes.get("Call OpenRouter Ingest Planner").type, "n8n-nodes-base.httpRequest");
-  assert.equal(nodes.get("Call OpenRouter Source Note Cleaner").type, "n8n-nodes-base.httpRequest");
-  assert.equal(nodes.get("Call OpenRouter Answer").parameters.headerParameters.parameters[0].name, "Authorization");
-  assert.equal(
-    nodes.get("Call OpenRouter Answer").parameters.headerParameters.parameters[0].value,
-    "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
-  );
-  assert.deepEqual(
-    nodes.get("Call OpenRouter Answer").parameters.headerParameters.parameters.map((header) => header.name),
-    ["Authorization", "Content-Type", "HTTP-Referer", "X-OpenRouter-Title"]
-  );
-  assert.doesNotMatch(JSON.stringify(nodes.get("Call OpenRouter Answer").parameters), /fetch/);
-  assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
-  assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /telegram_skip_reason/);
-  assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /KB answer completed/);
-
-  const $input = {
-    first: () => ({
-      json: {
-        body: {
-          update_id: 123,
-          message: {
-            message_id: 456,
-            chat: { id: 789 },
-            text: "/ask What does MCP connect?"
-          }
-        },
-        telegram_polled: true,
-        telegram_lock_acquired: true,
-        telegram_lock_id: "lock-123"
-      }
-    })
-  };
-  const prepared = new Function("$input", "$env", nodes.get("Prepare Query").parameters.jsCode)($input, {
-    TELEGRAM_CHAT_ID: "789"
-  })[0].json;
-  assert.equal(prepared.question, "What does MCP connect?");
-  assert.equal(prepared.telegram_chat_id, "789");
-  assert.equal(prepared.telegram_message_id, 456);
-  assert.equal(prepared.telegram_polled, true);
-  assert.equal(prepared.telegram_update_id, 123);
-  assert.equal(prepared.telegram_lock_acquired, true);
-  assert.equal(prepared.telegram_lock_id, "lock-123");
 
   const staticData = {};
   const polled = new Function(
@@ -466,21 +303,14 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
     () => staticData
   )[0].json;
   assert.equal(polled.body.update_id, 123);
-  assert.equal(polled.telegram_polled, true);
   assert.equal(polled.telegram_command, "ask");
-  assert.equal(polled.telegram_lock_acquired, undefined);
   assert.equal(staticData.telegram_last_update_id, undefined);
 
-  const lockId = "telegram-bot-lock-123";
   const locked = new Function("$input", "$node", nodes.get("Parse Bot Lock Result").parameters.jsCode)(
     {
       first: () => ({
         json: {
-          stdout: JSON.stringify({
-            status: "locked",
-            acquired: false,
-            lock_id: "existing-lock"
-          })
+          stdout: JSON.stringify({ status: "locked", acquired: false, lock_id: "existing-lock" })
         }
       })
     },
@@ -488,141 +318,34 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
   );
   assert.deepEqual(locked, []);
 
+  const lockId = "telegram-bot-lock-123";
   const lockedPolled = new Function("$input", "$node", nodes.get("Parse Bot Lock Result").parameters.jsCode)(
     {
-      first: () => ({
-        json: {
-          stdout: JSON.stringify({
-            status: "acquired",
-            acquired: true,
-            lock_id: lockId
-          })
-        }
-      })
+      first: () => ({ json: { stdout: JSON.stringify({ status: "acquired", acquired: true, lock_id: lockId }) } })
     },
     { "Prepare Telegram Updates": { json: polled } }
   )[0].json;
   assert.equal(lockedPolled.telegram_lock_acquired, true);
   assert.equal(lockedPolled.telegram_lock_id, lockId);
 
-  const nextPoll = new Function(
-    "$input",
-    "$env",
-    "$getWorkflowStaticData",
-    nodes.get("Prepare Telegram Updates").parameters.jsCode
-  )(
-    {
-      first: () => ({
-        json: {
-          ok: true,
-          result: [
-            {
-              update_id: 124,
-              message: {
-                message_id: 457,
-                chat: { id: 789 },
-                text: "/ingest https://youtu.be/dQw4w9WgXcQ"
-              }
-            }
-          ]
-        }
-      })
-    },
-    { TELEGRAM_CHAT_ID: "789" },
-    () => staticData
-  )[0].json;
-  assert.equal(nextPoll.telegram_command, "ingest");
-  assert.equal(staticData.telegram_last_update_id, undefined);
-
-  new Function("$json", "$node", "$getWorkflowStaticData", nodes.get("Finalize Answer Response").parameters.jsCode)(
-    {},
-    {
-      "Build Telegram Answer Log": {
-        json: {
-          telegram_polled: true,
-          telegram_update_id: 123,
-          telegram_lock_acquired: true,
-          telegram_lock_id: lockId
-        }
-      }
-    },
-    () => staticData
-  );
-  assert.equal(staticData.telegram_last_update_id, 123);
-
-  const ingestPoll = new Function(
-    "$input",
-    "$env",
-    "$getWorkflowStaticData",
-    nodes.get("Prepare Telegram Updates").parameters.jsCode
-  )(
-    {
-      first: () => ({
-        json: {
-          ok: true,
-          result: [
-            {
-              update_id: 124,
-              message: {
-                message_id: 457,
-                chat: { id: 789 },
-                text: "/ingest https://youtu.be/dQw4w9WgXcQ"
-              }
-            }
-          ]
-        }
-      })
-    },
-    { TELEGRAM_CHAT_ID: "789" },
-    () => staticData
-  )[0].json;
-  const ingestCommand = new Function("$input", "$node", nodes.get("Parse Bot Lock Result").parameters.jsCode)(
-    {
-      first: () => ({
-        json: {
-          stdout: JSON.stringify({
-            status: "acquired",
-            acquired: true,
-            lock_id: "telegram-bot-lock-124"
-          })
-        }
-      })
-    },
-    { "Prepare Telegram Updates": { json: ingestPoll } }
-  )[0].json;
-  assert.equal(ingestCommand.telegram_command, "ingest");
-  assert.equal(staticData.telegram_last_update_id, 123);
-
-  const ingestRequest = new Function("$input", nodes.get("Prepare YouTube Ingest Request").parameters.jsCode)({
-    first: () => ({ json: ingestCommand })
+  const answerPayload = new Function("$input", nodes.get("Build Answer Run Payload").parameters.jsCode)({
+    first: () => ({ json: lockedPolled })
   })[0].json;
-  assert.equal(ingestRequest.youtube_ingest_status, "pending");
-  assert.equal(ingestRequest.youtube_ingest_url, "https://youtu.be/dQw4w9WgXcQ");
-  assert.equal(ingestRequest.telegram_lock_acquired, true);
-  assert.equal(ingestRequest.telegram_lock_id, ingestCommand.telegram_lock_id);
-  assert.ok(ingestRequest.youtube_payload_b64);
+  assert.ok(answerPayload.payload_b64);
 
-  assert.equal(workflow.connections["Schedule Trigger"].main[0][0].node, "Build Telegram Poll Request");
-  assert.equal(workflow.connections["Build Telegram Poll Request"].main[0][0].node, "Should Poll Telegram?");
-  assert.equal(workflow.connections["Should Poll Telegram?"].main[0][0].node, "Call Telegram getUpdates");
-  assert.equal(workflow.connections["Call Telegram getUpdates"].main[0][0].node, "Prepare Telegram Updates");
-  assert.equal(workflow.connections["Prepare Telegram Updates"].main[0][0].node, "Acquire Bot Lock");
-  assert.equal(workflow.connections["Acquire Bot Lock"].main[0][0].node, "Parse Bot Lock Result");
-  assert.equal(workflow.connections["Parse Bot Lock Result"].main[0][0].node, "Is Telegram Ingest Command?");
-  assert.equal(workflow.connections["Is Telegram Ingest Command?"].main[0][0].node, "Prepare YouTube Ingest Request");
-  assert.equal(workflow.connections["Is Telegram Ingest Command?"].main[1][0].node, "Prepare Query");
-  assert.equal(workflow.connections["Should Ingest YouTube Transcript?"].main[0][0].node, "Normalize Raw Event");
-  assert.equal(workflow.connections["Should Ingest YouTube Transcript?"].main[1][0].node, "Build Telegram Ingest Failure Log");
-  assert.equal(workflow.connections["Build Answer Response"].main[0][0].node, "Build Telegram Answer Log");
-  assert.equal(workflow.connections["Build Telegram Answer Log"].main[0][0].node, "Should Send Telegram Answer Log?");
-  assert.equal(workflow.connections["Should Send Telegram Answer Log?"].main[0][0].node, "Send Telegram Answer Log");
-  assert.equal(workflow.connections["Should Send Telegram Answer Log?"].main[1][0].node, "Finalize Answer Response");
-  assert.equal(workflow.connections["Send Telegram Answer Log"].main[0][0].node, "Finalize Answer Response");
+  const finalized = new Function("$json", "$node", "$getWorkflowStaticData", nodes.get("Finalize Answer Response").parameters.jsCode)(
+    {},
+    { "Parse Answer Run Result": { json: { telegram_polled: true, telegram_update_id: 123 } } },
+    () => staticData
+  )[0].json;
+  assert.equal(finalized.telegram_update_id, 123);
+  assert.equal(staticData.telegram_last_update_id, 123);
+
+  assert.equal(workflow.connections["Is Telegram Ingest Command?"].main[0][0].node, "Build Ingest Run Payload");
+  assert.equal(workflow.connections["Is Telegram Ingest Command?"].main[1][0].node, "Build Answer Run Payload");
+  assert.equal(workflow.connections["Build Answer Run Payload"].main[0][0].node, "Run answer-run.ts");
+  assert.equal(workflow.connections["Build Ingest Run Payload"].main[0][0].node, "Run ingest-run.ts");
   assert.equal(workflow.connections["Finalize Answer Response"].main[0][0].node, "Release Bot Lock After Answer");
-  assert.equal(
-    workflow.connections["Finalize Telegram Ingest Failure Log"].main[0][0].node,
-    "Release Bot Lock After Ingest Failure"
-  );
   assert.equal(workflow.connections["Finalize Ingest Response"].main[0][0].node, "Release Bot Lock After Ingest");
 });
 
@@ -920,6 +643,180 @@ test("answer-context reads wiki docs and answer-record persists the output artif
   assert.match(artifact, /- wiki\/concepts\/model-context-protocol\.md/);
 });
 
+test("answer-run performs retrieval, LLM answer synthesis, answer recording, and feedback validation", async () => {
+  const vault = await createVault();
+  await runTool("init-db", ["--vault", vault]);
+  await runTool("reindex", ["--vault", vault]);
+
+  const mock = await startMockOpenRouter([
+    {
+      body: {
+        id: "chat-answer",
+        model: "mock/model",
+        choices: [
+          {
+            message: { content: "MCP connects tools and context." },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { total_tokens: 12 }
+      }
+    },
+    {
+      body: {
+        id: "chat-feedback",
+        model: "mock/model",
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                decision: "output_only",
+                reason: "The answer is useful but does not need a wiki mutation.",
+                source_refs: [],
+                candidate_items: [],
+                affected_notes: []
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { total_tokens: 8 }
+      }
+    }
+  ]);
+
+  try {
+    const inputPath = path.join(vault, "answer-run-input.json");
+    await writeJson(inputPath, {
+      question: "What does MCP connect?",
+      limit: 5
+    });
+
+    const result = await runTool("answer-run", ["--vault", vault, "--input", inputPath], {
+      env: {
+        OPENROUTER_API_KEY: "test-key",
+        LLM_API_KEY_HEADER: "x-api-key",
+        OPENROUTER_BASE_URL: mock.baseUrl,
+        OPENROUTER_MODEL: "mock/model",
+        TELEGRAM_BOT_TOKEN: "",
+        TELEGRAM_CHAT_ID: ""
+      }
+    });
+
+    assert.equal(result.json.status, "answer_recorded_feedback_proposed");
+    assert.equal(result.json.answer, "MCP connects tools and context.");
+    assert.equal(result.json.proposed_feedback.decision, "output_only");
+    assert.equal(result.json.openrouter_answer_meta.id, "chat-answer");
+    assert.equal(result.json.openrouter_feedback_meta.id, "chat-feedback");
+    assert.ok(result.json.retrieval.results.some((item) => item.path === "wiki/concepts/model-context-protocol.md"));
+    assert.equal(result.json.telegram_enabled, false);
+    assert.equal(mock.requests.length, 2);
+    assert.ok(mock.requests.every((request) => request.headers["x-api-key"] === "test-key"));
+    assert.ok(mock.requests.every((request) => !request.headers.authorization));
+
+    const artifact = await readFile(path.join(vault, result.json.output_path));
+    assert.match(artifact, /# Answer: What does MCP connect\?/);
+    assert.match(artifact, /MCP connects tools and context\./);
+  } finally {
+    await mock.close();
+  }
+});
+
+test("ingest-run applies the baseline ingest pipeline and skips empty LLM mutation plans", async () => {
+  const vault = await tempDir("dps-wiki-llm-ingest-run-vault-");
+  await runCommand("git", ["init"], { cwd: vault });
+  await runCommand("git", ["config", "user.name", "Test User"], { cwd: vault });
+  await runCommand("git", ["config", "user.email", "test@example.com"], { cwd: vault });
+  await writeFile(path.join(vault, "INDEX.md"), "# Index\n\n## Entries\n");
+  await writeFile(
+    path.join(vault, "raw/web/compact-workflows.md"),
+    `---\ntitle: "Compact Workflow Source"\ncanonical_url: "https://example.com/compact-workflows"\n---\n\nCompact workflows move fragile glue into scripts.\n`
+  );
+
+  const mock = await startMockOpenRouter([
+    {
+      body: {
+        id: "chat-source-note",
+        model: "mock/model",
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                summary: "A source about compact workflows.",
+                raw_context: "The source says compact workflows move fragile glue into scripts.",
+                extracted_claims: ["Compact workflows move fragile glue into scripts."],
+                open_questions: []
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { total_tokens: 10 }
+      }
+    },
+    {
+      body: {
+        id: "chat-ingest-plan",
+        model: "mock/model",
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                plan_id: "plan-compact-workflow-noop",
+                operation: "ingest",
+                summary: "No reusable changes beyond the source note.",
+                source_refs: ["raw/web/compact-workflows.md", "wiki/sources/2026-04-13-compact-workflow-source.md"],
+                page_actions: [],
+                index_updates: [],
+                post_actions: { reindex: true, commit: true }
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { total_tokens: 9 }
+      }
+    }
+  ]);
+
+  try {
+    const inputPath = path.join(vault, "ingest-run-input.json");
+    await writeJson(inputPath, {
+      raw_path: "raw/web/compact-workflows.md",
+      captured_at: "2026-04-13T10:00:00Z"
+    });
+
+    const result = await runTool("ingest-run", ["--vault", vault, "--input", inputPath], {
+      env: {
+        OPENROUTER_API_KEY: "test-key",
+        LLM_API_KEY_HEADER: "x-api-key",
+        OPENROUTER_BASE_URL: mock.baseUrl,
+        OPENROUTER_MODEL: "mock/model",
+        TELEGRAM_BOT_TOKEN: "",
+        TELEGRAM_CHAT_ID: ""
+      }
+    });
+
+    assert.equal(result.json.status, "baseline_ingest_applied_no_llm_changes");
+    assert.equal(result.json.openrouter_source_note_meta.id, "chat-source-note");
+    assert.equal(result.json.openrouter_ingest_meta.id, "chat-ingest-plan");
+    assert.equal(result.json.llm_mutation_result, null);
+    assert.equal(result.json.llm_plan_auto_apply_required, false);
+    assert.equal(result.json.baseline_commit_result.commit_created, true);
+    assert.ok(result.json.baseline_mutation_result.created[0].startsWith("wiki/sources/"));
+    assert.equal(mock.requests.length, 2);
+    assert.ok(mock.requests.every((request) => request.headers["x-api-key"] === "test-key"));
+
+    const sourceNote = await readFile(path.join(vault, result.json.baseline_mutation_result.created[0]));
+    assert.match(sourceNote, /Compact workflows move fragile glue into scripts\./);
+
+    const gitLog = await runCommand("git", ["log", "-1", "--format=%s"], { cwd: vault });
+    assert.equal(gitLog.stdout.trim(), "ingest: Compact Workflow Source");
+  } finally {
+    await mock.close();
+  }
+});
+
 test("new JSON-driven entrypoints reject unsafe paths", async () => {
   const vault = await createVault();
   const ingestInputPath = path.join(vault, "unsafe-ingest.json");
@@ -982,25 +879,30 @@ test("n8n workflow files remain valid JSON", async () => {
 
   const answer = workflows.get("kb-answer-blueprint.json");
   assert.equal(answer.name, "KB - Telegram Bot Polling");
+  assert.equal(answer.nodes.length, 23);
   assert.ok(!answer.nodes.some((node) => node.name === "Webhook"));
   assert.ok(answer.nodes.some((node) => node.name === "Call Telegram getUpdates"));
-  assert.ok(answer.nodes.some((node) => node.name === "Run youtube-transcript.ts"));
-  assert.ok(answer.nodes.some((node) => node.name === "Call OpenRouter Answer"));
-  assert.ok(answer.nodes.some((node) => node.name === "Call OpenRouter Feedback"));
-  assert.ok(answer.nodes.some((node) => node.name === "Validate feedback-record.ts"));
+  assert.ok(answer.nodes.some((node) => node.name === "Run answer-run.ts"));
+  assert.ok(answer.nodes.some((node) => node.name === "Run ingest-run.ts"));
+  assert.ok(answer.nodes.some((node) => node.name === "Acquire Bot Lock"));
+  assert.ok(answer.nodes.some((node) => node.name === "Release Bot Lock After Answer"));
+  assert.ok(answer.nodes.some((node) => node.name === "Release Bot Lock After Ingest"));
   assert.ok(answer.nodes.some((node) => node.name === "Send Telegram Answer Log"));
+  assert.ok(!answer.nodes.some((node) => node.name.includes("OpenRouter")));
   assert.match(
-    answer.nodes.find((node) => node.name === "Build OpenRouter Answer Request").parameters.jsCode,
-    /OPENROUTER_MODEL/
+    answer.nodes.find((node) => node.name === "Run answer-run.ts").parameters.command,
+    /answer-run\.js/
   );
 
   const ingest = workflows.get("kb-ingest-raw-blueprint.json");
   assert.equal(ingest.name, "KB - Ingest Raw OpenRouter Manual");
-  assert.ok(ingest.nodes.some((node) => node.name === "Call OpenRouter Ingest Planner"));
+  assert.equal(ingest.nodes.length, 8);
+  assert.ok(ingest.nodes.some((node) => node.name === "Run ingest-run.ts"));
   assert.ok(ingest.nodes.some((node) => node.name === "Send Telegram Ingest Log"));
+  assert.ok(!ingest.nodes.some((node) => node.name.includes("OpenRouter")));
   assert.match(
-    ingest.nodes.find((node) => node.name === "Build Ingest Response").parameters.jsCode,
-    /llm_plan_approval_required/
+    ingest.nodes.find((node) => node.name === "Run ingest-run.ts").parameters.command,
+    /ingest-run\.js/
   );
 
   const feedback = workflows.get("kb-apply-feedback.json");

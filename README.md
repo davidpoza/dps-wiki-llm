@@ -32,14 +32,16 @@ Breaking the `raw/` versus `wiki/` boundary creates loops, noisy state, and non-
 
 ## Implemented Tooling
 
-The repo now includes the deterministic local toolchain plus importable n8n workflows for a manual OpenRouter production cut. The scripts remain deterministic; OpenRouter calls live in n8n workflow nodes.
+The repo now includes the local toolchain plus compact importable n8n workflows for a manual OpenRouter production cut. n8n handles orchestration and Telegram I/O; fragile LLM and vault operations live in explicit Node.js macro scripts.
 
 | Script | Purpose | Main outputs |
 |---|---|---|
 | `init-db.ts` | Creates the SQLite schema and FTS tables. | `state/kb.db` |
 | `ingest-source.ts` | Normalizes a `raw/**` artifact into the canonical source payload. | stdout JSON |
 | `youtube-transcript.ts` | Calls `yt-dlp` to fetch YouTube subtitles and writes them as a raw transcript artifact. | `raw/web/**` plus stdout JSON |
-| `render-n8n-workflows.ts` | Renders importable n8n workflow JSON with a static LLM API-key header name. | updated `n8n/workflows/*.json` |
+| `ingest-run.ts` | Runs the full ingest path: optional YouTube transcript creation, source normalization, LLM source-note cleanup, baseline apply, reindex, commit, and optional guarded LLM wiki updates. | stdout JSON, `raw/**`, `wiki/**`, `state/**`, git commit |
+| `answer-run.ts` | Runs retrieval, answer synthesis, answer artifact persistence, and feedback-record validation without mutating `wiki/`. | stdout JSON, `outputs/**` |
+| `render-n8n-workflows.ts` | Legacy helper for rendering workflows that still contain n8n OpenRouter HTTP nodes. The compact workflows no longer need it. | updated workflow JSON when applicable |
 | `plan-source-note.ts` | Builds a safe baseline Mutation Plan that creates the source note and root index entry, using an LLM-cleaned `source_note` when provided. | stdout JSON |
 | `apply-update.ts` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
 | `answer-context.ts` | Reads retrieved wiki notes and builds the LLM context packet plus Answer Record shell. | stdout JSON |
@@ -54,7 +56,7 @@ The repo now includes the deterministic local toolchain plus importable n8n work
 Production V1 gaps relative to the target architecture:
 
 - workflows should remain manually run until the VM, WebDAV behavior, and approval path are validated
-- the LLM ingest planner now auto-applies non-empty plans after guardrail validation
+- the LLM ingest planner inside `ingest-run.ts` auto-applies non-empty plans after guardrail validation
 - scheduled maintenance and raw file watching are intentionally left inactive for the first production cut
 
 ## Code Documentation
@@ -111,6 +113,7 @@ services:
       - NODES_EXCLUDE=[]
 
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - LLM_API_KEY_HEADER=${LLM_API_KEY_HEADER}
       - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
       - OPENROUTER_MODEL=${OPENROUTER_MODEL}
       - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
@@ -136,7 +139,9 @@ services:
       - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
       - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+      - LLM_API_KEY_HEADER=${LLM_API_KEY_HEADER}
       - OPENROUTER_MODEL=${OPENROUTER_MODEL}
       - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
       - OPENROUTER_ANSWER_TEMPERATURE=0.2
@@ -293,7 +298,7 @@ npm run --silent feedback-record -- --vault /path/to/vault --input ./feedback.js
 Run the production V1 n8n flow manually:
 
 1. Import the workflows from `n8n/workflows/`.
-2. Set `OPENROUTER_API_KEY` in the n8n runtime and optionally set `OPENROUTER_MODEL`.
+2. Set `OPENROUTER_API_KEY` in the runtime that executes n8n command nodes. Optionally set `OPENROUTER_MODEL` and `LLM_API_KEY_HEADER`.
 3. Run `KB - Reindex Wiki`.
 4. Run `KB - Telegram Bot Polling` or `KB - Ingest Raw OpenRouter Manual`.
 5. Review any proposed feedback and the LLM ingest plan results.
@@ -315,7 +320,7 @@ npm run --silent commit -- --vault /path/to/vault --input ./commit.json
 ## CLI Conventions
 
 - `--vault` is the root of the target vault and defaults to the current working directory.
-- `--input` is used by JSON-driven scripts such as `ingest-source.ts`, `youtube-transcript.ts`, `plan-source-note.ts`, `apply-update.ts`, `answer-context.ts`, `answer-record.ts`, `feedback-record.ts`, and `commit.ts`.
+- `--input` is used by JSON-driven scripts such as `ingest-run.ts`, `answer-run.ts`, `ingest-source.ts`, `youtube-transcript.ts`, `plan-source-note.ts`, `apply-update.ts`, `answer-context.ts`, `answer-record.ts`, `feedback-record.ts`, and `commit.ts`.
 - `--db` can override the database path for `init-db.ts`, `reindex.ts`, and `search.ts`.
 - `--limit` controls result count in `search.ts`.
 - `--no-write` is supported by `feedback-record.ts`, `lint.ts`, and `health-check.ts`.
@@ -331,10 +336,10 @@ The canonical JSON payload contracts from `AGENTS.md` are represented as TypeScr
 
 - `apply-update.ts` enforces `create`, `update`, and `noop` actions and tracks idempotency keys in `state/runtime/idempotency-keys.json`.
 - `ingest-source.ts` accepts only `raw/**` paths and emits a normalized source payload.
-- `plan-source-note.ts` builds the baseline source note plan. The OpenRouter ingest workflow now requires an LLM-cleaned `source_note` before mutating `wiki/`, then proposes and auto-applies richer wiki propagation only after guardrail validation.
+- `plan-source-note.ts` builds the baseline source note plan. `ingest-run.ts` requires an LLM-cleaned `source_note` before mutating `wiki/`, then proposes and auto-applies richer wiki propagation only after guardrail validation.
 - `reindex.ts` indexes markdown derived from `wiki/`, not `raw/`.
 - `search.ts` queries the FTS index and returns ranked results with `path`, `title`, `doc_type`, and `score`.
-- `answer-context.ts` reads retrieved wiki markdown for LLM context; the OpenRouter answer workflow stores the answer under `outputs/` with `answer-record.ts` and returns feedback for review.
+- `answer-context.ts` reads retrieved wiki markdown for LLM context; `answer-run.ts` stores the answer under `outputs/` with `answer-record.ts` and returns feedback for review.
 - `lint.ts` focuses on structure and maintainability.
 - `health-check.ts` focuses on unsupported claims, stale low-confidence notes, and missing pages.
 - `commit.ts` writes a change log to `state/change-log/` before creating the git commit.

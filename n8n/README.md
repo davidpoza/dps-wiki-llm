@@ -9,8 +9,8 @@ This directory contains importable n8n workflow JSON files aligned with the scri
 - Obsidian vault mounted inside the n8n container at `/data/vault`
 - `Execute Command` enabled in self-hosted n8n
 - `Local File Trigger` enabled in self-hosted n8n if you want reactive ingestion from `raw/`
-- `OPENROUTER_API_KEY` configured in the n8n runtime for OpenRouter calls
-- optional `LLM_API_KEY_HEADER` used before importing when the LLM provider expects the raw API key in a header other than `Authorization`
+- `OPENROUTER_API_KEY` configured in the runtime that executes `Execute Command` nodes
+- optional `LLM_API_KEY_HEADER` configured in that same command runtime when the LLM provider expects the raw API key in a header other than `Authorization`
 - optional `OPENROUTER_MODEL` configured when you want to pin a model instead of using OpenRouter account defaults
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` configured when you want answer input/output and ingest logs over Telegram
 
@@ -20,13 +20,7 @@ The workflow command nodes use `node /app/dist/tools/<tool>.js ...` so stdout re
 
 For Docker Compose deployments, build the `n8n` service from the repository `Dockerfile`. The image installs n8n plus the compiled scripts into `/app`, so the workflows can find them without a bind mount over `/app`.
 
-The checked-in workflow JSON uses a static `Authorization: Bearer <OPENROUTER_API_KEY>` header for OpenRouter. If the provider needs a different API-key header, render the workflows before importing them:
-
-```sh
-LLM_API_KEY_HEADER=x-api-key npm run render-n8n-workflows
-```
-
-This keeps the header name static inside n8n and avoids runtime expression parsing issues in HTTP Request headers.
+The compact workflows do not contain OpenRouter HTTP Request nodes. `answer-run.ts` and `ingest-run.ts` read the LLM runtime configuration directly from the command environment. If the provider needs a different API-key header, set `LLM_API_KEY_HEADER` in the service that executes the command nodes; keep it unset or set to `Authorization` for the default `Authorization: Bearer <OPENROUTER_API_KEY>` behavior.
 
 The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/production-runbook.md).
 
@@ -40,8 +34,8 @@ The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/pro
   - runnable scheduled/manual Telegram bot workflow
   - polls Telegram with `getUpdates` and routes `/ask`, `/answer`, `/query`, and `/ingest`
   - acquires a short-lived filesystem Telegram bot lock before routing a polled update, so overlapping schedule cycles do not process concurrent bot tasks
-  - answer route runs `search.ts`, reads the top-k wiki markdown through `answer-context.ts`, calls OpenRouter for answer synthesis, and writes the answer via `answer-record.ts`
-  - ingest route accepts `/ingest <youtube-url>`, extracts YouTube subtitles through `youtube-transcript.ts` backed by `yt-dlp`, creates a `raw/web/**` artifact, and runs the normal ingest pipeline
+  - answer route delegates retrieval, answer synthesis, answer persistence, and feedback validation to `answer-run.ts`
+  - ingest route accepts `/ingest <youtube-url>` and delegates YouTube subtitle extraction plus the normal ingest pipeline to `ingest-run.ts`
   - sends Telegram logs for answer output, completed ingest, and handled ingest failures such as videos without subtitles
 
 - `workflows/kb-weekly-lint.json`
@@ -60,8 +54,7 @@ The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/pro
 - `workflows/kb-ingest-raw-blueprint.json`
   - runnable manual OpenRouter workflow
   - shows the orchestration for `raw/**` ingestion
-  - runs `ingest-source.ts`, calls OpenRouter to clean the source note content, then uses `plan-source-note.ts` to create and commit the source note
-  - calls OpenRouter for an optional richer Mutation Plan and auto-applies non-empty plans after guardrail validation, including narrow source-note `Linked Notes` backlinks
+  - delegates source normalization, LLM source-note cleanup, baseline source-note creation, optional guarded LLM propagation, reindexing, and commits to `ingest-run.ts`
   - sends a Telegram ingest log when Telegram env is configured
 
 ## Recommended Topology
@@ -70,15 +63,15 @@ Keep the orchestration split into small workflows instead of one large graph:
 
 1. `KB - Ingest Raw OpenRouter Manual`
    - runs manually in V1; only activate the raw watcher after WebDAV behavior is validated
-   - normalizes the event
-   - cleans the source note content through OpenRouter before mutating `wiki/`
-   - creates and commits the source-note baseline plan
-   - proposes richer wiki mutations through OpenRouter and applies safe non-empty plans with source/concept links
+   - delegates the event to `ingest-run.ts`
+   - `ingest-run.ts` cleans the source note content through OpenRouter before mutating `wiki/`
+   - `ingest-run.ts` creates and commits the source-note baseline plan
+   - `ingest-run.ts` proposes richer wiki mutations through OpenRouter and applies safe non-empty plans with source/concept links
 
 2. `KB - Telegram Bot Polling`
    - receives bot commands through outbound `getUpdates` polling
    - routes `/ask`, `/answer`, `/query`, and free text into the answer path
-   - routes `/ingest <youtube-url>` into `yt-dlp`-backed YouTube subtitle extraction, raw artifact creation, and the normal ingest pipeline
+   - routes `/ingest <youtube-url>` into `ingest-run.ts`, which handles `yt-dlp`-backed YouTube subtitle extraction, raw artifact creation, and the normal ingest pipeline
    - uses `state/locks/telegram-bot.lock` as a bot lock; set `TELEGRAM_BOT_LOCK_TTL_MS` to override the default 30 minute stale-lock timeout
    - sends answer, ingest success, and ingest failure logs back to Telegram when configured
 
@@ -101,7 +94,7 @@ Keep the orchestration split into small workflows instead of one large graph:
 - The maintenance workflows write reports under `state/maintenance/` by default.
 - The feedback workflow writes artifacts under `state/feedback/`.
 - Keep every workflow inactive for the first production cut and run them manually from n8n.
-- OpenRouter API keys must live in n8n environment or credentials, not in exported workflow JSON.
+- OpenRouter API keys must live in the command runtime environment or credentials, not in exported workflow JSON.
 - Telegram bot tokens must live in n8n environment or credentials, not in exported workflow JSON.
 - Telegram bot input uses outbound `getUpdates` polling; delete any active Telegram webhook for the bot before activating the polling workflow.
 - The critical boundary remains the same as in `AGENTS.md`: only watch `raw/**`; never auto-trigger on `wiki/**`.
