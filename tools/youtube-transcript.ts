@@ -290,7 +290,7 @@ async function downloadSubtitle(url: string, candidate: SubtitleCandidate, outpu
     "--sub-langs",
     candidate.language,
     "--sub-format",
-    "vtt/json3/srv3/best",
+    "json3/srv3/vtt/best",
     "--no-playlist",
     "--no-warnings",
     "--paths",
@@ -526,7 +526,62 @@ function parseVtt(vtt: string): TranscriptSegment[] {
     });
   }
 
-  return segments;
+  return collapseOverlappingSegments(segments);
+}
+
+function collapseOverlappingSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
+  const collapsed: TranscriptSegment[] = [];
+  let contextTokens: string[] = [];
+  const maxContextTokens = 120;
+
+  for (const segment of segments) {
+    const currentTokens = splitTranscriptTokens(segment.text);
+    if (currentTokens.length === 0) {
+      continue;
+    }
+
+    const overlap = commonSuffixPrefixLength(contextTokens, currentTokens);
+    const suffixTokens = currentTokens.slice(overlap);
+    if (suffixTokens.length === 0) {
+      continue;
+    }
+
+    collapsed.push({
+      ...segment,
+      text: suffixTokens.join(" ")
+    });
+    contextTokens = [...contextTokens, ...suffixTokens].slice(-maxContextTokens);
+  }
+
+  return collapsed;
+}
+
+function splitTranscriptTokens(text: string): string[] {
+  return text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+}
+
+function commonSuffixPrefixLength(previousTokens: string[], currentTokens: string[]): number {
+  const max = Math.min(previousTokens.length, currentTokens.length);
+
+  for (let length = max; length > 0; length -= 1) {
+    let matches = true;
+    for (let index = 0; index < length; index += 1) {
+      if (normalizeTranscriptToken(previousTokens[previousTokens.length - length + index]) !== normalizeTranscriptToken(currentTokens[index])) {
+        matches = false;
+        break;
+      }
+    }
+
+    if (matches) {
+      return length;
+    }
+  }
+
+  return 0;
+}
+
+function normalizeTranscriptToken(token: string): string {
+  return token.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
 }
 
 function parseVttTimestamp(value: string): number {
