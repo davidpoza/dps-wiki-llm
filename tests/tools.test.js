@@ -234,6 +234,8 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   assert.match(nodes.get("Call OpenRouter Ingest Planner").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
   assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /Authorization/);
   assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /OPENROUTER_API_KEY/);
+  assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /apiKeyValue/);
+  assert.doesNotMatch(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /JSON\.stringify/);
 
   assert.equal(workflow.connections["Parse Source Payload"].main[0][0].node, "Build OpenRouter Source Note Request");
   assert.equal(workflow.connections["Build OpenRouter Source Note Request"].main[0][0].node, "Call OpenRouter Source Note Cleaner");
@@ -370,6 +372,8 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
   assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
   assert.match(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /Authorization/);
   assert.match(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /OPENROUTER_API_KEY/);
+  assert.match(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /apiKeyValue/);
+  assert.doesNotMatch(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /JSON\.stringify/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /telegram_skip_reason/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /KB answer completed/);

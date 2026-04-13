@@ -120,7 +120,7 @@
         "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
         "options": {},
         "specifyHeaders": "json",
-        "jsonHeaders": "={{ JSON.stringify({ [$env.LLM_API_KEY_HEADER || 'Authorization']: 'Bearer ' + $env.OPENROUTER_API_KEY, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }) }}"
+        "jsonHeaders": "={{ (() => { const headerName = String($env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization'; const apiKey = String($env.OPENROUTER_API_KEY || '').trim(); const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey; return { [headerName]: apiKeyValue, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }; })() }}"
       },
       "id": "4031b912-0a1b-4e20-b96f-dbd60e47183f",
       "name": "Call OpenRouter Answer",
@@ -210,7 +210,7 @@
         "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
         "options": {},
         "specifyHeaders": "json",
-        "jsonHeaders": "={{ JSON.stringify({ [$env.LLM_API_KEY_HEADER || 'Authorization']: 'Bearer ' + $env.OPENROUTER_API_KEY, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }) }}"
+        "jsonHeaders": "={{ (() => { const headerName = String($env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization'; const apiKey = String($env.OPENROUTER_API_KEY || '').trim(); const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey; return { [headerName]: apiKeyValue, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }; })() }}"
       },
       "id": "1aef9905-e1c9-4737-b8d5-53985dc98a59",
       "name": "Call OpenRouter Feedback",
@@ -835,7 +835,7 @@
         "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
         "options": {},
         "specifyHeaders": "json",
-        "jsonHeaders": "={{ JSON.stringify({ [$env.LLM_API_KEY_HEADER || 'Authorization']: 'Bearer ' + $env.OPENROUTER_API_KEY, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }) }}"
+        "jsonHeaders": "={{ (() => { const headerName = String($env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization'; const apiKey = String($env.OPENROUTER_API_KEY || '').trim(); const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey; return { [headerName]: apiKeyValue, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }; })() }}"
       },
       "id": "0dec72b7-434f-4f3d-a724-cd56417cb72e",
       "name": "Call OpenRouter Ingest Planner",
@@ -1025,7 +1025,7 @@
         "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
         "options": {},
         "specifyHeaders": "json",
-        "jsonHeaders": "={{ JSON.stringify({ [$env.LLM_API_KEY_HEADER || 'Authorization']: 'Bearer ' + $env.OPENROUTER_API_KEY, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }) }}"
+        "jsonHeaders": "={{ (() => { const headerName = String($env.LLM_API_KEY_HEADER || 'Authorization').trim() || 'Authorization'; const apiKey = String($env.OPENROUTER_API_KEY || '').trim(); const apiKeyValue = headerName.toLowerCase() === 'authorization' ? 'Bearer ' + apiKey : apiKey; return { [headerName]: apiKeyValue, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }; })() }}"
       },
       "id": "5848180b-2059-4a01-af58-50599f2fed1d",
       "name": "Call OpenRouter Source Note Cleaner",

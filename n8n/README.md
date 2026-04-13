@@ -10,7 +10,7 @@ This directory contains importable n8n workflow JSON files aligned with the scri
 - `Execute Command` enabled in self-hosted n8n
 - `Local File Trigger` enabled in self-hosted n8n if you want reactive ingestion from `raw/`
 - `OPENROUTER_API_KEY` configured in the n8n runtime for OpenRouter calls
-- optional `LLM_API_KEY_HEADER` configured when the LLM provider expects the API key in a header other than `Authorization`
+- optional `LLM_API_KEY_HEADER` configured when the LLM provider expects the raw API key in a header other than `Authorization`
 - optional `OPENROUTER_MODEL` configured when you want to pin a model instead of using OpenRouter account defaults
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` configured when you want answer input/output and ingest logs over Telegram
 
