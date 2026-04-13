@@ -222,7 +222,7 @@
         "headerParameters": {
           "parameters": [
             {
-              "name": "Authorization",
+              "name": "={{ $env.LLM_API_KEY_HEADER || 'Authorization' }}",
               "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
             },
             {
@@ -430,7 +430,7 @@
         "headerParameters": {
           "parameters": [
             {
-              "name": "Authorization",
+              "name": "={{ $env.LLM_API_KEY_HEADER || 'Authorization' }}",
               "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
             },
             {

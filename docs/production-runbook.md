@@ -23,6 +23,7 @@ services:
     image: dps-wiki-llm-n8n:local
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - LLM_API_KEY_HEADER=${LLM_API_KEY_HEADER}
       - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
       - OPENROUTER_MODEL=${OPENROUTER_MODEL}
       - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
@@ -51,6 +52,7 @@ Set these in the n8n runtime environment or equivalent secret store:
 
 ```text
 OPENROUTER_API_KEY=<secret>
+LLM_API_KEY_HEADER=<optional header name; defaults to Authorization>
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 OPENROUTER_MODEL=<optional model id>
 OPENROUTER_SITE_URL=<optional site/referer>
@@ -61,9 +63,9 @@ TELEGRAM_CHAT_ID=<allowed chat id>
 TELEGRAM_BOT_LOCK_TTL_MS=<optional stale-lock timeout; defaults to 1800000>
 ```
 
-`OPENROUTER_MODEL` is optional so the model can be changed outside the workflow. If it is not set, OpenRouter account defaults apply.
+`OPENROUTER_MODEL` is optional so the model can be changed outside the workflow. If it is not set, OpenRouter account defaults apply. `LLM_API_KEY_HEADER` only changes the request header name that carries `OPENROUTER_API_KEY`; when unset, the workflows keep the current `Authorization: Bearer <key>` behavior.
 
-Add the same OpenRouter and Telegram variables to the `n8n` service environment. If your Code nodes run in the external `n8n-runner` service, also pass `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, `OPENROUTER_ANSWER_TEMPERATURE`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there so Code nodes can read the required runtime configuration. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `commit.ts` is run by an `Execute Command` node, so the main `n8n` service needs them.
+Add the same OpenRouter and Telegram variables to the `n8n` service environment. If your Code nodes run in the external `n8n-runner` service, also pass `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SITE_URL`, `OPENROUTER_ANSWER_TEMPERATURE`, `LLM_API_KEY_HEADER`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there so Code nodes can read the required runtime configuration. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `commit.ts` is run by an `Execute Command` node, so the main `n8n` service needs them.
 
 For Telegram bot input, `KB - Telegram Bot Polling` polls Telegram with `getUpdates`. `TELEGRAM_CHAT_ID` is used as the allowed incoming chat id and as the default output chat for logs.
 
