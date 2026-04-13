@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { parseArgs, readJsonInput } from "../dist/tools/lib/cli.js";
+import { chatCompletionsUrl } from "../dist/tools/lib/llm.js";
 import {
   loadJsonFile,
   pathExists,
@@ -51,6 +52,44 @@ test("readJsonInput reads JSON files", async () => {
   await writeJson(inputPath, { ok: true });
 
   assert.deepEqual(await readJsonInput(inputPath), { ok: true });
+});
+
+test("chatCompletionsUrl normalizes OpenAI-compatible base URL variants", () => {
+  const original = {
+    LLM_CHAT_COMPLETIONS_URL: process.env.LLM_CHAT_COMPLETIONS_URL,
+    LLM_BASE_URL: process.env.LLM_BASE_URL,
+    OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
+    OPENROUTER_BASE_URL: process.env.OPENROUTER_BASE_URL
+  };
+
+  try {
+    delete process.env.LLM_CHAT_COMPLETIONS_URL;
+    delete process.env.LLM_BASE_URL;
+    delete process.env.OPENAI_BASE_URL;
+    delete process.env.OPENROUTER_BASE_URL;
+    assert.equal(chatCompletionsUrl(), "https://openrouter.ai/api/v1/chat/completions");
+
+    process.env.OPENROUTER_BASE_URL = "https://openrouter.ai";
+    assert.equal(chatCompletionsUrl(), "https://openrouter.ai/api/v1/chat/completions");
+
+    process.env.OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
+    assert.equal(chatCompletionsUrl(), "https://openrouter.ai/api/v1/chat/completions");
+
+    delete process.env.OPENROUTER_BASE_URL;
+    process.env.LLM_BASE_URL = "https://llm.example.test/v1";
+    assert.equal(chatCompletionsUrl(), "https://llm.example.test/v1/chat/completions");
+
+    process.env.LLM_CHAT_COMPLETIONS_URL = "https://llm.example.test/custom/chat/completions";
+    assert.equal(chatCompletionsUrl(), "https://llm.example.test/custom/chat/completions");
+  } finally {
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 });
 
 test("fs utilities constrain paths and preserve JSON/text helpers", async () => {

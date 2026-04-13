@@ -929,6 +929,42 @@ test("ingest-run extracts Telegram /ingest YouTube URLs before source normalizat
   }
 });
 
+test("ingest-run returns a handled Telegram failure when /ingest has no URL", async () => {
+  const vault = await tempDir("dps-wiki-llm-telegram-ingest-missing-url-vault-");
+  const inputPath = path.join(vault, "telegram-ingest-run-input.json");
+  await writeJson(inputPath, {
+    update_id: 124,
+    message: {
+      message_id: 457,
+      chat: { id: 789 },
+      text: "/ingest"
+    },
+    telegram_polled: true,
+    telegram_command: "ingest",
+    telegram_lock_acquired: true,
+    telegram_lock_id: "telegram-bot-lock-456"
+  });
+
+  const result = await runTool("ingest-run", ["--vault", vault, "--input", inputPath], {
+    env: {
+      TELEGRAM_BOT_TOKEN: "telegram-token",
+      TELEGRAM_CHAT_ID: "789"
+    }
+  });
+
+  assert.equal(result.json.status, "ingest_input_invalid");
+  assert.equal(result.json.ingest_error, "Telegram /ingest requires a YouTube URL after the command");
+  assert.equal(result.json.telegram_enabled, true);
+  assert.equal(result.json.telegram_chat_id, "789");
+  assert.equal(result.json.telegram_message_id, 457);
+  assert.equal(result.json.telegram_update_id, 124);
+  assert.equal(result.json.telegram_polled, true);
+  assert.equal(result.json.telegram_lock_id, "telegram-bot-lock-456");
+  assert.equal(result.json.telegram_message.chat_id, "789");
+  assert.match(result.json.telegram_message.text, /KB ingest failed/);
+  assert.match(result.json.telegram_message.text, /requires a YouTube URL/);
+});
+
 test("new JSON-driven entrypoints reject unsafe paths", async () => {
   const vault = await createVault();
   const ingestInputPath = path.join(vault, "unsafe-ingest.json");

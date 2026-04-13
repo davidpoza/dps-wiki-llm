@@ -9,9 +9,10 @@ This directory contains importable n8n workflow JSON files aligned with the scri
 - Obsidian vault mounted inside the n8n container at `/data/vault`
 - `Execute Command` enabled in self-hosted n8n
 - `Local File Trigger` enabled in self-hosted n8n if you want reactive ingestion from `raw/`
-- `OPENROUTER_API_KEY` configured in the runtime that executes `Execute Command` nodes
-- optional `LLM_API_KEY_HEADER` configured in that same command runtime when the LLM provider expects the raw API key in a header other than `Authorization`
-- optional `OPENROUTER_MODEL` configured when you want to pin a model instead of using OpenRouter account defaults
+- `LLM_API_KEY` or legacy `OPENROUTER_API_KEY` configured in the runtime that executes `Execute Command` nodes
+- `LLM_BASE_URL` or legacy `OPENROUTER_BASE_URL` configured for the OpenAI-compatible provider
+- optional `LLM_API_KEY_HEADER` configured in that same command runtime when the provider expects the raw API key in a header other than `Authorization`
+- optional `LLM_MODEL` or legacy `OPENROUTER_MODEL` configured when you want to pin a model
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` configured when you want answer input/output and ingest logs over Telegram
 
 If your paths differ, update the command strings and watched paths after importing.
@@ -20,7 +21,7 @@ The workflow command nodes use `node /app/dist/tools/<tool>.js ...` so stdout re
 
 For Docker Compose deployments, build the `n8n` service from the repository `Dockerfile`. The image installs n8n plus the compiled scripts into `/app`, so the workflows can find them without a bind mount over `/app`.
 
-The compact workflows do not contain OpenRouter HTTP Request nodes. `answer-run.ts` and `ingest-run.ts` read the LLM runtime configuration directly from the command environment. If the provider needs a different API-key header, set `LLM_API_KEY_HEADER` in the service that executes the command nodes; keep it unset or set to `Authorization` for the default `Authorization: Bearer <OPENROUTER_API_KEY>` behavior.
+The compact workflows do not contain provider-specific LLM HTTP Request nodes. `answer-run.ts` and `ingest-run.ts` read the LLM runtime configuration directly from the command environment and call an OpenAI-compatible chat completions endpoint. If the provider needs a different API-key header, set `LLM_API_KEY_HEADER` in the service that executes the command nodes; keep it unset or set to `Authorization` for the default `Authorization: Bearer <LLM_API_KEY>` behavior.
 
 The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/production-runbook.md).
 

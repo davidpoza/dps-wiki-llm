@@ -51,19 +51,23 @@ The GitHub Actions workflow at `.github/workflows/docker-publish.yml` publishes 
 Set these in the n8n runtime environment or equivalent secret store:
 
 ```text
-OPENROUTER_API_KEY=<secret>
+LLM_API_KEY=<secret>
 LLM_API_KEY_HEADER=<optional header name; defaults to Authorization>
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=<optional model id>
+LLM_BASE_URL=<OpenAI-compatible base URL, for example https://openrouter.ai/api/v1>
+LLM_CHAT_COMPLETIONS_URL=<optional exact chat completions URL>
+LLM_MODEL=<optional model id>
+LLM_ANSWER_TEMPERATURE=0.2
+OPENROUTER_API_KEY=<legacy alias for LLM_API_KEY>
+OPENROUTER_BASE_URL=<legacy alias for LLM_BASE_URL>
+OPENROUTER_MODEL=<legacy alias for LLM_MODEL>
 OPENROUTER_SITE_URL=<optional site/referer>
-OPENROUTER_ANSWER_TEMPERATURE=0.2
 N8N_BLOCK_ENV_ACCESS_IN_NODE=false
 TELEGRAM_BOT_TOKEN=<secret>
 TELEGRAM_CHAT_ID=<allowed chat id>
 TELEGRAM_BOT_LOCK_TTL_MS=<optional stale-lock timeout; defaults to 1800000>
 ```
 
-`OPENROUTER_MODEL` is optional so the model can be changed outside the workflow. If it is not set, OpenRouter account defaults apply. The compact workflows do not contain n8n OpenRouter HTTP Request nodes; `answer-run.ts` and `ingest-run.ts` call the LLM from Node.js.
+`LLM_MODEL` is optional so the model can be changed outside the workflow. The compact workflows do not contain n8n HTTP Request nodes for the LLM; `answer-run.ts` and `ingest-run.ts` call an OpenAI-compatible chat completions API from Node.js. The older `OPENROUTER_*` names still work as aliases for OpenRouter deployments.
 
 If a provider needs a different API-key header, set `LLM_API_KEY_HEADER` in the runtime that executes the command nodes:
 
@@ -71,9 +75,9 @@ If a provider needs a different API-key header, set `LLM_API_KEY_HEADER` in the 
 LLM_API_KEY_HEADER=x-api-key
 ```
 
-When `LLM_API_KEY_HEADER` is unset or `Authorization`, the scripts send `Authorization: Bearer <OPENROUTER_API_KEY>`. When it is set to a different header name, the scripts send the raw API key in that header.
+When `LLM_API_KEY_HEADER` is unset or `Authorization`, the scripts send `Authorization: Bearer <LLM_API_KEY>`. When it is set to a different header name, the scripts send the raw API key in that header. If a custom service needs a non-Bearer Authorization value, set `LLM_API_KEY_PREFIX` to the required prefix, or set it to an empty string to send the raw key.
 
-Add the same OpenRouter and Telegram variables to the service environment that runs `Execute Command`. Code nodes still read Telegram variables such as `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. If your Code nodes run in the external `n8n-runner` service, pass the Code-node variables and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there as well. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `ingest-run.ts` and `commit.ts` are run by `Execute Command` nodes, so that service needs them.
+Add the same LLM and Telegram variables to the service environment that runs `Execute Command`. Code nodes still read Telegram variables such as `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. If your Code nodes run in the external `n8n-runner` service, pass the Code-node variables and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there as well. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `ingest-run.ts` and `commit.ts` are run by `Execute Command` nodes, so that service needs them.
 
 For Telegram bot input, `KB - Telegram Bot Polling` polls Telegram with `getUpdates`. `TELEGRAM_CHAT_ID` is used as the allowed incoming chat id and as the default output chat for logs.
 

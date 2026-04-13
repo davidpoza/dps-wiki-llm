@@ -582,7 +582,22 @@ async function ensureRawEvent(args: ReturnType<typeof parseArgs>, rawEvent: Inge
   const url = stringValue(rawEvent.youtube_ingest_url);
   if (!url) {
     if (stringValue(rawEvent.telegram_command) === "ingest") {
-      throw new Error("Telegram /ingest requires a YouTube URL after the command");
+      const reason = "Telegram /ingest requires a YouTube URL after the command";
+      return {
+        rawEvent,
+        handledFailure: {
+          status: "ingest_input_invalid",
+          ingest_error: reason,
+          telegram_chat_id: rawEvent.telegram_chat_id ?? null,
+          telegram_message_id: rawEvent.telegram_message_id ?? null,
+          telegram_update_id: rawEvent.telegram_update_id ?? null,
+          telegram_polled: Boolean(rawEvent.telegram_polled),
+          telegram_command: rawEvent.telegram_command ?? null,
+          telegram_lock_acquired: Boolean(rawEvent.telegram_lock_acquired),
+          telegram_lock_id: rawEvent.telegram_lock_id ?? null,
+          ...buildTelegramFailureFields(rawEvent, reason, {})
+        }
+      };
     }
 
     throw new Error("ingest-run requires raw_path, path, filePath, filename, youtube_ingest_url, youtube_url, or url");
