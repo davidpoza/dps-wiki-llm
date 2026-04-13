@@ -228,22 +228,12 @@ test("ingest workflow auto-applies non-empty LLM mutation plans with guardrails"
   assert.match(nodes.get("Build Telegram Ingest Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
   assert.match(nodes.get("Build Telegram Ingest Log").parameters.jsCode, /telegram_skip_reason/);
   assert.match(nodes.get("Build Telegram Ingest Log").parameters.jsCode, /KB ingest completed/);
-  assert.match(
-    nodes.get("Call OpenRouter Source Note Cleaner").parameters.headerParameters.parameters[0].name,
-    /LLM_API_KEY_HEADER/
-  );
-  assert.match(
-    nodes.get("Call OpenRouter Ingest Planner").parameters.headerParameters.parameters[0].name,
-    /LLM_API_KEY_HEADER/
-  );
-  assert.match(
-    nodes.get("Call OpenRouter Source Note Cleaner").parameters.headerParameters.parameters[0].name,
-    /Authorization/
-  );
-  assert.match(
-    nodes.get("Call OpenRouter Source Note Cleaner").parameters.headerParameters.parameters[0].value,
-    /OPENROUTER_API_KEY/
-  );
+  assert.equal(nodes.get("Call OpenRouter Source Note Cleaner").parameters.specifyHeaders, "json");
+  assert.equal(nodes.get("Call OpenRouter Ingest Planner").parameters.specifyHeaders, "json");
+  assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
+  assert.match(nodes.get("Call OpenRouter Ingest Planner").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
+  assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /Authorization/);
+  assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /OPENROUTER_API_KEY/);
 
   assert.equal(workflow.connections["Parse Source Payload"].main[0][0].node, "Build OpenRouter Source Note Request");
   assert.equal(workflow.connections["Build OpenRouter Source Note Request"].main[0][0].node, "Call OpenRouter Source Note Cleaner");
@@ -370,12 +360,16 @@ test("telegram bot workflow routes answer and ingest commands", async () => {
   assert.match(nodes.get("Prepare YouTube Ingest Request").parameters.jsCode, /telegram_lock_id/);
   assert.match(nodes.get("Normalize Raw Event").parameters.jsCode, /telegram_lock_id/);
   assert.match(nodes.get("Build Ingest Response").parameters.jsCode, /telegram_lock_id/);
-  assert.match(nodes.get("Call OpenRouter Answer").parameters.headerParameters.parameters[0].name, /LLM_API_KEY_HEADER/);
-  assert.match(nodes.get("Call OpenRouter Feedback").parameters.headerParameters.parameters[0].name, /LLM_API_KEY_HEADER/);
-  assert.match(nodes.get("Call OpenRouter Ingest Planner").parameters.headerParameters.parameters[0].name, /LLM_API_KEY_HEADER/);
-  assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.headerParameters.parameters[0].name, /LLM_API_KEY_HEADER/);
-  assert.match(nodes.get("Call OpenRouter Answer").parameters.headerParameters.parameters[0].name, /Authorization/);
-  assert.match(nodes.get("Call OpenRouter Answer").parameters.headerParameters.parameters[0].value, /OPENROUTER_API_KEY/);
+  assert.equal(nodes.get("Call OpenRouter Answer").parameters.specifyHeaders, "json");
+  assert.equal(nodes.get("Call OpenRouter Feedback").parameters.specifyHeaders, "json");
+  assert.equal(nodes.get("Call OpenRouter Ingest Planner").parameters.specifyHeaders, "json");
+  assert.equal(nodes.get("Call OpenRouter Source Note Cleaner").parameters.specifyHeaders, "json");
+  assert.match(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
+  assert.match(nodes.get("Call OpenRouter Feedback").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
+  assert.match(nodes.get("Call OpenRouter Ingest Planner").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
+  assert.match(nodes.get("Call OpenRouter Source Note Cleaner").parameters.jsonHeaders, /LLM_API_KEY_HEADER/);
+  assert.match(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /Authorization/);
+  assert.match(nodes.get("Call OpenRouter Answer").parameters.jsonHeaders, /OPENROUTER_API_KEY/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /TELEGRAM_BOT_TOKEN/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /telegram_skip_reason/);
   assert.match(nodes.get("Build Telegram Answer Log").parameters.jsCode, /KB answer completed/);

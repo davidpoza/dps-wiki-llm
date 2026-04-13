@@ -219,30 +219,12 @@
         "url": "={{ $json.openrouter_url }}",
         "authentication": "none",
         "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "={{ $env.LLM_API_KEY_HEADER || 'Authorization' }}",
-              "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "HTTP-Referer",
-              "value": "={{ $env.OPENROUTER_SITE_URL || 'https://localhost' }}"
-            },
-            {
-              "name": "X-OpenRouter-Title",
-              "value": "dps-wiki-llm"
-            }
-          ]
-        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
-        "options": {}
+        "options": {},
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify({ [$env.LLM_API_KEY_HEADER || 'Authorization']: 'Bearer ' + $env.OPENROUTER_API_KEY, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }) }}"
       },
       "id": "0dec72b7-434f-4f3d-a724-cd56417cb72e",
       "name": "Call OpenRouter Ingest Planner",
@@ -427,30 +409,12 @@
         "url": "={{ $json.openrouter_url }}",
         "authentication": "none",
         "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "={{ $env.LLM_API_KEY_HEADER || 'Authorization' }}",
-              "value": "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "HTTP-Referer",
-              "value": "={{ $env.OPENROUTER_SITE_URL || 'https://localhost' }}"
-            },
-            {
-              "name": "X-OpenRouter-Title",
-              "value": "dps-wiki-llm"
-            }
-          ]
-        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.openrouter_request) }}",
-        "options": {}
+        "options": {},
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify({ [$env.LLM_API_KEY_HEADER || 'Authorization']: 'Bearer ' + $env.OPENROUTER_API_KEY, 'Content-Type': 'application/json', 'HTTP-Referer': $env.OPENROUTER_SITE_URL || 'https://localhost', 'X-OpenRouter-Title': 'dps-wiki-llm' }) }}"
       },
       "id": "5848180b-2059-4a01-af58-50599f2fed1d",
       "name": "Call OpenRouter Source Note Cleaner",
