@@ -3,6 +3,7 @@
 import crypto from "node:crypto";
 
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import {
   ensureDirectory,
   loadJsonFile,
@@ -33,9 +34,12 @@ const VALID_ACTIONS = configuredSet(SYSTEM_CONFIG.mutation.validActions);
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("apply-update");
   const vaultRoot = resolveVaultRoot(args.vault);
   const plan = await readJsonInput(args.input);
   validatePlan(plan);
+
+  log.info({ plan_id: plan.plan_id, page_actions: plan.page_actions?.length ?? 0 }, "apply-update started");
 
   const runtimeDir = resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.runtimeDir);
   const ledgerPath = resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.idempotencyLedgerPath);
@@ -71,6 +75,10 @@ async function main(): Promise<void> {
   }
 
   await writeJsonFile(ledgerPath, ledger);
+  log.info(
+    { created: result.created.length, updated: result.updated.length, skipped: result.skipped.length },
+    "apply-update completed"
+  );
   writeJsonStdout(result, args.pretty);
 }
 

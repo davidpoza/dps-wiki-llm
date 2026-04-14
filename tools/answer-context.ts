@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 
 import { SYSTEM_CONFIG } from "./config.js";
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import type { AnswerContextDoc, AnswerContextPacket, AnswerRecord, SearchResult, SearchResultItem } from "./lib/contracts.js";
 import { resolveVaultRoot, resolveWithinRoot } from "./lib/fs-utils.js";
 import { splitFrontmatter } from "./lib/frontmatter.js";
@@ -124,7 +125,9 @@ function normalizeAnswerRecord(input: Record<string, unknown>, question: string,
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("answer-context");
   const vaultRoot = resolveVaultRoot(args.vault);
+  log.info("answer-context started");
   const input = normalizeInput(await readJsonInput(args.input));
   const answerRecord =
     input.answer_record ||
@@ -156,6 +159,7 @@ async function main(): Promise<void> {
     answer_record: answerRecord
   };
 
+  log.info({ context_docs: contextDocs.length }, "answer-context completed");
   writeJsonStdout(packet, args.pretty);
 }
 

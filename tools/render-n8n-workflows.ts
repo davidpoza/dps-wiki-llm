@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 
 import { parseArgs, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 
 const DEFAULT_WORKFLOW_PATHS = [
   "n8n/workflows/kb-answer-blueprint.json",
@@ -98,14 +99,17 @@ async function renderWorkflow(filePath: string, headerName: string, write: boole
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("render-n8n-workflows");
   const headerName = llmHeaderName();
   const workflowPaths = args._.length > 0 ? args._ : DEFAULT_WORKFLOW_PATHS;
+  log.info({ workflow_count: workflowPaths.length }, "render-n8n-workflows started");
   const rendered: RenderedWorkflow[] = [];
 
   for (const workflowPath of workflowPaths) {
     rendered.push(await renderWorkflow(workflowPath, headerName, args.write));
   }
 
+  log.info({ workflow_count: rendered.length, wrote: args.write }, "render-n8n-workflows completed");
   writeJsonStdout(
     {
       status: args.write ? "written" : "rendered",

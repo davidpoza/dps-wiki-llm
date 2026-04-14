@@ -4,6 +4,7 @@ import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import { ensureDirectory, resolveVaultRoot, resolveWithinRoot, writeTextFile } from "./lib/fs-utils.js";
 import { SYSTEM_CONFIG } from "./config.js";
 import type { CommitInput, CommitResult } from "./lib/contracts.js";
@@ -222,8 +223,10 @@ async function resolveGitIdentityEnv(repoRoot: string): Promise<NodeJS.ProcessEn
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("commit");
   const input = normalizeCommitInput(await readJsonInput(args.input));
   const vaultRoot = resolveVaultRoot(args.vault);
+  log.info({ operation: input.operation }, "commit started");
   const repoRoot = await git(["rev-parse", "--show-toplevel"], vaultRoot);
 
   const materialPaths = uniquePaths([
@@ -281,6 +284,7 @@ async function main(): Promise<void> {
     change_log_path: changeLogRelativePath,
     staged_paths: pathsToStage
   };
+  log.info({ commit_sha: commitSha, operation: input.operation }, "commit completed");
   writeJsonStdout(result, args.pretty);
 }
 

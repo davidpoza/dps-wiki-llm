@@ -3,6 +3,7 @@
 import crypto from "node:crypto";
 
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import { ensureDirectory, resolveVaultRoot, resolveWithinRoot, writeJsonFile, writeTextFile } from "./lib/fs-utils.js";
 import { configuredSet, SYSTEM_CONFIG } from "./config.js";
 import type {
@@ -38,7 +39,9 @@ const VALID_OUTCOMES = configuredSet(SYSTEM_CONFIG.feedback.validOutcomes);
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("feedback-record");
   const vaultRoot = resolveVaultRoot(args.vault);
+  log.info("feedback-record started");
   const input = await readJsonInput(args.input);
   const record = normalizeFeedbackRecord(input);
   const stamp = nowStamp();
@@ -62,6 +65,7 @@ async function main(): Promise<void> {
     }
   }
 
+  log.info({ decision: record.decision, wrote: args.write }, "feedback-record completed");
   writeJsonStdout(
     {
       record,

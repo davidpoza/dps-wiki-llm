@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { parseArgs, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import {
   ensureDirectory,
   resolveVaultRoot,
@@ -205,7 +206,9 @@ function renderSummary(result: MaintenanceResult & { missing_pages: MissingPage[
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("health-check");
   const vaultRoot = resolveVaultRoot(args.vault);
+  log.info("health-check started");
   const docs = await loadWikiDocs(vaultRoot);
   const graph = analyzeWikiGraph(docs);
   const docsByPath = new Map(docs.map((doc) => [doc.relativePath, doc]));
@@ -374,6 +377,7 @@ async function main(): Promise<void> {
     result.summary_path = `${SYSTEM_CONFIG.paths.maintenanceDir}/${stamp}-health-check.md`;
   }
 
+  log.info({ docs: result.stats.docs, findings: result.stats.findings, critical: result.stats.critical }, "health-check completed");
   writeJsonStdout(result, args.pretty);
 }
 

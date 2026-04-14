@@ -2,6 +2,7 @@
 
 import { SYSTEM_CONFIG } from "./config.js";
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import type { CommitInput, JsonObject, LlmSourceNote, MutationPlan, NormalizedSourcePayload } from "./lib/contracts.js";
 import { firstMeaningfulParagraph, slugify, stableHash, truncateText } from "./lib/text.js";
 
@@ -252,8 +253,12 @@ function buildPlan(payload: NormalizedSourcePayload): SourceNotePlanOutput {
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("plan-source-note");
+  log.info("plan-source-note started");
   const payload = normalizePayload(await readJsonInput(args.input));
-  writeJsonStdout(buildPlan(payload), args.pretty);
+  const plan = buildPlan(payload);
+  log.info({ plan_id: plan.mutation_plan.plan_id }, "plan-source-note completed");
+  writeJsonStdout(plan, args.pretty);
 }
 
 main().catch((error) => {

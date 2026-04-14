@@ -5,6 +5,7 @@ import { relativeVaultPath, resolveVaultRoot, resolveWithinRoot } from "./lib/fs
 import { ensureSchema, openDatabase } from "./lib/db.js";
 import { SYSTEM_CONFIG } from "./config.js";
 import type { CliArgs } from "./lib/contracts.js";
+import { createLogger } from "./lib/logger.js";
 
 /**
  * Initialize the SQLite database used for wiki indexing and retrieval.
@@ -27,8 +28,12 @@ function parseDbPath(args: Pick<CliArgs, "db">, vaultRoot: string): string {
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("init-db");
   const vaultRoot = resolveVaultRoot(args.vault);
   const dbPath = parseDbPath(args, vaultRoot);
+
+  log.info({ db_path: dbPath }, "init-db started");
+
   const db = await openDatabase(dbPath);
 
   try {
@@ -37,6 +42,7 @@ async function main(): Promise<void> {
     db.close();
   }
 
+  log.info({ db_path: relativeVaultPath(vaultRoot, dbPath) }, "init-db completed");
   writeJsonStdout(
     {
       db_path: relativeVaultPath(vaultRoot, dbPath),

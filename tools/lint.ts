@@ -3,6 +3,7 @@
 import path from "node:path";
 
 import { parseArgs, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import {
   ensureDirectory,
   pathExists,
@@ -148,7 +149,9 @@ function renderSummary(result: MaintenanceResult): string {
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("lint");
   const vaultRoot = resolveVaultRoot(args.vault);
+  log.info("lint started");
   const docs = await loadWikiDocs(vaultRoot);
   const graph = analyzeWikiGraph(docs);
   const findings: MaintenanceFinding[] = [];
@@ -332,6 +335,7 @@ async function main(): Promise<void> {
     result.summary_path = `${SYSTEM_CONFIG.paths.maintenanceDir}/${stamp}-lint.md`;
   }
 
+  log.info({ docs: result.stats.docs, findings: result.stats.findings, critical: result.stats.critical }, "lint completed");
   writeJsonStdout(result, args.pretty);
 }
 

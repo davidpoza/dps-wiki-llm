@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { SYSTEM_CONFIG } from "./config.js";
 import { writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import { ensureDirectory, relativeVaultPath, resolveVaultRoot, resolveWithinRoot, writeJsonFile } from "./lib/fs-utils.js";
 
 type Action = "acquire" | "release" | "status";
@@ -261,7 +262,9 @@ async function status(rootPath: string, args: Args): Promise<Record<string, unkn
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("bot-lock");
   const rootPath = resolveVaultRoot(args.vault);
+  log.info({ action: args.action, name: args.name }, "bot-lock started");
   const result =
     args.action === "acquire"
       ? await acquire(rootPath, args)
@@ -269,6 +272,7 @@ async function main(): Promise<void> {
         ? await release(rootPath, args)
         : await status(rootPath, args);
 
+  log.info({ action: args.action, acquired: (result as Record<string, unknown>).acquired }, "bot-lock completed");
   writeJsonStdout(result, args.pretty);
 }
 

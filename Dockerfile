@@ -32,6 +32,8 @@ COPY --from=kb-build --chown=node:node /app/package.json ./package.json
 COPY --from=kb-build --chown=node:node /app/package-lock.json ./package-lock.json
 COPY --from=kb-build --chown=node:node /app/dist ./dist
 
+RUN npm ci --omit=dev
+
 RUN set -eux; \
   node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major < 22 || (major === 22 && minor < 5)) { throw new Error('dps-wiki-llm requires Node.js >=22.5.0; base image has ' + process.versions.node); }"; \
   node -e "require('node:sqlite')"; \

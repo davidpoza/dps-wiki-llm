@@ -148,6 +148,12 @@ export const SYSTEM_CONFIG = {
       warning: 1,
       suggestion: 2
     } satisfies Record<Severity, number>
+  },
+  logging: {
+    dir: (vaultRoot: string) => `${vaultRoot}/state/logs`,
+    level: "info",
+    maxSize: "10m",
+    frequency: "daily"
   }
 } as const;
 

@@ -26,7 +26,8 @@
     "search": "node dist/tools/search.js",
     "lint": "node dist/tools/lint.js",
     "health-check": "node dist/tools/health-check.js",
-    "commit": "node dist/tools/commit.js"
+    "commit": "node dist/tools/commit.js",
+    "log-tail": "node dist/tools/log-tail.js"
   },
   "engines": {
     "node": ">=22.5.0"
@@ -34,5 +35,9 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "pino": "^10.3.1",
+    "pino-roll": "^4.0.0"
   }
 }

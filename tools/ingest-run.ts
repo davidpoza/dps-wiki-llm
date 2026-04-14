@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
@@ -808,7 +809,10 @@ async function ensureRawEvent(args: ReturnType<typeof parseArgs>, rawEvent: Inge
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("ingest-run");
   let lockContext: unknown = null;
+
+  log.info("ingest-run started");
 
   try {
     const input = await readJsonInput<IngestRunInput>(args.input);
@@ -818,13 +822,16 @@ async function main(): Promise<void> {
     const { rawEvent, handledFailure } = await ensureRawEvent(args, initialRawEvent);
     lockContext = rawEvent;
     if (handledFailure) {
+      log.info({ status: handledFailure.status }, "ingest-run handled failure");
       writeJsonStdout(handledFailure, args.pretty);
       return;
     }
+    log.info({ trigger_source: rawEvent.trigger_source }, "ingest-source starting");
     const sourcePayload = await runToolJson<NormalizedSourcePayload>("ingest-source", {
       vault: args.vault,
       input: rawEvent
     });
+    log.info({ source_id: sourcePayload.source_id }, "source-note LLM call starting");
     const sourceNoteRequestBody = sourceNoteRequest(sourcePayload);
     const sourceNoteResponse = await chatCompletion(sourceNoteRequestBody);
     const sourceNote = parseSourceNote(sourceNoteResponse, sourceNoteRequestBody);
@@ -833,15 +840,19 @@ async function main(): Promise<void> {
       content: "",
       source_note: sourceNote
     };
+    log.info("plan-source-note starting");
     const baselinePlanOutput = await runToolJson<ToolPlanOutput>("plan-source-note", {
       vault: args.vault,
       input: sourcePayloadWithNote
     });
+    log.info({ plan_id: baselinePlanOutput.mutation_plan.plan_id }, "apply-update (baseline) starting");
     const baselineMutationResult = await runToolJson<MutationResult>("apply-update", {
       vault: args.vault,
       input: baselinePlanOutput.mutation_plan
     });
+    log.info("reindex (baseline) starting");
     const baselineReindexResult = await runToolJson<ReindexResult>("reindex", { vault: args.vault });
+    log.info("commit (baseline) starting");
     const baselineCommitResult = await runToolJson<CommitResult>("commit", {
       vault: args.vault,
       input: baselinePlanOutput.commit_input
@@ -860,6 +871,7 @@ async function main(): Promise<void> {
       }
     });
 
+    log.info("ingest-plan LLM call starting");
     const ingestPlanRequestBody = ingestPlanRequest(
       baselinePlanOutput.source_payload,
       baselinePlanOutput.mutation_plan,
@@ -871,16 +883,20 @@ async function main(): Promise<void> {
       baselinePlanOutput.mutation_plan,
       wikiContext.context_docs
     );
+    log.info({ rejections: rejections.length, hasChanges }, "ingest plan parsed");
     let llmMutationResult: MutationResult | null = null;
     let llmReindexResult: ReindexResult | null = null;
     let llmCommitResult: CommitResult | null = null;
 
     if (hasChanges) {
+      log.info({ plan_id: llmMutationPlan.plan_id }, "apply-update (llm) starting");
       llmMutationResult = await runToolJson<MutationResult>("apply-update", {
         vault: args.vault,
         input: llmMutationPlan
       });
+      log.info("reindex (llm) starting");
       llmReindexResult = await runToolJson<ReindexResult>("reindex", { vault: args.vault });
+      log.info("commit (llm) starting");
       llmCommitResult = await runToolJson<CommitResult>("commit", {
         vault: args.vault,
         input: buildLlmCommitInput({
@@ -918,8 +934,10 @@ async function main(): Promise<void> {
       youtube_transcript_result: rawEvent.youtube_transcript_result ?? null
     };
 
+    log.info({ status: outputBase.status }, "ingest-run completed");
     writeJsonStdout({ ...outputBase, ...buildTelegramFields(outputBase) }, args.pretty);
   } catch (error) {
+    log.error({ err: error instanceof Error ? error.message : String(error) }, "ingest-run failed");
     await releaseTelegramLockAfterFailure(args.vault, lockContext, "ingest-run");
     throw error;
   }

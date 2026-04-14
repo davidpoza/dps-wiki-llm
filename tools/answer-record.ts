@@ -2,6 +2,7 @@
 
 import { SYSTEM_CONFIG } from "./config.js";
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import type { AnswerRecord, AnswerRecordInput } from "./lib/contracts.js";
 import { resolveVaultRoot, resolveWithinRoot, writeTextFile } from "./lib/fs-utils.js";
 import { slugify, stableHash } from "./lib/text.js";
@@ -126,7 +127,9 @@ function renderAnswerArtifact(record: AnswerRecord, answer: string): string {
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("answer-record");
   const vaultRoot = resolveVaultRoot(args.vault);
+  log.info("answer-record started");
   const input = normalizeInput(await readJsonInput(args.input));
   const record: AnswerRecord = {
     output_id: input.output_id || defaultOutputId(input.question),
@@ -148,6 +151,7 @@ async function main(): Promise<void> {
     wrote: args.write
   };
 
+  log.info({ output_path: record.output_path, wrote: args.write }, "answer-record completed");
   writeJsonStdout(output, args.pretty);
 }
 

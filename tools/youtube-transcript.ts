@@ -9,6 +9,7 @@ import path from "node:path";
 
 import { SYSTEM_CONFIG } from "./config.js";
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import type { JsonObject } from "./lib/contracts.js";
 import { resolveVaultRoot, resolveWithinRoot, writeTextFile } from "./lib/fs-utils.js";
 
@@ -669,23 +670,30 @@ function buildRawMarkdown(input: {
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("youtube-transcript");
   const vaultRoot = resolveVaultRoot(args.vault);
   const input = await readJsonInput<InputPayload>(args.input);
   const url = stringValue(input.url);
 
   if (!url) {
+    log.warn("youtube-transcript called without URL");
     writeJsonStdout({ status: "failed", reason: "Missing YouTube URL" } satisfies Result, args.pretty);
     return;
   }
 
+  log.info({ url }, "youtube-transcript started");
+
   const videoIdFromUrl = extractVideoId(url);
   if (!videoIdFromUrl) {
+    log.warn({ url }, "youtube-transcript: unsupported URL format");
     writeJsonStdout({ status: "failed", reason: "URL is not a supported YouTube video URL", url } satisfies Result, args.pretty);
     return;
   }
 
+  log.info({ video_id: videoIdFromUrl }, "loading yt-dlp metadata");
   const info = await loadYtDlpInfo(url);
   if (!info) {
+    log.error({ url, video_id: videoIdFromUrl }, "youtube-transcript: yt-dlp metadata load failed");
     writeJsonStdout({ status: "failed", reason: "Could not load YouTube metadata with yt-dlp", url, video_id: videoIdFromUrl } satisfies Result, args.pretty);
     return;
   }
@@ -733,6 +741,7 @@ async function main(): Promise<void> {
 
   await writeTextFile(resolveWithinRoot(vaultRoot, rawPath), markdown);
 
+  log.info({ video_id: videoId, raw_path: rawPath }, "youtube-transcript completed");
   writeJsonStdout(
     {
       status: "created",

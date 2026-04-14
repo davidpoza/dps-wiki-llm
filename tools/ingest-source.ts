@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { SYSTEM_CONFIG } from "./config.js";
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import type { JsonObject, JsonValue, NormalizedSourcePayload } from "./lib/contracts.js";
 import { relativeVaultPath, resolveVaultRoot, resolveWithinRoot } from "./lib/fs-utils.js";
 import { splitFrontmatter } from "./lib/frontmatter.js";
@@ -132,7 +133,11 @@ function inferSourceKind(rawPath: string, input: Record<string, unknown>, frontm
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("ingest-source");
   const vaultRoot = resolveVaultRoot(args.vault);
+
+  log.info("ingest-source started");
+
   const input = await readJsonInput(args.input);
 
   if (!isRecord(input)) {
@@ -190,6 +195,7 @@ async function main(): Promise<void> {
     payload.author = author;
   }
 
+  log.info({ source_id: payload.source_id, raw_path: payload.raw_path }, "ingest-source completed");
   writeJsonStdout(payload, args.pretty);
 }
 

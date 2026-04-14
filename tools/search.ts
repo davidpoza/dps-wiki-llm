@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { parseArgs, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import { resolveVaultRoot, resolveWithinRoot, relativeVaultPath } from "./lib/fs-utils.js";
 import { ensureSchema, openDatabase } from "./lib/db.js";
 import { SYSTEM_CONFIG } from "./config.js";
@@ -132,6 +133,7 @@ function buildFtsQuery(query: string): string {
 
 async function main(): Promise<void> {
   const args = parseSearchArgs();
+  const log = createLogger("search");
   const ftsQuery = buildFtsQuery(args.query);
   const vaultRoot = resolveVaultRoot(args.vault);
   const dbPath = args.db ? resolveWithinRoot(vaultRoot, args.db) : resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.dbPath);
@@ -154,6 +156,7 @@ async function main(): Promise<void> {
     db.close();
   }
 
+  log.info({ query: args.query, results: rows.length }, "search completed");
   writeJsonStdout(
     {
       query: args.query,

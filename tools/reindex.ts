@@ -6,6 +6,7 @@ import { ensureSchema, openDatabase, rebuildFts } from "./lib/db.js";
 import { loadWikiDocs } from "./lib/wiki-inspect.js";
 import { SYSTEM_CONFIG } from "./config.js";
 import type { CliArgs } from "./lib/contracts.js";
+import { createLogger } from "./lib/logger.js";
 
 /**
  * Rebuild the docs table and FTS index from the current wiki markdown state.
@@ -28,8 +29,12 @@ function parseDbPath(args: Pick<CliArgs, "db">, vaultRoot: string): string {
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("reindex");
   const vaultRoot = resolveVaultRoot(args.vault);
   const dbPath = parseDbPath(args, vaultRoot);
+
+  log.info("reindex started");
+
   const docs = await loadWikiDocs(vaultRoot);
 
   const db = await openDatabase(dbPath);
@@ -61,6 +66,7 @@ async function main(): Promise<void> {
     db.close();
   }
 
+  log.info({ indexed: docs.length }, "reindex completed");
   writeJsonStdout(
     {
       db_path: relativeVaultPath(vaultRoot, dbPath),

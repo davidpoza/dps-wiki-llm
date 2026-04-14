@@ -2,6 +2,7 @@
 
 import { SYSTEM_CONFIG } from "./config.js";
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { createLogger } from "./lib/logger.js";
 import type { AnswerContextPacket, AnswerRecord, FeedbackRecord, SearchResult } from "./lib/contracts.js";
 import type { ChatCompletionRequest, ChatCompletionResponse, LlmMeta } from "./lib/llm.js";
 import { answerTemperature, chatCompletion, chatText, extractJson, llmMeta } from "./lib/llm.js";
@@ -281,17 +282,22 @@ function buildTelegramFields(output: Omit<AnswerRunOutput, "telegram_enabled" | 
 
 async function main(): Promise<void> {
   const args = parseArgs();
+  const log = createLogger("answer-run");
   let lockContext: unknown = null;
+
+  log.info("answer-run started");
 
   try {
     const input = await readJsonInput<AnswerRunInput>(args.input);
     lockContext = input;
     const normalized = normalizeInput(input);
     lockContext = normalized;
+    log.info({ question: normalized.question.slice(0, 100) }, "search starting");
     const retrieval = await runToolJson<SearchResult>("search", {
       vault: args.vault,
       args: ["--limit", String(normalized.limit), normalized.question]
     });
+    log.info("answer-context starting");
     const context = await runToolJson<AnswerContextPacket>("answer-context", {
       vault: args.vault,
       input: {
@@ -299,8 +305,10 @@ async function main(): Promise<void> {
         retrieval
       }
     });
+    log.info("answer LLM call starting");
     const answerResponse = await chatCompletion(answerRequest(context));
     const answer = chatText(answerResponse, "LLM answer");
+    log.info("answer-record starting");
     const answerRecordResult = await runToolJson<AnswerRecordResult>("answer-record", {
       vault: args.vault,
       input: {
@@ -309,8 +317,10 @@ async function main(): Promise<void> {
       }
     });
     const answerRecord = answerRecordResult.record;
+    log.info("feedback LLM call starting");
     const feedbackResponse = await chatCompletion(feedbackRequest(context, answer, answerRecord));
     const proposedFeedback = parseFeedback(feedbackResponse, answerRecord);
+    log.info("feedback-record starting");
     const feedbackValidation = await runToolJson<FeedbackValidation>("feedback-record", {
       vault: args.vault,
       input: proposedFeedback,
@@ -345,8 +355,10 @@ async function main(): Promise<void> {
       telegram_lock_id: normalized.telegram_lock_id
     };
 
+    log.info({ output_path: answerRecordResult.output_path }, "answer-run completed");
     writeJsonStdout({ ...outputBase, ...buildTelegramFields(outputBase) }, args.pretty);
   } catch (error) {
+    log.error({ err: error instanceof Error ? error.message : String(error) }, "answer-run failed");
     await releaseTelegramLockAfterFailure(args.vault, lockContext, "answer-run");
     throw error;
   }
