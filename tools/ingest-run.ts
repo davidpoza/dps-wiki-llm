@@ -937,9 +937,34 @@ async function main(): Promise<void> {
     log.info({ status: outputBase.status }, "ingest-run completed");
     writeJsonStdout({ ...outputBase, ...buildTelegramFields(outputBase) }, args.pretty);
   } catch (error) {
-    log.error({ err: error instanceof Error ? error.message : String(error) }, "ingest-run failed");
+    const reason = error instanceof Error ? error.message : String(error);
+    log.error({ err: reason }, "ingest-run failed");
     await releaseTelegramLockAfterFailure(args.vault, lockContext, "ingest-run");
-    throw error;
+    // IMPORTANT: write a failure JSON to stdout and exit with code 0 instead of re-throwing.
+    //
+    // If we exit with code 1 here, N8N's executeCommand node fails and the workflow stops
+    // before reaching "Finalize Ingest Response". That node is responsible for updating
+    // staticData.telegram_last_update_id, which tells the next Telegram poll to advance
+    // past this update (offset = last_id + 1). Without it, the same update is retried on
+    // every poll cycle → infinite loop on the same command.
+    //
+    // By writing a structured failure output and exiting cleanly, N8N continues the workflow,
+    // "Finalize Ingest Response" runs, the update is marked, and the Telegram message with
+    // the failure reason is sent to the user.
+    const ctx = isRecord(lockContext) ? lockContext : {};
+    writeJsonStdout({
+      status: "ingest_pipeline_failed",
+      ingest_error: reason,
+      telegram_chat_id: ctx.telegram_chat_id ?? null,
+      telegram_message_id: ctx.telegram_message_id ?? null,
+      telegram_update_id: ctx.telegram_update_id ?? null,
+      telegram_polled: Boolean(ctx.telegram_polled),
+      telegram_command: ctx.telegram_command ?? null,
+      telegram_lock_acquired: Boolean(ctx.telegram_lock_acquired),
+      telegram_lock_id: ctx.telegram_lock_id ?? null,
+      youtube_ingest_url: ctx.youtube_ingest_url ?? null,
+      ...buildTelegramFailureFields(ctx as IngestRunInput, reason, ctx.youtube_transcript_result ?? null)
+    }, args.pretty);
   }
 }
 
