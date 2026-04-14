@@ -817,6 +817,97 @@ test("ingest-run applies the baseline ingest pipeline and skips empty LLM mutati
   }
 });
 
+test("ingest-run tolerates an LLM ingest plan missing optional envelope fields", async () => {
+  const vault = await tempDir("dps-wiki-llm-ingest-run-missing-plan-id-vault-");
+  await runCommand("git", ["init"], { cwd: vault });
+  await runCommand("git", ["config", "user.name", "Test User"], { cwd: vault });
+  await runCommand("git", ["config", "user.email", "test@example.com"], { cwd: vault });
+  await writeFile(path.join(vault, "INDEX.md"), "# Index\n\n## Entries\n");
+  await writeFile(
+    path.join(vault, "raw/web/missing-plan-id.md"),
+    `---\ntitle: "Missing Plan ID Source"\ncanonical_url: "https://example.com/missing-plan-id"\n---\n\nThe optional LLM mutation plan can be malformed.\n`
+  );
+
+  const mock = await startMockLlm([
+    {
+      body: {
+        id: "chat-source-note",
+        model: "mock/model",
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                summary: "A source about malformed optional LLM plans.",
+                raw_context: "The source says the optional LLM mutation plan can be malformed.",
+                extracted_claims: ["The optional LLM mutation plan can be malformed."],
+                open_questions: []
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { total_tokens: 10 }
+      }
+    },
+    {
+      body: {
+        id: "chat-ingest-plan",
+        model: "mock/model",
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                operation: "ingest",
+                summary: "No reusable changes beyond the source note.",
+                page_actions: [],
+                index_updates: [],
+                post_actions: { reindex: true, commit: true }
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { total_tokens: 9 }
+      }
+    }
+  ]);
+
+  try {
+    const inputPath = path.join(vault, "ingest-run-input.json");
+    await writeJson(inputPath, {
+      raw_path: "raw/web/missing-plan-id.md",
+      captured_at: "2026-04-13T11:00:00Z"
+    });
+
+    const result = await runTool("ingest-run", ["--vault", vault, "--input", inputPath], {
+      env: {
+        LLM_API_KEY: "test-key",
+        LLM_API_KEY_HEADER: "x-api-key",
+        LLM_BASE_URL: mock.baseUrl,
+        LLM_MODEL: "mock/model",
+        TELEGRAM_BOT_TOKEN: "",
+        TELEGRAM_CHAT_ID: ""
+      }
+    });
+
+    assert.equal(result.json.status, "baseline_ingest_applied_no_llm_changes");
+    assert.match(result.json.llm_mutation_plan.plan_id, /-llm-ingest-review$/);
+    assert.deepEqual(result.json.llm_mutation_plan.source_refs, result.json.baseline_mutation_plan.source_refs);
+    assert.equal(result.json.llm_plan_auto_apply_required, false);
+    assert.equal(result.json.llm_mutation_result, null);
+    assert.ok(
+      result.json.llm_guardrail_rejections.some((item) => item.reason.includes("missing plan_id")),
+      "expected a guardrail rejection for the missing plan_id"
+    );
+    assert.ok(
+      result.json.llm_guardrail_rejections.some((item) => item.reason.includes("missing source_refs")),
+      "expected a guardrail rejection for the missing source_refs"
+    );
+  } finally {
+    await mock.close();
+  }
+});
+
 test("ingest-run extracts Telegram /ingest YouTube URLs before source normalization", async () => {
   const vault = await tempDir("dps-wiki-llm-telegram-ingest-run-vault-");
   const fakeYtDlpArgs = fakeYtDlpBinaryArgs();

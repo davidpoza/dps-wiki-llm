@@ -342,29 +342,86 @@ function hasOnlyLinkedNotesSection(action: Record<string, unknown>): boolean {
   );
 }
 
+function defaultLlmPlanId(baselinePlan: MutationPlan): string {
+  return `${baselinePlan.plan_id}-llm-ingest-review`;
+}
+
+function defaultLlmSourceRefs(baselinePlan: MutationPlan): string[] {
+  return Array.isArray(baselinePlan.source_refs) ? baselinePlan.source_refs.filter(Boolean) : [];
+}
+
+function planRejection(collection: GuardrailRejection[], reason: string): void {
+  collection.push({
+    path: null,
+    action: null,
+    reason
+  });
+}
+
 function parseAndGuardrailPlan(response: ChatCompletionResponse, baselinePlan: MutationPlan): {
   plan: MutationPlan;
   rejections: GuardrailRejection[];
   hasChanges: boolean;
 } {
-  const rawPlan = extractJson(chatText(response, "LLM ingest planner"));
-  if (!isRecord(rawPlan)) {
-    throw new Error("LLM ingest plan must be an object");
+  const rejections: GuardrailRejection[] = [];
+  let rawPlan: unknown;
+
+  try {
+    rawPlan = extractJson(chatText(response, "LLM ingest planner"));
+  } catch (error) {
+    return {
+      plan: {
+        plan_id: defaultLlmPlanId(baselinePlan),
+        operation: "ingest",
+        summary: "Skipped malformed LLM ingest plan",
+        source_refs: defaultLlmSourceRefs(baselinePlan),
+        page_actions: [],
+        index_updates: [],
+        post_actions: { reindex: true, commit: true }
+      },
+      rejections: [
+        {
+          path: null,
+          action: null,
+          reason: `malformed LLM ingest plan JSON: ${error instanceof Error ? error.message : String(error)}`
+        }
+      ],
+      hasChanges: false
+    };
   }
+
+  if (!isRecord(rawPlan)) {
+    return {
+      plan: {
+        plan_id: defaultLlmPlanId(baselinePlan),
+        operation: "ingest",
+        summary: "Skipped non-object LLM ingest plan",
+        source_refs: defaultLlmSourceRefs(baselinePlan),
+        page_actions: [],
+        index_updates: [],
+        post_actions: { reindex: true, commit: true }
+      },
+      rejections: [{ path: null, action: null, reason: "LLM ingest plan must be an object" }],
+      hasChanges: false
+    };
+  }
+
   if (typeof rawPlan.plan_id !== "string" || !rawPlan.plan_id.trim()) {
-    throw new Error("LLM ingest plan must include plan_id");
+    rawPlan.plan_id = defaultLlmPlanId(baselinePlan);
+    planRejection(rejections, "LLM ingest plan missing plan_id; using fallback plan_id");
   }
   if (!Array.isArray(rawPlan.source_refs) || rawPlan.source_refs.length === 0) {
-    throw new Error("LLM ingest plan must include source_refs[]");
+    rawPlan.source_refs = defaultLlmSourceRefs(baselinePlan);
+    planRejection(rejections, "LLM ingest plan missing source_refs[]; using baseline source_refs");
   }
   if (!Array.isArray(rawPlan.page_actions)) {
-    throw new Error("LLM ingest plan must include page_actions[]");
+    rawPlan.page_actions = [];
+    planRejection(rejections, "LLM ingest plan missing page_actions[]; treating as no-op");
   }
   if (!Array.isArray(rawPlan.index_updates)) {
     rawPlan.index_updates = [];
   }
 
-  const rejections: GuardrailRejection[] = [];
   const baselineSourceNotePath = baselinePlan.page_actions?.[0]?.path;
   const validPageActions = new Set(["create", "update", "noop"]);
 
