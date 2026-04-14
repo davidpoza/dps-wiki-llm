@@ -32,7 +32,7 @@ Breaking the `raw/` versus `wiki/` boundary creates loops, noisy state, and non-
 
 ## Implemented Tooling
 
-The repo now includes the local toolchain plus compact importable n8n workflows for a manual OpenRouter production cut. n8n handles orchestration and Telegram I/O; fragile LLM and vault operations live in explicit Node.js macro scripts.
+The repo now includes the local toolchain plus compact importable n8n workflows for a manual LLM production cut. n8n handles orchestration and Telegram I/O; fragile LLM and vault operations live in explicit Node.js macro scripts.
 
 | Script | Purpose | Main outputs |
 |---|---|---|
@@ -41,7 +41,7 @@ The repo now includes the local toolchain plus compact importable n8n workflows 
 | `youtube-transcript.ts` | Calls `yt-dlp` to fetch YouTube subtitles and writes them as a raw transcript artifact. | `raw/web/**` plus stdout JSON |
 | `ingest-run.ts` | Runs the full ingest path: optional YouTube transcript creation, source normalization, LLM source-note cleanup, baseline apply, reindex, commit, and optional guarded LLM wiki updates. | stdout JSON, `raw/**`, `wiki/**`, `state/**`, git commit |
 | `answer-run.ts` | Runs retrieval, answer synthesis, answer artifact persistence, and feedback-record validation without mutating `wiki/`. | stdout JSON, `outputs/**` |
-| `render-n8n-workflows.ts` | Legacy helper for rendering workflows that still contain n8n OpenRouter HTTP nodes. The compact workflows no longer need it. | updated workflow JSON when applicable |
+| `render-n8n-workflows.ts` | Legacy helper for rendering workflows that still contain n8n LLM HTTP nodes. The compact workflows no longer need it. | updated workflow JSON when applicable |
 | `plan-source-note.ts` | Builds a safe baseline Mutation Plan that creates the source note and root index entry, using an LLM-cleaned `source_note` when provided. | stdout JSON |
 | `apply-update.ts` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
 | `answer-context.ts` | Reads retrieved wiki notes and builds the LLM context packet plus Answer Record shell. | stdout JSON |
@@ -112,12 +112,11 @@ services:
       - NODE_FUNCTION_ALLOW_EXTERNAL=axios,qs
       - NODES_EXCLUDE=[]
 
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - LLM_API_KEY=${LLM_API_KEY}
       - LLM_API_KEY_HEADER=${LLM_API_KEY_HEADER}
-      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-      - OPENROUTER_MODEL=${OPENROUTER_MODEL}
-      - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
-      - OPENROUTER_ANSWER_TEMPERATURE=0.2
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL}
+      - LLM_ANSWER_TEMPERATURE=0.2
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
 
@@ -139,12 +138,11 @@ services:
       - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
       - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_API_KEY_HEADER=${LLM_API_KEY_HEADER}
-      - OPENROUTER_MODEL=${OPENROUTER_MODEL}
-      - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
-      - OPENROUTER_ANSWER_TEMPERATURE=0.2
+      - LLM_MODEL=${LLM_MODEL}
+      - LLM_ANSWER_TEMPERATURE=0.2
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
 
@@ -298,9 +296,9 @@ npm run --silent feedback-record -- --vault /path/to/vault --input ./feedback.js
 Run the production V1 n8n flow manually:
 
 1. Import the workflows from `n8n/workflows/`.
-2. Set `OPENROUTER_API_KEY` in the runtime that executes n8n command nodes. Optionally set `OPENROUTER_MODEL` and `LLM_API_KEY_HEADER`.
+2. Set `LLM_API_KEY` in the runtime that executes n8n command nodes. Optionally set `LLM_MODEL` and `LLM_API_KEY_HEADER`.
 3. Run `KB - Reindex Wiki`.
-4. Run `KB - Telegram Bot Polling` or `KB - Ingest Raw OpenRouter Manual`.
+4. Run `KB - Telegram Bot Polling` or `KB - Ingest Raw LLM Manual`.
 5. Review any proposed feedback and the LLM ingest plan results.
 6. Run `KB - Apply Feedback` with `approved=true` only after review.
 

@@ -85,7 +85,7 @@ fs.writeFileSync(path.join(outputDir, id + "." + language + "." + extension), su
   return ["--eval", code, "--"];
 }
 
-async function startMockOpenRouter(responses) {
+async function startMockLlm(responses) {
   const requests = [];
   const server = http.createServer(async (request, response) => {
     let body = "";
@@ -103,7 +103,7 @@ async function startMockOpenRouter(responses) {
 
     const next = responses.shift() || {
       status: 500,
-      body: { error: { message: "unexpected mock OpenRouter request" } }
+      body: { error: { message: "unexpected mock LLM request" } }
     };
     response.writeHead(next.status || 200, { "Content-Type": "application/json" });
     response.end(JSON.stringify(next.body));
@@ -235,7 +235,7 @@ test("ingest workflow delegates the full ingest pipeline to ingest-run", async (
   assert.ok(nodes.has("Parse Ingest Run Result"));
   assert.ok(nodes.has("Should Send Telegram Ingest Log?"));
   assert.ok(nodes.has("Send Telegram Ingest Log"));
-  assert.ok(!workflow.nodes.some((node) => node.name.includes("OpenRouter")));
+  assert.ok(!workflow.nodes.some((node) => node.name.includes("LLM")));
   assert.match(nodes.get("Run ingest-run.ts").parameters.command, /ingest-run.js/);
   assert.match(nodes.get("Build Ingest Run Payload").parameters.jsCode, /payload_b64/);
   assert.match(nodes.get("Finalize Ingest Response").parameters.jsCode, /telegram_last_update_id/);
@@ -266,7 +266,7 @@ test("telegram bot workflow delegates answer and ingest work to macro scripts", 
   assert.ok(nodes.has("Send Telegram Ingest Log"));
   assert.ok(nodes.has("Release Bot Lock After Answer"));
   assert.ok(nodes.has("Release Bot Lock After Ingest"));
-  assert.ok(!workflow.nodes.some((node) => node.name.includes("OpenRouter")));
+  assert.ok(!workflow.nodes.some((node) => node.name.includes("LLM")));
   assert.ok(!workflow.nodes.some((node) => node.name === "Run youtube-transcript.ts"));
   assert.match(nodes.get("Run answer-run.ts").parameters.command, /answer-run.js/);
   assert.match(nodes.get("Run ingest-run.ts").parameters.command, /ingest-run.js/);
@@ -582,7 +582,7 @@ test("plan-source-note uses an LLM-cleaned source_note when present", async () =
       raw_context: "LLM-cleaned raw context with preserved details.",
       extracted_claims: ["Grounded claim one.", "Grounded claim two."],
       open_questions: ["What remains unresolved?"],
-      generated_by: "openrouter",
+      generated_by: "llm",
       model: "test/model"
     }
   });
@@ -594,7 +594,7 @@ test("plan-source-note uses an LLM-cleaned source_note when present", async () =
   assert.deepEqual(sourceAction.payload.sections["Raw Context"], ["LLM-cleaned raw context with preserved details."]);
   assert.deepEqual(sourceAction.payload.sections["Extracted Claims"], ["Grounded claim one.", "Grounded claim two."]);
   assert.deepEqual(sourceAction.payload.sections["Open Questions"], ["What remains unresolved?"]);
-  assert.equal(sourceAction.payload.frontmatter.source_note_generated_by, "openrouter");
+  assert.equal(sourceAction.payload.frontmatter.source_note_generated_by, "llm");
   assert.equal(sourceAction.payload.frontmatter.source_note_model, "test/model");
 });
 
@@ -648,7 +648,7 @@ test("answer-run performs retrieval, LLM answer synthesis, answer recording, and
   await runTool("init-db", ["--vault", vault]);
   await runTool("reindex", ["--vault", vault]);
 
-  const mock = await startMockOpenRouter([
+  const mock = await startMockLlm([
     {
       body: {
         id: "chat-answer",
@@ -694,10 +694,10 @@ test("answer-run performs retrieval, LLM answer synthesis, answer recording, and
 
     const result = await runTool("answer-run", ["--vault", vault, "--input", inputPath], {
       env: {
-        OPENROUTER_API_KEY: "test-key",
+        LLM_API_KEY: "test-key",
         LLM_API_KEY_HEADER: "x-api-key",
-        OPENROUTER_BASE_URL: mock.baseUrl,
-        OPENROUTER_MODEL: "mock/model",
+        LLM_BASE_URL: mock.baseUrl,
+        LLM_MODEL: "mock/model",
         TELEGRAM_BOT_TOKEN: "",
         TELEGRAM_CHAT_ID: ""
       }
@@ -706,8 +706,8 @@ test("answer-run performs retrieval, LLM answer synthesis, answer recording, and
     assert.equal(result.json.status, "answer_recorded_feedback_proposed");
     assert.equal(result.json.answer, "MCP connects tools and context.");
     assert.equal(result.json.proposed_feedback.decision, "output_only");
-    assert.equal(result.json.openrouter_answer_meta.id, "chat-answer");
-    assert.equal(result.json.openrouter_feedback_meta.id, "chat-feedback");
+    assert.equal(result.json.llm_answer_meta.id, "chat-answer");
+    assert.equal(result.json.llm_feedback_meta.id, "chat-feedback");
     assert.ok(result.json.retrieval.results.some((item) => item.path === "wiki/concepts/model-context-protocol.md"));
     assert.equal(result.json.telegram_enabled, false);
     assert.equal(mock.requests.length, 2);
@@ -733,7 +733,7 @@ test("ingest-run applies the baseline ingest pipeline and skips empty LLM mutati
     `---\ntitle: "Compact Workflow Source"\ncanonical_url: "https://example.com/compact-workflows"\n---\n\nCompact workflows move fragile glue into scripts.\n`
   );
 
-  const mock = await startMockOpenRouter([
+  const mock = await startMockLlm([
     {
       body: {
         id: "chat-source-note",
@@ -788,18 +788,18 @@ test("ingest-run applies the baseline ingest pipeline and skips empty LLM mutati
 
     const result = await runTool("ingest-run", ["--vault", vault, "--input", inputPath], {
       env: {
-        OPENROUTER_API_KEY: "test-key",
+        LLM_API_KEY: "test-key",
         LLM_API_KEY_HEADER: "x-api-key",
-        OPENROUTER_BASE_URL: mock.baseUrl,
-        OPENROUTER_MODEL: "mock/model",
+        LLM_BASE_URL: mock.baseUrl,
+        LLM_MODEL: "mock/model",
         TELEGRAM_BOT_TOKEN: "",
         TELEGRAM_CHAT_ID: ""
       }
     });
 
     assert.equal(result.json.status, "baseline_ingest_applied_no_llm_changes");
-    assert.equal(result.json.openrouter_source_note_meta.id, "chat-source-note");
-    assert.equal(result.json.openrouter_ingest_meta.id, "chat-ingest-plan");
+    assert.equal(result.json.llm_source_note_meta.id, "chat-source-note");
+    assert.equal(result.json.llm_ingest_meta.id, "chat-ingest-plan");
     assert.equal(result.json.llm_mutation_result, null);
     assert.equal(result.json.llm_plan_auto_apply_required, false);
     assert.equal(result.json.baseline_commit_result.commit_created, true);
@@ -825,7 +825,7 @@ test("ingest-run extracts Telegram /ingest YouTube URLs before source normalizat
   await runCommand("git", ["config", "user.email", "test@example.com"], { cwd: vault });
   await writeFile(path.join(vault, "INDEX.md"), "# Index\n\n## Entries\n");
 
-  const mock = await startMockOpenRouter([
+  const mock = await startMockLlm([
     {
       body: {
         id: "chat-source-note",
@@ -889,10 +889,10 @@ test("ingest-run extracts Telegram /ingest YouTube URLs before source normalizat
 
     const result = await runTool("ingest-run", ["--vault", vault, "--input", inputPath], {
       env: {
-        OPENROUTER_API_KEY: "test-key",
+        LLM_API_KEY: "test-key",
         LLM_API_KEY_HEADER: "x-api-key",
-        OPENROUTER_BASE_URL: mock.baseUrl,
-        OPENROUTER_MODEL: "mock/model",
+        LLM_BASE_URL: mock.baseUrl,
+        LLM_MODEL: "mock/model",
         TELEGRAM_BOT_TOKEN: "",
         TELEGRAM_CHAT_ID: "789",
         YTDLP_BINARY: process.execPath,
@@ -1036,18 +1036,18 @@ test("n8n workflow files remain valid JSON", async () => {
   assert.ok(answer.nodes.some((node) => node.name === "Release Bot Lock After Answer"));
   assert.ok(answer.nodes.some((node) => node.name === "Release Bot Lock After Ingest"));
   assert.ok(answer.nodes.some((node) => node.name === "Send Telegram Answer Log"));
-  assert.ok(!answer.nodes.some((node) => node.name.includes("OpenRouter")));
+  assert.ok(!answer.nodes.some((node) => node.name.includes("LLM")));
   assert.match(
     answer.nodes.find((node) => node.name === "Run answer-run.ts").parameters.command,
     /answer-run\.js/
   );
 
   const ingest = workflows.get("kb-ingest-raw-blueprint.json");
-  assert.equal(ingest.name, "KB - Ingest Raw OpenRouter Manual");
+  assert.equal(ingest.name, "KB - Ingest Raw LLM Manual");
   assert.equal(ingest.nodes.length, 8);
   assert.ok(ingest.nodes.some((node) => node.name === "Run ingest-run.ts"));
   assert.ok(ingest.nodes.some((node) => node.name === "Send Telegram Ingest Log"));
-  assert.ok(!ingest.nodes.some((node) => node.name.includes("OpenRouter")));
+  assert.ok(!ingest.nodes.some((node) => node.name.includes("LLM")));
   assert.match(
     ingest.nodes.find((node) => node.name === "Run ingest-run.ts").parameters.command,
     /ingest-run\.js/

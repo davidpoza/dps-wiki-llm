@@ -9,10 +9,10 @@ This directory contains importable n8n workflow JSON files aligned with the scri
 - Obsidian vault mounted inside the n8n container at `/data/vault`
 - `Execute Command` enabled in self-hosted n8n
 - `Local File Trigger` enabled in self-hosted n8n if you want reactive ingestion from `raw/`
-- `LLM_API_KEY` or legacy `OPENROUTER_API_KEY` configured in the runtime that executes `Execute Command` nodes
-- `LLM_BASE_URL` or legacy `OPENROUTER_BASE_URL` configured for the OpenAI-compatible provider
+- `LLM_API_KEY` configured in the runtime that executes `Execute Command` nodes
+- `LLM_BASE_URL` configured for the OpenAI-compatible provider
 - optional `LLM_API_KEY_HEADER` configured in that same command runtime when the provider expects the raw API key in a header other than `Authorization`
-- optional `LLM_MODEL` or legacy `OPENROUTER_MODEL` configured when you want to pin a model
+- optional `LLM_MODEL` configured when you want to pin a model
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` configured when you want answer input/output and ingest logs over Telegram
 
 If your paths differ, update the command strings and watched paths after importing.
@@ -53,7 +53,7 @@ The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/pro
   - records feedback, propagates only when `approved=true`, reindexes, and commits
 
 - `workflows/kb-ingest-raw-blueprint.json`
-  - runnable manual OpenRouter workflow
+  - runnable manual LLM workflow
   - shows the orchestration for `raw/**` ingestion
   - delegates source normalization, LLM source-note cleanup, baseline source-note creation, optional guarded LLM propagation, reindexing, and commits to `ingest-run.ts`
   - sends a Telegram ingest log when Telegram env is configured
@@ -62,12 +62,12 @@ The production V1 runbook lives in [`../docs/production-runbook.md`](../docs/pro
 
 Keep the orchestration split into small workflows instead of one large graph:
 
-1. `KB - Ingest Raw OpenRouter Manual`
+1. `KB - Ingest Raw LLM Manual`
    - runs manually in V1; only activate the raw watcher after WebDAV behavior is validated
    - delegates the event to `ingest-run.ts`
-   - `ingest-run.ts` cleans the source note content through OpenRouter before mutating `wiki/`
+   - `ingest-run.ts` cleans the source note content through the LLM provider before mutating `wiki/`
    - `ingest-run.ts` creates and commits the source-note baseline plan
-   - `ingest-run.ts` proposes richer wiki mutations through OpenRouter and applies safe non-empty plans with source/concept links
+   - `ingest-run.ts` proposes richer wiki mutations through the LLM provider and applies safe non-empty plans with source/concept links
 
 2. `KB - Telegram Bot Polling`
    - receives bot commands through outbound `getUpdates` polling
@@ -95,7 +95,7 @@ Keep the orchestration split into small workflows instead of one large graph:
 - The maintenance workflows write reports under `state/maintenance/` by default.
 - The feedback workflow writes artifacts under `state/feedback/`.
 - Keep every workflow inactive for the first production cut and run them manually from n8n.
-- OpenRouter API keys must live in the command runtime environment or credentials, not in exported workflow JSON.
+- LLM API keys must live in the command runtime environment or credentials, not in exported workflow JSON.
 - Telegram bot tokens must live in n8n environment or credentials, not in exported workflow JSON.
 - Telegram bot input uses outbound `getUpdates` polling; delete any active Telegram webhook for the bot before activating the polling workflow.
 - The critical boundary remains the same as in `AGENTS.md`: only watch `raw/**`; never auto-trigger on `wiki/**`.

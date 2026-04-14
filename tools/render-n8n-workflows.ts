@@ -7,11 +7,11 @@ const DEFAULT_WORKFLOW_PATHS = [
   "n8n/workflows/kb-ingest-raw-blueprint.json"
 ];
 
-const OPENROUTER_CALL_NODE_NAMES = new Set([
-  "Call OpenRouter Answer",
-  "Call OpenRouter Feedback",
-  "Call OpenRouter Ingest Planner",
-  "Call OpenRouter Source Note Cleaner"
+const LLM_CALL_NODE_NAMES = new Set([
+  "Call LLM Answer",
+  "Call LLM Feedback",
+  "Call LLM Ingest Planner",
+  "Call LLM Source Note Cleaner"
 ]);
 
 type WorkflowNode = {
@@ -37,16 +37,16 @@ function llmHeaderName(): string {
 
 function llmHeaderValueExpression(headerName: string): string {
   if (headerName.toLowerCase() === "authorization") {
-    return "={{ 'Bearer ' + $env.OPENROUTER_API_KEY }}";
+    return "={{ 'Bearer ' + $env.LLM_API_KEY }}";
   }
 
-  return "={{ $env.OPENROUTER_API_KEY }}";
+  return "={{ $env.LLM_API_KEY }}";
 }
 
-function openRouterHttpRequestParameters(headerName: string): Record<string, unknown> {
+function llmHttpRequestParameters(headerName: string): Record<string, unknown> {
   return {
     method: "POST",
-    url: "={{ $json.openrouter_url }}",
+    url: "={{ $json.llm_url }}",
     authentication: "none",
     sendHeaders: true,
     headerParameters: {
@@ -58,20 +58,12 @@ function openRouterHttpRequestParameters(headerName: string): Record<string, unk
         {
           name: "Content-Type",
           value: "application/json"
-        },
-        {
-          name: "HTTP-Referer",
-          value: "={{ $env.OPENROUTER_SITE_URL || 'https://localhost' }}"
-        },
-        {
-          name: "X-OpenRouter-Title",
-          value: "dps-wiki-llm"
         }
       ]
     },
     sendBody: true,
     specifyBody: "json",
-    jsonBody: "={{ JSON.stringify($json.openrouter_request) }}",
+    jsonBody: "={{ JSON.stringify($json.llm_request) }}",
     options: {}
   };
 }
@@ -81,16 +73,16 @@ async function renderWorkflow(filePath: string, headerName: string, write: boole
   const updatedNodes: string[] = [];
 
   for (const node of workflow.nodes ?? []) {
-    if (!node.name || !OPENROUTER_CALL_NODE_NAMES.has(node.name)) {
+    if (!node.name || !LLM_CALL_NODE_NAMES.has(node.name)) {
       continue;
     }
 
     node.type = "n8n-nodes-base.httpRequest";
     node.typeVersion = 4.2;
-    node.parameters = openRouterHttpRequestParameters(headerName);
+    node.parameters = llmHttpRequestParameters(headerName);
     node.notes =
       "Calls the LLM API through n8n HTTP Request with a render-time API-key header. " +
-      "LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw OPENROUTER_API_KEY value.";
+      "LLM_API_KEY_HEADER defaults to Authorization; non-Authorization headers receive the raw LLM_API_KEY value.";
     updatedNodes.push(node.name);
   }
 

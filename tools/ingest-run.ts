@@ -41,7 +41,7 @@ type IngestRunOutput = {
   baseline_mutation_result: MutationResult;
   baseline_reindex_result: ReindexResult;
   baseline_commit_result: CommitResult;
-  openrouter_source_note_meta: LlmMeta;
+  llm_source_note_meta: LlmMeta;
   llm_mutation_plan: MutationPlan;
   llm_guardrail_rejections: GuardrailRejection[];
   llm_plan_approval_required: false;
@@ -49,7 +49,7 @@ type IngestRunOutput = {
   llm_mutation_result: MutationResult | null;
   llm_reindex_result: ReindexResult | null;
   llm_commit_result: CommitResult | null;
-  openrouter_ingest_meta: LlmMeta;
+  llm_ingest_meta: LlmMeta;
   telegram_chat_id: unknown;
   telegram_message_id: unknown;
   telegram_update_id: unknown;
@@ -200,7 +200,7 @@ function stringField(record: Record<string, unknown>, field: string): string {
 }
 
 function parseSourceNote(response: ChatCompletionResponse, request: ChatCompletionRequest): LlmSourceNote {
-  const proposed = extractJson(chatText(response, "OpenRouter source note"));
+  const proposed = extractJson(chatText(response, "LLM source note"));
   if (!isRecord(proposed)) {
     throw new Error("LLM source note must be an object");
   }
@@ -210,7 +210,7 @@ function parseSourceNote(response: ChatCompletionResponse, request: ChatCompleti
     raw_context: stringField(proposed, "raw_context"),
     extracted_claims: stringArrayField(proposed, "extracted_claims", true),
     open_questions: stringArrayField(proposed, "open_questions", false),
-    generated_by: "openrouter",
+    generated_by: "llm",
     model: response.model ?? request.model
   };
 }
@@ -347,7 +347,7 @@ function parseAndGuardrailPlan(response: ChatCompletionResponse, baselinePlan: M
   rejections: GuardrailRejection[];
   hasChanges: boolean;
 } {
-  const rawPlan = extractJson(chatText(response, "OpenRouter ingest planner"));
+  const rawPlan = extractJson(chatText(response, "LLM ingest planner"));
   if (!isRecord(rawPlan)) {
     throw new Error("LLM ingest plan must be an object");
   }
@@ -714,7 +714,7 @@ async function main(): Promise<void> {
     baseline_mutation_result: baselineMutationResult,
     baseline_reindex_result: baselineReindexResult,
     baseline_commit_result: baselineCommitResult,
-    openrouter_source_note_meta: llmMeta(sourceNoteResponse),
+    llm_source_note_meta: llmMeta(sourceNoteResponse),
     llm_mutation_plan: llmMutationPlan,
     llm_guardrail_rejections: rejections,
     llm_plan_approval_required: false,
@@ -722,7 +722,7 @@ async function main(): Promise<void> {
     llm_mutation_result: llmMutationResult,
     llm_reindex_result: llmReindexResult,
     llm_commit_result: llmCommitResult,
-    openrouter_ingest_meta: llmMeta(ingestPlanResponse),
+    llm_ingest_meta: llmMeta(ingestPlanResponse),
     telegram_chat_id: rawEvent.telegram_chat_id ?? null,
     telegram_message_id: rawEvent.telegram_message_id ?? null,
     telegram_update_id: rawEvent.telegram_update_id ?? null,

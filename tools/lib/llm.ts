@@ -32,46 +32,25 @@ export type LlmMeta = {
   finish_reason: string | null;
 };
 
-export function openRouterUrl(): string {
+export function llmUrl(): string {
   return chatCompletionsUrl();
 }
 
 export function chatCompletionsUrl(): string {
-  const exactUrl = process.env.LLM_CHAT_COMPLETIONS_URL?.trim();
-  if (exactUrl) {
-    return exactUrl.replace(/\/+$/, "");
-  }
-
   const baseUrl = normalizedLlmBaseUrl();
   return baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`;
 }
 
 function normalizedLlmBaseUrl(): string {
-  const configured = (process.env.LLM_BASE_URL || process.env.OPENAI_BASE_URL || process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1")
-    .trim()
-    .replace(/\/+$/, "");
-
-  try {
-    const url = new URL(configured);
-    const host = url.hostname.toLowerCase();
-    const pathName = url.pathname.replace(/\/+$/, "");
-
-    if ((host === "openrouter.ai" || host === "www.openrouter.ai") && (pathName === "" || pathName === "/")) {
-      url.hostname = "openrouter.ai";
-      url.pathname = "/api/v1";
-      url.search = "";
-      url.hash = "";
-      return url.toString().replace(/\/+$/, "");
-    }
-  } catch {
-    return configured;
+  const configured = process.env.LLM_BASE_URL?.trim().replace(/\/+$/, "");
+  if (!configured) {
+    throw new Error("Missing LLM runtime configuration: LLM_BASE_URL");
   }
-
   return configured;
 }
 
 export function configuredModel(): string | undefined {
-  return process.env.LLM_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || process.env.OPENROUTER_MODEL?.trim() || undefined;
+  return process.env.LLM_MODEL?.trim() || undefined;
 }
 
 export function withConfiguredModel(request: ChatCompletionRequest): ChatCompletionRequest {
@@ -83,30 +62,23 @@ export function withConfiguredModel(request: ChatCompletionRequest): ChatComplet
 }
 
 export function answerTemperature(): number {
-  const value = Number(process.env.LLM_ANSWER_TEMPERATURE ?? process.env.OPENROUTER_ANSWER_TEMPERATURE);
+  const value = Number(process.env.LLM_ANSWER_TEMPERATURE);
   return Number.isFinite(value) ? value : 0.2;
 }
 
 function authHeaders(): Record<string, string> {
   const headerName = process.env.LLM_API_KEY_HEADER?.trim() || "Authorization";
-  const apiKey = process.env.LLM_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim();
+  const apiKey = process.env.LLM_API_KEY?.trim();
 
   if (!apiKey) {
-    throw new Error("Missing LLM runtime configuration: LLM_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY");
+    throw new Error("Missing LLM runtime configuration: LLM_API_KEY");
   }
 
   const apiKeyValue = authorizationHeaderValue(headerName, apiKey);
-  const headers: Record<string, string> = {
+  return {
     [headerName]: apiKeyValue,
     "Content-Type": "application/json"
   };
-
-  if (isOpenRouterEndpoint(chatCompletionsUrl())) {
-    headers["HTTP-Referer"] = process.env.OPENROUTER_SITE_URL || "https://localhost";
-    headers["X-OpenRouter-Title"] = "dps-wiki-llm";
-  }
-
-  return headers;
 }
 
 function authorizationHeaderValue(headerName: string, apiKey: string): string {
@@ -114,21 +86,7 @@ function authorizationHeaderValue(headerName: string, apiKey: string): string {
     return apiKey;
   }
 
-  if (process.env.LLM_API_KEY_PREFIX !== undefined) {
-    const prefix = process.env.LLM_API_KEY_PREFIX.trim();
-    return prefix ? `${prefix} ${apiKey}` : apiKey;
-  }
-
   return `Bearer ${apiKey}`;
-}
-
-function isOpenRouterEndpoint(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.hostname.toLowerCase() === "openrouter.ai" || url.hostname.toLowerCase() === "www.openrouter.ai";
-  } catch {
-    return false;
-  }
 }
 
 export async function chatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {

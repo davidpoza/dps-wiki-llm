@@ -1,6 +1,6 @@
 # Production Runbook
 
-This runbook describes the first production cut: manual operation from self-hosted n8n, deterministic vault writes through the local scripts, and OpenRouter for provider-switchable LLM calls.
+This runbook describes the first production cut: manual operation from self-hosted n8n, deterministic vault writes through the local scripts, and provider-switchable LLM calls.
 
 ## Runtime
 
@@ -22,12 +22,11 @@ services:
         N8N_VERSION: latest
     image: dps-wiki-llm-n8n:local
     environment:
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - LLM_API_KEY=${LLM_API_KEY}
       - LLM_API_KEY_HEADER=${LLM_API_KEY_HEADER}
-      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-      - OPENROUTER_MODEL=${OPENROUTER_MODEL}
-      - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
-      - OPENROUTER_ANSWER_TEMPERATURE=0.2
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL}
+      - LLM_ANSWER_TEMPERATURE=0.2
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE}
       - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME}
       - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL}
@@ -46,28 +45,23 @@ The image intentionally uses `node:22-alpine` and installs `n8n` from npm instea
 
 The GitHub Actions workflow at `.github/workflows/docker-publish.yml` publishes the n8n image to GitHub Container Registry as `ghcr.io/<owner>/<repo>` and the runner image as `ghcr.io/<owner>/<repo>-runner`. It runs only on `main`, version tags like `v1.0.0`, and manual dispatch; pull requests do not build or publish the images.
 
-## OpenRouter Configuration
+## LLM Configuration
 
 Set these in the n8n runtime environment or equivalent secret store:
 
 ```text
 LLM_API_KEY=<secret>
 LLM_API_KEY_HEADER=<optional header name; defaults to Authorization>
-LLM_BASE_URL=<OpenAI-compatible base URL, for example https://openrouter.ai/api/v1>
-LLM_CHAT_COMPLETIONS_URL=<optional exact chat completions URL>
+LLM_BASE_URL=<OpenAI-compatible base URL>
 LLM_MODEL=<optional model id>
 LLM_ANSWER_TEMPERATURE=0.2
-OPENROUTER_API_KEY=<legacy alias for LLM_API_KEY>
-OPENROUTER_BASE_URL=<legacy alias for LLM_BASE_URL>
-OPENROUTER_MODEL=<legacy alias for LLM_MODEL>
-OPENROUTER_SITE_URL=<optional site/referer>
 N8N_BLOCK_ENV_ACCESS_IN_NODE=false
 TELEGRAM_BOT_TOKEN=<secret>
 TELEGRAM_CHAT_ID=<allowed chat id>
 TELEGRAM_BOT_LOCK_TTL_MS=<optional stale-lock timeout; defaults to 1800000>
 ```
 
-`LLM_MODEL` is optional so the model can be changed outside the workflow. The compact workflows do not contain n8n HTTP Request nodes for the LLM; `answer-run.ts` and `ingest-run.ts` call an OpenAI-compatible chat completions API from Node.js. The older `OPENROUTER_*` names still work as aliases for OpenRouter deployments.
+`LLM_MODEL` is optional so the model can be changed outside the workflow. The compact workflows do not contain n8n HTTP Request nodes for the LLM; `answer-run.ts` and `ingest-run.ts` call an OpenAI-compatible chat completions API from Node.js.
 
 If a provider needs a different API-key header, set `LLM_API_KEY_HEADER` in the runtime that executes the command nodes:
 
@@ -75,7 +69,7 @@ If a provider needs a different API-key header, set `LLM_API_KEY_HEADER` in the 
 LLM_API_KEY_HEADER=x-api-key
 ```
 
-When `LLM_API_KEY_HEADER` is unset or `Authorization`, the scripts send `Authorization: Bearer <LLM_API_KEY>`. When it is set to a different header name, the scripts send the raw API key in that header. If a custom service needs a non-Bearer Authorization value, set `LLM_API_KEY_PREFIX` to the required prefix, or set it to an empty string to send the raw key.
+When `LLM_API_KEY_HEADER` is unset or `Authorization`, the scripts send `Authorization: Bearer <LLM_API_KEY>`. When it is set to a different header name, the scripts send the raw API key in that header.
 
 Add the same LLM and Telegram variables to the service environment that runs `Execute Command`. Code nodes still read Telegram variables such as `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. If your Code nodes run in the external `n8n-runner` service, pass the Code-node variables and `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` there as well. Keep the Git identity variables on the service that runs `Execute Command`; in the provided workflows, `ingest-run.ts` and `commit.ts` are run by `Execute Command` nodes, so that service needs them.
 
@@ -109,12 +103,11 @@ services:
       - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
       - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - LLM_API_KEY=${LLM_API_KEY}
       - LLM_API_KEY_HEADER=${LLM_API_KEY_HEADER}
-      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-      - OPENROUTER_MODEL=${OPENROUTER_MODEL}
-      - OPENROUTER_SITE_URL=${OPENROUTER_SITE_URL}
-      - OPENROUTER_ANSWER_TEMPERATURE=0.2
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL}
+      - LLM_ANSWER_TEMPERATURE=0.2
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME}
@@ -188,24 +181,24 @@ If `decision` is `propagate` and `approved` is not `true`, the workflow fails be
 
 ## Ingest Flow
 
-Run `KB - Ingest Raw OpenRouter Manual` manually while V1 is stabilizing.
+Run `KB - Ingest Raw LLM Manual` manually while V1 is stabilizing.
 
 The workflow:
 
 - passes the raw event to `ingest-run.ts` from a single command node
 - `ingest-run.ts` normalizes a `raw/**` path with `ingest-source.ts`
-- `ingest-run.ts` calls OpenRouter to clean the source content into a structured `source_note`
+- `ingest-run.ts` calls LLM to clean the source content into a structured `source_note`
 - `ingest-run.ts` validates that the LLM source note includes non-empty `summary` and `raw_context`
 - `ingest-run.ts` builds the baseline source note plan with `plan-source-note.ts`
 - `ingest-run.ts` applies and commits that LLM-cleaned source note baseline
-- `ingest-run.ts` calls OpenRouter for an optional richer Mutation Plan
+- `ingest-run.ts` calls LLM for an optional richer Mutation Plan
 - `ingest-run.ts` validates the LLM plan with guardrails
 - `ingest-run.ts` links grounded concept/entity/topic/analysis updates back to the baseline source note through `Sources`
 - `ingest-run.ts` allows only a narrow backlink update to the exact baseline source note `Linked Notes` section
 - `ingest-run.ts` applies non-empty LLM plans with `apply-update.ts`
 - `ingest-run.ts` reindexes and creates a second commit for applied LLM changes
 - sends a Telegram ingest log when Telegram env is configured
-- returns `openrouter_source_note_meta`, `llm_mutation_plan`, `llm_guardrail_rejections`, `llm_plan_auto_apply_required`, `llm_mutation_result`, and `llm_commit_result`
+- returns `llm_source_note_meta`, `llm_mutation_plan`, `llm_guardrail_rejections`, `llm_plan_auto_apply_required`, `llm_mutation_result`, and `llm_commit_result`
 
 If the source-note cleaner fails or returns invalid JSON, the workflow fails before mutating `wiki/`.
 
@@ -214,7 +207,7 @@ If the LLM plan is empty, the workflow stops after the baseline commit and retur
 ## Safety Checks
 
 - Never activate a workflow that watches `wiki/**`.
-- Keep the raw watcher in `KB - Ingest Raw OpenRouter Manual` inactive until WebDAV sync behavior is validated.
-- Do not store `OPENROUTER_API_KEY` in workflow JSON, markdown notes, or committed files.
+- Keep the raw watcher in `KB - Ingest Raw LLM Manual` inactive until WebDAV sync behavior is validated.
+- Do not store `LLM_API_KEY` in workflow JSON, markdown notes, or committed files.
 - Treat every LLM-generated source note and Mutation Plan as untrusted; the workflow validates shape before writes and guardrails the applied mutation plan.
 - Use `KB - Apply Feedback` for approved feedback propagation so `feedback-record.ts`, `apply-update.ts`, `reindex.ts`, and `commit.ts` preserve traceability.

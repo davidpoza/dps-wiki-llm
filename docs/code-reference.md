@@ -11,7 +11,7 @@ This document is the English reference for the repository's implementation. It e
 | `tools/youtube-transcript.ts` | Calls `yt-dlp` to fetch YouTube subtitles and writes them as a raw web artifact. | JSON with `url` and optional `captured_at` via `--input` or `stdin`. | JSON with created `raw_path` or a handled failure reason. |
 | `tools/ingest-run.ts` | Runs the compact production ingest pipeline from one n8n command node. | Raw event JSON or Telegram `/ingest` payload via `--input` or `stdin`. | JSON containing baseline ingest results, optional LLM plan results, Telegram message payloads, and handled YouTube failures. |
 | `tools/answer-run.ts` | Runs the compact production answer pipeline from one n8n command node. | Question or Telegram update payload via `--input` or `stdin`. | JSON containing the generated answer, answer record, validated feedback proposal, retrieval context, and Telegram message payload. |
-| `tools/render-n8n-workflows.ts` | Legacy helper for rendering workflows that still contain n8n OpenRouter HTTP nodes. | Optional workflow paths plus `LLM_API_KEY_HEADER`. | JSON render summary and updated workflow files when matching nodes are present. |
+| `tools/render-n8n-workflows.ts` | Legacy helper for rendering workflows that still contain n8n LLM HTTP nodes. | Optional workflow paths plus `LLM_API_KEY_HEADER`. | JSON render summary and updated workflow files when matching nodes are present. |
 | `tools/plan-source-note.ts` | Builds the deterministic baseline ingestion plan for creating a source note. | Normalized Source Payload JSON via `--input` or `stdin`. | JSON containing `mutation_plan` and `commit_input`. |
 | `tools/reindex.ts` | Scans wiki markdown files and rebuilds the relational and FTS indexes. | CLI flags such as `--vault` and optional `--db`. | JSON with indexed document count and rebuilt status. |
 | `tools/search.ts` | Runs a full-text search query against `state/kb.db`. | Positional search query plus CLI flags. | JSON search result payload with ranked documents. |
@@ -33,7 +33,7 @@ This document is the English reference for the repository's implementation. It e
 | `tools/lib/db.ts` | SQLite connection setup, schema creation, and FTS rebuild helpers. | Wraps `node:sqlite` with repository-specific pragmas. |
 | `tools/lib/fs-utils.ts` | Safe path resolution and filesystem helpers scoped to a vault root. | Enforces the "do not write outside the vault" boundary. |
 | `tools/lib/frontmatter.ts` | Minimal YAML-like parser, serializer, and merge logic for note frontmatter. | Supports the subset of frontmatter needed by the wiki tooling. |
-| `tools/lib/llm.ts` | Runtime OpenRouter chat-completion helper used by the macro scripts. | Reads `OPENROUTER_API_KEY`, optional `LLM_API_KEY_HEADER`, model, base URL, referer, and answer temperature from the command runtime environment. |
+| `tools/lib/llm.ts` | Runtime LLM chat-completion helper used by the macro scripts. | Reads `LLM_API_KEY`, optional `LLM_API_KEY_HEADER`, model, base URL, and answer temperature from the command runtime environment. |
 | `tools/lib/markdown.ts` | Markdown section parsing and idempotent note rendering. | Merges content by section instead of performing broad rewrites. |
 | `tools/lib/run-tool.ts` | Helper for macro scripts to call sibling compiled tool scripts with JSON passed through temporary files. | Avoids large command-line arguments and keeps script composition explicit. |
 | `tools/lib/text.ts` | Shared hashing, slugging, truncation, and summary helpers. | Keeps artifact naming deterministic across scripts. |
@@ -241,8 +241,8 @@ This is the core note renderer used by `apply-update.ts`.
 
 ### `tools/lib/llm.ts`
 
-- Centralizes OpenRouter-compatible chat completion calls used by `answer-run.ts` and `ingest-run.ts`.
-- Reads `OPENROUTER_API_KEY` at runtime and supports `LLM_API_KEY_HEADER` for providers that require a custom API-key header.
+- Centralizes LLM-compatible chat completion calls used by `answer-run.ts` and `ingest-run.ts`.
+- Reads `LLM_API_KEY` at runtime and supports `LLM_API_KEY_HEADER` for providers that require a custom API-key header.
 - Uses `Authorization: Bearer <key>` when the header name is `Authorization`; otherwise it sends the raw key in the configured header.
 - Provides JSON extraction and response metadata helpers so macro scripts do not duplicate LLM parsing code.
 

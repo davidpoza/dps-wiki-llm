@@ -43,8 +43,8 @@ type AnswerRunOutput = {
     approved: true;
     feedback: FeedbackRecord;
   };
-  openrouter_answer_meta: LlmMeta;
-  openrouter_feedback_meta: LlmMeta;
+  llm_answer_meta: LlmMeta;
+  llm_feedback_meta: LlmMeta;
   retrieval: SearchResult;
   context_docs: AnswerContextPacket["context_docs"];
   telegram_chat_id: unknown;
@@ -208,9 +208,9 @@ function feedbackRequest(packet: AnswerContextPacket, answer: string, answerReco
 }
 
 function parseFeedback(response: ChatCompletionResponse, answerRecord: AnswerRecord): FeedbackRecord {
-  const proposed = extractJson(chatText(response, "OpenRouter feedback"));
+  const proposed = extractJson(chatText(response, "LLM feedback"));
   if (!isRecord(proposed)) {
-    throw new Error("OpenRouter feedback response must be a JSON object");
+    throw new Error("LLM feedback response must be a JSON object");
   }
   if (!proposed.output_id) {
     proposed.output_id = answerRecord.output_id;
@@ -293,7 +293,7 @@ async function main(): Promise<void> {
     }
   });
   const answerResponse = await chatCompletion(answerRequest(context));
-  const answer = chatText(answerResponse, "OpenRouter answer");
+  const answer = chatText(answerResponse, "LLM answer");
   const answerRecordResult = await runToolJson<AnswerRecordResult>("answer-record", {
     vault: args.vault,
     input: {
@@ -325,8 +325,8 @@ async function main(): Promise<void> {
       approved: true,
       feedback
     },
-    openrouter_answer_meta: llmMeta(answerResponse),
-    openrouter_feedback_meta: llmMeta(feedbackResponse),
+    llm_answer_meta: llmMeta(answerResponse),
+    llm_feedback_meta: llmMeta(feedbackResponse),
     retrieval,
     context_docs: context.context_docs,
     telegram_chat_id: normalized.telegram_chat_id,
