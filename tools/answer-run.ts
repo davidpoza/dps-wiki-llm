@@ -6,6 +6,7 @@ import type { AnswerContextPacket, AnswerRecord, FeedbackRecord, SearchResult } 
 import type { ChatCompletionRequest, ChatCompletionResponse, LlmMeta } from "./lib/llm.js";
 import { answerTemperature, chatCompletion, chatText, extractJson, llmMeta } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
+import { releaseTelegramLockAfterFailure } from "./lib/telegram-lock.js";
 
 type AnswerRunInput = Record<string, unknown>;
 
@@ -280,65 +281,75 @@ function buildTelegramFields(output: Omit<AnswerRunOutput, "telegram_enabled" | 
 
 async function main(): Promise<void> {
   const args = parseArgs();
-  const normalized = normalizeInput(await readJsonInput<AnswerRunInput>(args.input));
-  const retrieval = await runToolJson<SearchResult>("search", {
-    vault: args.vault,
-    args: ["--limit", String(normalized.limit), normalized.question]
-  });
-  const context = await runToolJson<AnswerContextPacket>("answer-context", {
-    vault: args.vault,
-    input: {
-      question: normalized.question,
-      retrieval
-    }
-  });
-  const answerResponse = await chatCompletion(answerRequest(context));
-  const answer = chatText(answerResponse, "LLM answer");
-  const answerRecordResult = await runToolJson<AnswerRecordResult>("answer-record", {
-    vault: args.vault,
-    input: {
-      answer_record: context.answer_record,
-      answer
-    }
-  });
-  const answerRecord = answerRecordResult.record;
-  const feedbackResponse = await chatCompletion(feedbackRequest(context, answer, answerRecord));
-  const proposedFeedback = parseFeedback(feedbackResponse, answerRecord);
-  const feedbackValidation = await runToolJson<FeedbackValidation>("feedback-record", {
-    vault: args.vault,
-    input: proposedFeedback,
-    write: false
-  });
-  const feedback = feedbackValidation.record;
-  const outputBase: Omit<AnswerRunOutput, "telegram_enabled" | "telegram_skip_reason" | "telegram_bot_token" | "telegram_message" | "telegram_answer_message"> = {
-    status: "answer_recorded_feedback_proposed",
-    question: normalized.question,
-    answer,
-    answer_record: answerRecord,
-    answer_record_result: answerRecordResult,
-    output_path: answerRecordResult.output_path,
-    proposed_feedback: feedback,
-    feedback_validation: feedbackValidation,
-    approval_required: feedback.decision === "propagate",
-    apply_feedback_workflow: "KB - Apply Feedback",
-    approval_payload: {
-      approved: true,
-      feedback
-    },
-    llm_answer_meta: llmMeta(answerResponse),
-    llm_feedback_meta: llmMeta(feedbackResponse),
-    retrieval,
-    context_docs: context.context_docs,
-    telegram_chat_id: normalized.telegram_chat_id,
-    telegram_message_id: normalized.telegram_message_id,
-    telegram_update_id: normalized.telegram_update_id,
-    telegram_polled: normalized.telegram_polled,
-    telegram_command: normalized.telegram_command,
-    telegram_lock_acquired: normalized.telegram_lock_acquired,
-    telegram_lock_id: normalized.telegram_lock_id
-  };
+  let lockContext: unknown = null;
 
-  writeJsonStdout({ ...outputBase, ...buildTelegramFields(outputBase) }, args.pretty);
+  try {
+    const input = await readJsonInput<AnswerRunInput>(args.input);
+    lockContext = input;
+    const normalized = normalizeInput(input);
+    lockContext = normalized;
+    const retrieval = await runToolJson<SearchResult>("search", {
+      vault: args.vault,
+      args: ["--limit", String(normalized.limit), normalized.question]
+    });
+    const context = await runToolJson<AnswerContextPacket>("answer-context", {
+      vault: args.vault,
+      input: {
+        question: normalized.question,
+        retrieval
+      }
+    });
+    const answerResponse = await chatCompletion(answerRequest(context));
+    const answer = chatText(answerResponse, "LLM answer");
+    const answerRecordResult = await runToolJson<AnswerRecordResult>("answer-record", {
+      vault: args.vault,
+      input: {
+        answer_record: context.answer_record,
+        answer
+      }
+    });
+    const answerRecord = answerRecordResult.record;
+    const feedbackResponse = await chatCompletion(feedbackRequest(context, answer, answerRecord));
+    const proposedFeedback = parseFeedback(feedbackResponse, answerRecord);
+    const feedbackValidation = await runToolJson<FeedbackValidation>("feedback-record", {
+      vault: args.vault,
+      input: proposedFeedback,
+      write: false
+    });
+    const feedback = feedbackValidation.record;
+    const outputBase: Omit<AnswerRunOutput, "telegram_enabled" | "telegram_skip_reason" | "telegram_bot_token" | "telegram_message" | "telegram_answer_message"> = {
+      status: "answer_recorded_feedback_proposed",
+      question: normalized.question,
+      answer,
+      answer_record: answerRecord,
+      answer_record_result: answerRecordResult,
+      output_path: answerRecordResult.output_path,
+      proposed_feedback: feedback,
+      feedback_validation: feedbackValidation,
+      approval_required: feedback.decision === "propagate",
+      apply_feedback_workflow: "KB - Apply Feedback",
+      approval_payload: {
+        approved: true,
+        feedback
+      },
+      llm_answer_meta: llmMeta(answerResponse),
+      llm_feedback_meta: llmMeta(feedbackResponse),
+      retrieval,
+      context_docs: context.context_docs,
+      telegram_chat_id: normalized.telegram_chat_id,
+      telegram_message_id: normalized.telegram_message_id,
+      telegram_update_id: normalized.telegram_update_id,
+      telegram_polled: normalized.telegram_polled,
+      telegram_command: normalized.telegram_command,
+      telegram_lock_acquired: normalized.telegram_lock_acquired,
+      telegram_lock_id: normalized.telegram_lock_id
+    };
+
+    writeJsonStdout({ ...outputBase, ...buildTelegramFields(outputBase) }, args.pretty);
+  } catch (error) {
+    await releaseTelegramLockAfterFailure(args.vault, lockContext, "answer-run");
+    throw error;
+  }
 }
 
 main().catch((error) => {

@@ -722,6 +722,41 @@ test("answer-run performs retrieval, LLM answer synthesis, answer recording, and
   }
 });
 
+test("answer-run releases the Telegram lock when a script step fails", async () => {
+  const vault = await createVault();
+  await runTool("init-db", ["--vault", vault]);
+  await runTool("reindex", ["--vault", vault]);
+  const lock = await runTool("bot-lock", [
+    "acquire",
+    "--vault",
+    vault,
+    "--name",
+    "telegram-bot",
+    "--owner",
+    "telegram-update-999"
+  ]);
+  const inputPath = path.join(vault, "answer-run-failure-input.json");
+  await writeJson(inputPath, {
+    question: "What does MCP connect?",
+    telegram_lock_id: lock.json.lock_id,
+    telegram_lock_acquired: true
+  });
+
+  await assert.rejects(
+    runTool("answer-run", ["--vault", vault, "--input", inputPath], {
+      env: {
+        LLM_API_KEY: "test-key",
+        LLM_BASE_URL: ""
+      }
+    }),
+    /Missing LLM runtime configuration: LLM_BASE_URL/
+  );
+
+  const status = await runTool("bot-lock", ["status", "--vault", vault, "--name", "telegram-bot"]);
+  assert.equal(status.json.status, "unlocked");
+  assert.equal(status.json.released, false);
+});
+
 test("ingest-run applies the baseline ingest pipeline and skips empty LLM mutation plans", async () => {
   const vault = await tempDir("dps-wiki-llm-ingest-run-vault-");
   await runCommand("git", ["init"], { cwd: vault });
@@ -906,6 +941,45 @@ test("ingest-run tolerates an LLM ingest plan missing optional envelope fields",
   } finally {
     await mock.close();
   }
+});
+
+test("ingest-run releases the Telegram lock when a script step fails", async () => {
+  const vault = await tempDir("dps-wiki-llm-ingest-run-lock-failure-vault-");
+  await writeFile(path.join(vault, "INDEX.md"), "# Index\n\n## Entries\n");
+  await writeFile(
+    path.join(vault, "raw/web/lock-failure.md"),
+    `---\ntitle: "Lock Failure Source"\n---\n\nThis source forces an LLM runtime failure.\n`
+  );
+  const lock = await runTool("bot-lock", [
+    "acquire",
+    "--vault",
+    vault,
+    "--name",
+    "telegram-bot",
+    "--owner",
+    "telegram-update-1000"
+  ]);
+  const inputPath = path.join(vault, "ingest-run-failure-input.json");
+  await writeJson(inputPath, {
+    raw_path: "raw/web/lock-failure.md",
+    captured_at: "2026-04-13T12:30:00Z",
+    telegram_lock_id: lock.json.lock_id,
+    telegram_lock_acquired: true
+  });
+
+  await assert.rejects(
+    runTool("ingest-run", ["--vault", vault, "--input", inputPath], {
+      env: {
+        LLM_API_KEY: "test-key",
+        LLM_BASE_URL: ""
+      }
+    }),
+    /Missing LLM runtime configuration: LLM_BASE_URL/
+  );
+
+  const status = await runTool("bot-lock", ["status", "--vault", vault, "--name", "telegram-bot"]);
+  assert.equal(status.json.status, "unlocked");
+  assert.equal(status.json.released, false);
 });
 
 test("ingest-run extracts Telegram /ingest YouTube URLs before source normalization", async () => {

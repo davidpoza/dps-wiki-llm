@@ -8,6 +8,7 @@ import type {
 } from "./lib/llm.js";
 import { chatCompletion, chatText, extractJson, llmMeta } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
+import { releaseTelegramLockAfterFailure } from "./lib/telegram-lock.js";
 import type { CommitInput, LlmSourceNote, MutationPlan, MutationResult, NormalizedSourcePayload } from "./lib/contracts.js";
 
 type IngestRunInput = Record<string, unknown>;
@@ -706,92 +707,103 @@ async function ensureRawEvent(args: ReturnType<typeof parseArgs>, rawEvent: Inge
 
 async function main(): Promise<void> {
   const args = parseArgs();
-  const initialRawEvent = normalizeRawEvent(await readJsonInput<IngestRunInput>(args.input));
-  const { rawEvent, handledFailure } = await ensureRawEvent(args, initialRawEvent);
-  if (handledFailure) {
-    writeJsonStdout(handledFailure, args.pretty);
-    return;
-  }
-  const sourcePayload = await runToolJson<NormalizedSourcePayload>("ingest-source", {
-    vault: args.vault,
-    input: rawEvent
-  });
-  const sourceNoteRequestBody = sourceNoteRequest(sourcePayload);
-  const sourceNoteResponse = await chatCompletion(sourceNoteRequestBody);
-  const sourceNote = parseSourceNote(sourceNoteResponse, sourceNoteRequestBody);
-  const sourcePayloadWithNote: NormalizedSourcePayload = {
-    ...sourcePayload,
-    content: "",
-    source_note: sourceNote
-  };
-  const baselinePlanOutput = await runToolJson<ToolPlanOutput>("plan-source-note", {
-    vault: args.vault,
-    input: sourcePayloadWithNote
-  });
-  const baselineMutationResult = await runToolJson<MutationResult>("apply-update", {
-    vault: args.vault,
-    input: baselinePlanOutput.mutation_plan
-  });
-  const baselineReindexResult = await runToolJson<ReindexResult>("reindex", { vault: args.vault });
-  const baselineCommitResult = await runToolJson<CommitResult>("commit", {
-    vault: args.vault,
-    input: baselinePlanOutput.commit_input
-  });
+  let lockContext: unknown = null;
 
-  const ingestPlanRequestBody = ingestPlanRequest(baselinePlanOutput.source_payload, baselinePlanOutput.mutation_plan);
-  const ingestPlanResponse = await chatCompletion(ingestPlanRequestBody);
-  const { plan: llmMutationPlan, rejections, hasChanges } = parseAndGuardrailPlan(
-    ingestPlanResponse,
-    baselinePlanOutput.mutation_plan
-  );
-  let llmMutationResult: MutationResult | null = null;
-  let llmReindexResult: ReindexResult | null = null;
-  let llmCommitResult: CommitResult | null = null;
-
-  if (hasChanges) {
-    llmMutationResult = await runToolJson<MutationResult>("apply-update", {
+  try {
+    const input = await readJsonInput<IngestRunInput>(args.input);
+    lockContext = input;
+    const initialRawEvent = normalizeRawEvent(input);
+    lockContext = initialRawEvent;
+    const { rawEvent, handledFailure } = await ensureRawEvent(args, initialRawEvent);
+    lockContext = rawEvent;
+    if (handledFailure) {
+      writeJsonStdout(handledFailure, args.pretty);
+      return;
+    }
+    const sourcePayload = await runToolJson<NormalizedSourcePayload>("ingest-source", {
       vault: args.vault,
-      input: llmMutationPlan
+      input: rawEvent
     });
-    llmReindexResult = await runToolJson<ReindexResult>("reindex", { vault: args.vault });
-    llmCommitResult = await runToolJson<CommitResult>("commit", {
+    const sourceNoteRequestBody = sourceNoteRequest(sourcePayload);
+    const sourceNoteResponse = await chatCompletion(sourceNoteRequestBody);
+    const sourceNote = parseSourceNote(sourceNoteResponse, sourceNoteRequestBody);
+    const sourcePayloadWithNote: NormalizedSourcePayload = {
+      ...sourcePayload,
+      content: "",
+      source_note: sourceNote
+    };
+    const baselinePlanOutput = await runToolJson<ToolPlanOutput>("plan-source-note", {
       vault: args.vault,
-      input: buildLlmCommitInput({
-        source_payload: baselinePlanOutput.source_payload,
-        llm_mutation_plan: llmMutationPlan,
-        llm_mutation_result: llmMutationResult
-      })
+      input: sourcePayloadWithNote
     });
+    const baselineMutationResult = await runToolJson<MutationResult>("apply-update", {
+      vault: args.vault,
+      input: baselinePlanOutput.mutation_plan
+    });
+    const baselineReindexResult = await runToolJson<ReindexResult>("reindex", { vault: args.vault });
+    const baselineCommitResult = await runToolJson<CommitResult>("commit", {
+      vault: args.vault,
+      input: baselinePlanOutput.commit_input
+    });
+
+    const ingestPlanRequestBody = ingestPlanRequest(baselinePlanOutput.source_payload, baselinePlanOutput.mutation_plan);
+    const ingestPlanResponse = await chatCompletion(ingestPlanRequestBody);
+    const { plan: llmMutationPlan, rejections, hasChanges } = parseAndGuardrailPlan(
+      ingestPlanResponse,
+      baselinePlanOutput.mutation_plan
+    );
+    let llmMutationResult: MutationResult | null = null;
+    let llmReindexResult: ReindexResult | null = null;
+    let llmCommitResult: CommitResult | null = null;
+
+    if (hasChanges) {
+      llmMutationResult = await runToolJson<MutationResult>("apply-update", {
+        vault: args.vault,
+        input: llmMutationPlan
+      });
+      llmReindexResult = await runToolJson<ReindexResult>("reindex", { vault: args.vault });
+      llmCommitResult = await runToolJson<CommitResult>("commit", {
+        vault: args.vault,
+        input: buildLlmCommitInput({
+          source_payload: baselinePlanOutput.source_payload,
+          llm_mutation_plan: llmMutationPlan,
+          llm_mutation_result: llmMutationResult
+        })
+      });
+    }
+
+    const outputBase: Omit<IngestRunOutput, "telegram_enabled" | "telegram_skip_reason" | "telegram_bot_token" | "telegram_message" | "telegram_ingest_message"> = {
+      status: llmMutationResult ? "baseline_ingest_applied_llm_plan_applied" : "baseline_ingest_applied_no_llm_changes",
+      source_payload: baselinePlanOutput.source_payload,
+      baseline_mutation_plan: baselinePlanOutput.mutation_plan,
+      baseline_mutation_result: baselineMutationResult,
+      baseline_reindex_result: baselineReindexResult,
+      baseline_commit_result: baselineCommitResult,
+      llm_source_note_meta: llmMeta(sourceNoteResponse),
+      llm_mutation_plan: llmMutationPlan,
+      llm_guardrail_rejections: rejections,
+      llm_plan_approval_required: false,
+      llm_plan_auto_apply_required: hasChanges,
+      llm_mutation_result: llmMutationResult,
+      llm_reindex_result: llmReindexResult,
+      llm_commit_result: llmCommitResult,
+      llm_ingest_meta: llmMeta(ingestPlanResponse),
+      telegram_chat_id: rawEvent.telegram_chat_id ?? null,
+      telegram_message_id: rawEvent.telegram_message_id ?? null,
+      telegram_update_id: rawEvent.telegram_update_id ?? null,
+      telegram_polled: Boolean(rawEvent.telegram_polled),
+      telegram_command: rawEvent.telegram_command ?? null,
+      telegram_lock_acquired: Boolean(rawEvent.telegram_lock_acquired),
+      telegram_lock_id: rawEvent.telegram_lock_id ?? null,
+      youtube_ingest_url: rawEvent.youtube_ingest_url ?? null,
+      youtube_transcript_result: rawEvent.youtube_transcript_result ?? null
+    };
+
+    writeJsonStdout({ ...outputBase, ...buildTelegramFields(outputBase) }, args.pretty);
+  } catch (error) {
+    await releaseTelegramLockAfterFailure(args.vault, lockContext, "ingest-run");
+    throw error;
   }
-
-  const outputBase: Omit<IngestRunOutput, "telegram_enabled" | "telegram_skip_reason" | "telegram_bot_token" | "telegram_message" | "telegram_ingest_message"> = {
-    status: llmMutationResult ? "baseline_ingest_applied_llm_plan_applied" : "baseline_ingest_applied_no_llm_changes",
-    source_payload: baselinePlanOutput.source_payload,
-    baseline_mutation_plan: baselinePlanOutput.mutation_plan,
-    baseline_mutation_result: baselineMutationResult,
-    baseline_reindex_result: baselineReindexResult,
-    baseline_commit_result: baselineCommitResult,
-    llm_source_note_meta: llmMeta(sourceNoteResponse),
-    llm_mutation_plan: llmMutationPlan,
-    llm_guardrail_rejections: rejections,
-    llm_plan_approval_required: false,
-    llm_plan_auto_apply_required: hasChanges,
-    llm_mutation_result: llmMutationResult,
-    llm_reindex_result: llmReindexResult,
-    llm_commit_result: llmCommitResult,
-    llm_ingest_meta: llmMeta(ingestPlanResponse),
-    telegram_chat_id: rawEvent.telegram_chat_id ?? null,
-    telegram_message_id: rawEvent.telegram_message_id ?? null,
-    telegram_update_id: rawEvent.telegram_update_id ?? null,
-    telegram_polled: Boolean(rawEvent.telegram_polled),
-    telegram_command: rawEvent.telegram_command ?? null,
-    telegram_lock_acquired: Boolean(rawEvent.telegram_lock_acquired),
-    telegram_lock_id: rawEvent.telegram_lock_id ?? null,
-    youtube_ingest_url: rawEvent.youtube_ingest_url ?? null,
-    youtube_transcript_result: rawEvent.youtube_transcript_result ?? null
-  };
-
-  writeJsonStdout({ ...outputBase, ...buildTelegramFields(outputBase) }, args.pretty);
 }
 
 main().catch((error) => {
