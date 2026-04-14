@@ -841,6 +841,12 @@ test("ingest-run applies the baseline ingest pipeline and skips empty LLM mutati
     assert.ok(result.json.baseline_mutation_result.created[0].startsWith("wiki/sources/"));
     assert.equal(mock.requests.length, 2);
     assert.ok(mock.requests.every((request) => request.headers["x-api-key"] === "test-key"));
+    const plannerPayload = JSON.parse(mock.requests[1].body.messages[1].content);
+    assert.equal(plannerPayload.source_payload, undefined);
+    assert.equal(plannerPayload.wiki_context.baseline_source_note.path, result.json.baseline_mutation_result.created[0]);
+    assert.ok(plannerPayload.wiki_context.supporting_notes.some((item) => item.path === result.json.baseline_mutation_result.created[0]));
+    assert.match(plannerPayload.wiki_context.baseline_source_note.sections["Raw Context"][0], /compact workflows/i);
+    assert.match(plannerPayload.knowledge_boundary, /only from wiki_context/);
 
     const sourceNote = await readFile(path.join(vault, result.json.baseline_mutation_result.created[0]));
     assert.match(sourceNote, /Compact workflows move fragile glue into scripts\./);
@@ -938,6 +944,235 @@ test("ingest-run tolerates an LLM ingest plan missing optional envelope fields",
       result.json.llm_guardrail_rejections.some((item) => item.reason.includes("missing source_refs")),
       "expected a guardrail rejection for the missing source_refs"
     );
+  } finally {
+    await mock.close();
+  }
+});
+
+test("ingest-run rejects durable LLM wiki updates without source-note support", async () => {
+  const vault = await tempDir("dps-wiki-llm-ingest-run-unsupported-wiki-update-vault-");
+  await runCommand("git", ["init"], { cwd: vault });
+  await runCommand("git", ["config", "user.name", "Test User"], { cwd: vault });
+  await runCommand("git", ["config", "user.email", "test@example.com"], { cwd: vault });
+  await writeFile(path.join(vault, "INDEX.md"), "# Index\n\n## Entries\n");
+  await writeFile(
+    path.join(vault, "raw/web/unsupported-wiki-update.md"),
+    `---\ntitle: "Unsupported Wiki Update Source"\n---\n\nThis source mentions grounded ingestion boundaries.\n`
+  );
+
+  const mock = await startMockLlm([
+    {
+      body: {
+        id: "chat-source-note",
+        model: "mock/model",
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                summary: "A source about grounded ingestion boundaries.",
+                raw_context: "The source mentions grounded ingestion boundaries.",
+                extracted_claims: ["The source mentions grounded ingestion boundaries."],
+                open_questions: []
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { total_tokens: 10 }
+      }
+    },
+    {
+      body: {
+        id: "chat-ingest-plan",
+        model: "mock/model",
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                plan_id: "plan-unsupported-wiki-update",
+                operation: "ingest",
+                summary: "Create an unsupported concept.",
+                source_refs: ["raw/web/unsupported-wiki-update.md"],
+                page_actions: [
+                  {
+                    path: "wiki/concepts/grounded-ingestion-boundaries.md",
+                    action: "create",
+                    doc_type: "concept",
+                    change_type: "fact",
+                    idempotency_key: "unsupported-wiki-update:concept",
+                    payload: {
+                      title: "Grounded Ingestion Boundaries",
+                      sections: {
+                        Summary: ["Grounded ingestion boundaries keep durable notes reliable."],
+                        Facts: ["Durable updates must be grounded."]
+                      }
+                    }
+                  }
+                ],
+                index_updates: [],
+                post_actions: { reindex: true, commit: true }
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { total_tokens: 9 }
+      }
+    }
+  ]);
+
+  try {
+    const inputPath = path.join(vault, "ingest-run-input.json");
+    await writeJson(inputPath, {
+      raw_path: "raw/web/unsupported-wiki-update.md",
+      captured_at: "2026-04-13T11:30:00Z"
+    });
+
+    const result = await runTool("ingest-run", ["--vault", vault, "--input", inputPath], {
+      env: {
+        LLM_API_KEY: "test-key",
+        LLM_API_KEY_HEADER: "x-api-key",
+        LLM_BASE_URL: mock.baseUrl,
+        LLM_MODEL: "mock/model",
+        TELEGRAM_BOT_TOKEN: "",
+        TELEGRAM_CHAT_ID: ""
+      }
+    });
+
+    assert.equal(result.json.status, "baseline_ingest_applied_no_llm_changes");
+    assert.equal(result.json.llm_mutation_result, null);
+    assert.ok(
+      result.json.llm_guardrail_rejections.some((item) =>
+        item.reason.includes("must include a wiki_context note link in Sources")
+      )
+    );
+    assert.ok(
+      result.json.llm_guardrail_rejections.some((item) =>
+        item.reason.includes("missing baseline source note in source_refs")
+      )
+    );
+
+    await assert.rejects(
+      readFile(path.join(vault, "wiki/concepts/grounded-ingestion-boundaries.md")),
+      /ENOENT/
+    );
+  } finally {
+    await mock.close();
+  }
+});
+
+test("ingest-run allows durable LLM wiki updates supported by existing wiki context", async () => {
+  const vault = await tempDir("dps-wiki-llm-ingest-run-existing-wiki-context-vault-");
+  await runCommand("git", ["init"], { cwd: vault });
+  await runCommand("git", ["config", "user.name", "Test User"], { cwd: vault });
+  await runCommand("git", ["config", "user.email", "test@example.com"], { cwd: vault });
+  await writeFile(path.join(vault, "INDEX.md"), "# Index\n\n## Entries\n");
+  await writeFile(
+    path.join(vault, "wiki/concepts/existing-wiki-anchor.md"),
+    conceptNote(
+      "Existing Wiki Anchor",
+      `## Summary\nExisting wiki anchor content is already curated in the wiki.\n\n## Facts\n- Existing wiki anchor supports ingestion planning from wiki context.\n\n## Sources\n- [[Existing Source]]`
+    )
+  );
+  await writeFile(
+    path.join(vault, "raw/web/existing-wiki-context-source.md"),
+    `---\ntitle: "Existing Wiki Context Source"\n---\n\nThis source mentions the existing wiki anchor.\n`
+  );
+
+  const mock = await startMockLlm([
+    {
+      body: {
+        id: "chat-source-note",
+        model: "mock/model",
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                summary: "A source about the existing wiki anchor.",
+                raw_context: "The source mentions the existing wiki anchor.",
+                extracted_claims: ["The source mentions the existing wiki anchor."],
+                open_questions: []
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { total_tokens: 10 }
+      }
+    },
+    {
+      body: {
+        id: "chat-ingest-plan",
+        model: "mock/model",
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                plan_id: "plan-existing-wiki-context",
+                operation: "ingest",
+                summary: "Create a topic grounded in existing wiki context.",
+                source_refs: [
+                  "raw/web/existing-wiki-context-source.md",
+                  "wiki/sources/2026-04-13-existing-wiki-context-source.md",
+                  "wiki/concepts/existing-wiki-anchor.md"
+                ],
+                page_actions: [
+                  {
+                    path: "wiki/topics/existing-wiki-context.md",
+                    action: "create",
+                    doc_type: "topic",
+                    change_type: "fact",
+                    idempotency_key: "existing-wiki-context:topic",
+                    payload: {
+                      title: "Existing Wiki Context",
+                      sections: {
+                        Summary: ["Existing wiki context groups notes supported by already curated wiki material."],
+                        Sources: ["[[Existing Wiki Anchor]]"]
+                      }
+                    }
+                  }
+                ],
+                index_updates: [],
+                post_actions: { reindex: true, commit: true }
+              })
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { total_tokens: 9 }
+      }
+    }
+  ]);
+
+  try {
+    const inputPath = path.join(vault, "ingest-run-input.json");
+    await writeJson(inputPath, {
+      raw_path: "raw/web/existing-wiki-context-source.md",
+      captured_at: "2026-04-13T11:45:00Z"
+    });
+
+    const result = await runTool("ingest-run", ["--vault", vault, "--input", inputPath], {
+      env: {
+        LLM_API_KEY: "test-key",
+        LLM_API_KEY_HEADER: "x-api-key",
+        LLM_BASE_URL: mock.baseUrl,
+        LLM_MODEL: "mock/model",
+        TELEGRAM_BOT_TOKEN: "",
+        TELEGRAM_CHAT_ID: ""
+      }
+    });
+
+    assert.equal(result.json.status, "baseline_ingest_applied_llm_plan_applied");
+    assert.ok(result.json.llm_mutation_result.created.includes("wiki/topics/existing-wiki-context.md"));
+    assert.equal(
+      result.json.llm_guardrail_rejections.some((item) =>
+        item.reason.includes("must include a wiki_context note link in Sources")
+      ),
+      false
+    );
+
+    const topic = await readFile(path.join(vault, "wiki/topics/existing-wiki-context.md"));
+    assert.match(topic, /\[\[Existing Wiki Anchor\]\]/);
   } finally {
     await mock.close();
   }

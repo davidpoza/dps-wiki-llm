@@ -9,7 +9,16 @@ import type {
 import { chatCompletion, chatText, extractJson, llmMeta } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { releaseTelegramLockAfterFailure } from "./lib/telegram-lock.js";
-import type { CommitInput, LlmSourceNote, MutationPlan, MutationResult, NormalizedSourcePayload } from "./lib/contracts.js";
+import type {
+  AnswerContextDoc,
+  AnswerContextPacket,
+  CommitInput,
+  LlmSourceNote,
+  MutationPlan,
+  MutationResult,
+  NormalizedSourcePayload,
+  SearchResult
+} from "./lib/contracts.js";
 
 type IngestRunInput = Record<string, unknown>;
 
@@ -68,6 +77,7 @@ type IngestRunOutput = {
 };
 
 const ALLOWED_PAGE_PREFIXES = ["wiki/concepts/", "wiki/entities/", "wiki/topics/", "wiki/analyses/"];
+const INGEST_WIKI_CONTEXT_LIMIT = 8;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -216,11 +226,36 @@ function parseSourceNote(response: ChatCompletionResponse, request: ChatCompleti
   };
 }
 
-function ingestPlanRequest(sourcePayload: NormalizedSourcePayload, baselinePlan: MutationPlan): ChatCompletionRequest {
+function buildWikiContextQuery(sourcePayload: NormalizedSourcePayload, sourceNote: LlmSourceNote): string {
+  return compactLines([
+    sourcePayload.title,
+    sourceNote.summary,
+    ...(sourceNote.extracted_claims ?? [])
+  ]).replace(/\s+/g, " ").slice(0, 1000);
+}
+
+function wikiLinkForDoc(doc: Pick<AnswerContextDoc, "title" | "path">): string {
+  return doc.title ? `[[${doc.title}]]` : `[[${doc.path}]]`;
+}
+
+function ingestPlanRequest(
+  sourcePayload: NormalizedSourcePayload,
+  baselinePlan: MutationPlan,
+  wikiContextDocs: AnswerContextDoc[]
+): ChatCompletionRequest {
   const baselineSourceNotePath = baselinePlan.page_actions?.[0]?.path;
-  const baselineSourceNoteTitle = baselinePlan.page_actions?.[0]?.payload?.title || sourcePayload.title;
+  const baselineSourceNotePayload = baselinePlan.page_actions?.[0]?.payload;
+  const baselineSourceNoteTitle = baselineSourceNotePayload?.title || sourcePayload.title;
   const baselineSourceNoteLink = baselineSourceNoteTitle ? `[[${baselineSourceNoteTitle}]]` : null;
   const sourceRefs = [sourcePayload.raw_path, baselineSourceNotePath].filter(Boolean);
+  const supportingWikiNotes = wikiContextDocs.map((doc) => ({
+    path: doc.path,
+    title: doc.title,
+    doc_type: doc.doc_type,
+    link: wikiLinkForDoc(doc),
+    body: doc.body
+  }));
+  const supportingWikiLinks = [...new Set(supportingWikiNotes.map((doc) => doc.link).filter(Boolean))];
 
   return {
     stream: false,
@@ -231,6 +266,9 @@ function ingestPlanRequest(sourcePayload: NormalizedSourcePayload, baselinePlan:
         content: [
           "You produce only valid JSON matching the Mutation Plan contract.",
           "This plan may be applied automatically and must not include a create action for the baseline source note.",
+          "For concepts, entities, topics, and analyses, use only the provided wiki_context as knowledge support.",
+          "Do not add model-prior, web-prior, or raw-content facts that are not present in wiki_context.",
+          "wiki_context may include the newly created baseline source note and other existing wiki sources, concepts, topics, and entities.",
           "Every page_actions[].path must start exactly with one of: wiki/concepts/, wiki/entities/, wiki/topics/, or wiki/analyses/, except for one narrow update to the exact baseline source note path provided by source_note_update_allowed_path.",
           "Never write directly under wiki/, for example use wiki/concepts/lean-server.md instead of wiki/lean-server.md.",
           "Only propose small grounded changes under those allowed page path prefixes.",
@@ -247,12 +285,28 @@ function ingestPlanRequest(sourcePayload: NormalizedSourcePayload, baselinePlan:
         role: "user",
         content: JSON.stringify(
           {
-            source_payload: sourcePayload,
-            baseline_mutation_plan: baselinePlan,
+            wiki_context: {
+              baseline_source_note: {
+                path: baselineSourceNotePath,
+                title: baselineSourceNoteTitle,
+                link: baselineSourceNoteLink,
+                sections: baselineSourceNotePayload?.sections ?? {}
+              },
+              supporting_notes: supportingWikiNotes
+            },
+            baseline_mutation_plan_metadata: {
+              plan_id: baselinePlan.plan_id,
+              operation: baselinePlan.operation,
+              summary: baselinePlan.summary,
+              source_refs: sourceRefs
+            },
             allowed_page_path_prefixes: ALLOWED_PAGE_PREFIXES,
             source_note_update_allowed_path: baselineSourceNotePath,
             source_note_update_allowed_sections: ["Linked Notes"],
             baseline_source_note_link: baselineSourceNoteLink,
+            allowed_supporting_wiki_links: supportingWikiLinks,
+            knowledge_boundary:
+              "Concepts, entities, topics, and analyses must be derived only from wiki_context. They may use any source, concept, topic, or entity present in wiki_context.supporting_notes. If the needed content is not in wiki_context, return no-op actions.",
             invalid_page_path_examples: ["wiki/lean-server.md", "wiki/example.md", "wiki/sources/other-source.md"],
             required_json_shape: {
               plan_id: `plan-${sourcePayload.source_id}-llm-ingest-review`,
@@ -343,6 +397,27 @@ function hasOnlyLinkedNotesSection(action: Record<string, unknown>): boolean {
   );
 }
 
+function sectionValues(value: unknown): string[] {
+  if (typeof value === "string") {
+    return value.trim() ? [value.trim()] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function hasWikiContextSupport(action: Record<string, unknown>, allowedSupportingLinks: Set<string>): boolean {
+  if (allowedSupportingLinks.size === 0) {
+    return false;
+  }
+  const payload = action.payload;
+  if (!isRecord(payload) || !isRecord(payload.sections)) {
+    return false;
+  }
+  return sectionValues(payload.sections.Sources).some((link) => allowedSupportingLinks.has(link));
+}
+
 function defaultLlmPlanId(baselinePlan: MutationPlan): string {
   return `${baselinePlan.plan_id}-llm-ingest-review`;
 }
@@ -359,7 +434,11 @@ function planRejection(collection: GuardrailRejection[], reason: string): void {
   });
 }
 
-function parseAndGuardrailPlan(response: ChatCompletionResponse, baselinePlan: MutationPlan): {
+function parseAndGuardrailPlan(
+  response: ChatCompletionResponse,
+  baselinePlan: MutationPlan,
+  wikiContextDocs: AnswerContextDoc[] = []
+): {
   plan: MutationPlan;
   rejections: GuardrailRejection[];
   hasChanges: boolean;
@@ -414,6 +493,13 @@ function parseAndGuardrailPlan(response: ChatCompletionResponse, baselinePlan: M
   if (!Array.isArray(rawPlan.source_refs) || rawPlan.source_refs.length === 0) {
     rawPlan.source_refs = defaultLlmSourceRefs(baselinePlan);
     planRejection(rejections, "LLM ingest plan missing source_refs[]; using baseline source_refs");
+  } else {
+    const normalizedSourceRefs = rawPlan.source_refs.filter((item): item is string => typeof item === "string" && Boolean(item.trim()));
+    rawPlan.source_refs = normalizedSourceRefs;
+    if (normalizedSourceRefs.length === 0) {
+      rawPlan.source_refs = defaultLlmSourceRefs(baselinePlan);
+      planRejection(rejections, "LLM ingest plan source_refs[] contained no strings; using baseline source_refs");
+    }
   }
   if (!Array.isArray(rawPlan.page_actions)) {
     rawPlan.page_actions = [];
@@ -424,7 +510,18 @@ function parseAndGuardrailPlan(response: ChatCompletionResponse, baselinePlan: M
   }
 
   const baselineSourceNotePath = baselinePlan.page_actions?.[0]?.path;
+  const baselineSourceNoteTitle = baselinePlan.page_actions?.[0]?.payload?.title;
+  const baselineSourceNoteLink = typeof baselineSourceNoteTitle === "string" && baselineSourceNoteTitle.trim() ? `[[${baselineSourceNoteTitle}]]` : null;
+  const allowedSupportingLinks = new Set(
+    [baselineSourceNoteLink, ...wikiContextDocs.map(wikiLinkForDoc)].filter((item): item is string => typeof item === "string" && Boolean(item))
+  );
   const validPageActions = new Set(["create", "update", "noop"]);
+
+  const planSourceRefs = rawPlan.source_refs as string[];
+  if (typeof baselineSourceNotePath === "string" && !planSourceRefs.includes(baselineSourceNotePath)) {
+    planSourceRefs.push(baselineSourceNotePath);
+    planRejection(rejections, "LLM ingest plan missing baseline source note in source_refs[]; adding it");
+  }
 
   const pageActions = rawPlan.page_actions as unknown[];
   const indexUpdates = rawPlan.index_updates as unknown[];
@@ -469,6 +566,10 @@ function parseAndGuardrailPlan(response: ChatCompletionResponse, baselinePlan: M
 
     if (!ALLOWED_PAGE_PREFIXES.some((prefix) => actionPath.startsWith(prefix))) {
       rejectAction(rejections, action, "page path outside allowed wiki areas");
+      continue;
+    }
+    if (action.action !== "noop" && !hasWikiContextSupport(action, allowedSupportingLinks)) {
+      rejectAction(rejections, action, "durable wiki updates must include a wiki_context note link in Sources");
       continue;
     }
     if (
@@ -745,12 +846,30 @@ async function main(): Promise<void> {
       vault: args.vault,
       input: baselinePlanOutput.commit_input
     });
+    const wikiContextQuery = buildWikiContextQuery(sourcePayload, sourceNote);
+    const wikiContextRetrieval = await runToolJson<SearchResult>("search", {
+      vault: args.vault,
+      args: ["--limit", String(INGEST_WIKI_CONTEXT_LIMIT), wikiContextQuery]
+    });
+    const wikiContext = await runToolJson<AnswerContextPacket>("answer-context", {
+      vault: args.vault,
+      input: {
+        question: wikiContextQuery,
+        retrieval: wikiContextRetrieval,
+        should_review_for_feedback: false
+      }
+    });
 
-    const ingestPlanRequestBody = ingestPlanRequest(baselinePlanOutput.source_payload, baselinePlanOutput.mutation_plan);
+    const ingestPlanRequestBody = ingestPlanRequest(
+      baselinePlanOutput.source_payload,
+      baselinePlanOutput.mutation_plan,
+      wikiContext.context_docs
+    );
     const ingestPlanResponse = await chatCompletion(ingestPlanRequestBody);
     const { plan: llmMutationPlan, rejections, hasChanges } = parseAndGuardrailPlan(
       ingestPlanResponse,
-      baselinePlanOutput.mutation_plan
+      baselinePlanOutput.mutation_plan,
+      wikiContext.context_docs
     );
     let llmMutationResult: MutationResult | null = null;
     let llmReindexResult: ReindexResult | null = null;
