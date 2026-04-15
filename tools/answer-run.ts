@@ -3,11 +3,21 @@
 import { SYSTEM_CONFIG } from "./config.js";
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
-import type { AnswerContextPacket, AnswerRecord, FeedbackRecord, SearchResult } from "./lib/contracts.js";
-import type { ChatCompletionRequest, ChatCompletionResponse, LlmMeta } from "./lib/llm.js";
-import { answerTemperature, chatCompletion, chatText, extractJson, llmMeta } from "./lib/llm.js";
+import type { LlmMeta } from "./lib/llm.js";
+import { chatCompletion, chatText, llmMeta } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { releaseTelegramLockAfterFailure } from "./lib/telegram-lock.js";
+import type {
+  AnswerContextPacket,
+  AnswerRecord,
+  FeedbackRecord,
+  SearchResult
+} from "./lib/contracts.js";
+
+import { answerRequest } from "./services/answers/generate-answer.js";
+import { feedbackRequest, parseFeedback } from "./services/answers/propose-feedback.js";
+import { buildAnswerNotification } from "./services/notifications/telegram.js";
+import type { TelegramBaseFields, TelegramMessage } from "./services/notifications/telegram.js";
 
 type AnswerRunInput = Record<string, unknown>;
 
@@ -24,13 +34,7 @@ type FeedbackValidation = {
   mutation_plan_path: string | null;
 };
 
-type TelegramMessage = {
-  chat_id: string;
-  text: string;
-  disable_web_page_preview: boolean;
-};
-
-type AnswerRunOutput = {
+type AnswerRunOutput = TelegramBaseFields & {
   status: "answer_recorded_feedback_proposed";
   question: string;
   answer: string;
@@ -41,10 +45,7 @@ type AnswerRunOutput = {
   feedback_validation: FeedbackValidation;
   approval_required: boolean;
   apply_feedback_workflow: "KB - Apply Feedback";
-  approval_payload: {
-    approved: true;
-    feedback: FeedbackRecord;
-  };
+  approval_payload: { approved: true; feedback: FeedbackRecord };
   llm_answer_meta: LlmMeta;
   llm_feedback_meta: LlmMeta;
   retrieval: SearchResult;
@@ -56,10 +57,6 @@ type AnswerRunOutput = {
   telegram_command: unknown;
   telegram_lock_acquired: boolean;
   telegram_lock_id: unknown;
-  telegram_enabled: boolean;
-  telegram_skip_reason: string | null;
-  telegram_bot_token: string;
-  telegram_message: TelegramMessage | null;
   telegram_answer_message: TelegramMessage | null;
 };
 
@@ -93,11 +90,17 @@ function normalizeInput(input: AnswerRunInput): {
       ? body.edited_message
       : null;
   const telegramChat = isRecord(telegramMessage?.chat) ? telegramMessage.chat : null;
-  const telegramChatId = telegramChat?.id !== undefined ? String(telegramChat.id) : null;
-  const telegramText = typeof telegramMessage?.text === "string" ? telegramMessage.text.trim() : "";
+  const telegramChatId =
+    telegramChat?.id !== undefined ? String(telegramChat.id) : null;
+  const telegramText =
+    typeof telegramMessage?.text === "string" ? telegramMessage.text.trim() : "";
   const allowedTelegramChatId = String(process.env.TELEGRAM_CHAT_ID || "").trim();
 
-  if (telegramChatId && allowedTelegramChatId && telegramChatId !== allowedTelegramChatId) {
+  if (
+    telegramChatId &&
+    allowedTelegramChatId &&
+    telegramChatId !== allowedTelegramChatId
+  ) {
     throw new Error(`Unauthorized Telegram chat id: ${telegramChatId}`);
   }
 
@@ -110,7 +113,10 @@ function normalizeInput(input: AnswerRunInput): {
     throw new Error("Telegram message did not include a question after the command");
   }
 
-  const limit = Number.isFinite(Number(body.limit)) && Number(body.limit) > 0 ? Number(body.limit) : SYSTEM_CONFIG.cli.defaultSearchLimit;
+  const limit =
+    Number.isFinite(Number(body.limit)) && Number(body.limit) > 0
+      ? Number(body.limit)
+      : SYSTEM_CONFIG.cli.defaultSearchLimit;
 
   return {
     question,
@@ -125,159 +131,19 @@ function normalizeInput(input: AnswerRunInput): {
   };
 }
 
-function answerRequest(packet: AnswerContextPacket): ChatCompletionRequest {
-  const contextDocs = Array.isArray(packet.context_docs) ? packet.context_docs : [];
-  return {
-    stream: false,
-    temperature: answerTemperature(),
-    messages: [
-      {
-        role: "system",
-        content: [
-          "You answer questions using only the provided markdown wiki context.",
-          "If the context is insufficient, say what is missing instead of inventing facts.",
-          "Do not mutate the wiki and do not claim to have updated files.",
-          "Return concise markdown suitable for an answer artifact."
-        ].join(" ")
-      },
-      {
-        role: "user",
-        content: JSON.stringify(
-          {
-            question: packet.question,
-            evidence_used: packet.answer_record?.evidence_used ?? [],
-            context_docs: contextDocs.map((doc) => ({
-              path: doc.path,
-              title: doc.title,
-              doc_type: doc.doc_type,
-              body: doc.body
-            }))
-          },
-          null,
-          2
-        )
+function countOf(values: unknown): number {
+  return Array.isArray(values) ? values.length : 0;
+}
+
+function usageSummary(meta: LlmMeta): Record<string, unknown> {
+  const usage = meta.usage as Record<string, unknown> | undefined;
+  return usage
+    ? {
+        prompt_tokens: usage.prompt_tokens ?? null,
+        completion_tokens: usage.completion_tokens ?? null,
+        total_tokens: usage.total_tokens ?? null
       }
-    ]
-  };
-}
-
-function feedbackRequest(packet: AnswerContextPacket, answer: string, answerRecord: AnswerRecord): ChatCompletionRequest {
-  const contextDocs = Array.isArray(packet.context_docs) ? packet.context_docs : [];
-  return {
-    stream: false,
-    temperature: 0,
-    messages: [
-      {
-        role: "system",
-        content: [
-          "You produce only valid JSON matching the Feedback Record contract.",
-          "Valid decision values are none, output_only, and propagate.",
-          "Use propagate only for small reusable wiki changes grounded in the evidence_used paths.",
-          "Every candidate item must include item_id, target_note, change_type, novelty, source_support, proposed_content, and outcome.",
-          "Use outcome applied only for changes you recommend a human approve; otherwise use deferred or rejected.",
-          "Do not copy the whole answer into the wiki."
-        ].join(" ")
-      },
-      {
-        role: "user",
-        content: JSON.stringify(
-          {
-            output_id: answerRecord.output_id,
-            answer_record: answerRecord,
-            answer,
-            source_refs: answerRecord.evidence_used ?? [],
-            context_docs: contextDocs.map((doc) => ({
-              path: doc.path,
-              title: doc.title,
-              doc_type: doc.doc_type,
-              body: doc.body
-            })),
-            required_json_shape: {
-              output_id: answerRecord.output_id,
-              decision: "none|output_only|propagate",
-              reason: "short reason",
-              source_refs: answerRecord.evidence_used ?? [],
-              candidate_items: [],
-              affected_notes: []
-            }
-          },
-          null,
-          2
-        )
-      }
-    ]
-  };
-}
-
-function parseFeedback(response: ChatCompletionResponse, answerRecord: AnswerRecord): FeedbackRecord {
-  const proposed = extractJson(chatText(response, "LLM feedback"));
-  if (!isRecord(proposed)) {
-    throw new Error("LLM feedback response must be a JSON object");
-  }
-  if (!proposed.output_id) {
-    proposed.output_id = answerRecord.output_id;
-  }
-  if (!Array.isArray(proposed.source_refs)) {
-    proposed.source_refs = answerRecord.evidence_used ?? [];
-  }
-  if (!Array.isArray(proposed.candidate_items)) {
-    proposed.candidate_items = [];
-  }
-  if (!Array.isArray(proposed.affected_notes)) {
-    const candidateItems = proposed.candidate_items as unknown[];
-    proposed.affected_notes = candidateItems
-      .filter((item) => isRecord(item) && item.outcome === "applied")
-      .map((item) => (isRecord(item) ? item.target_note : null))
-      .filter((item): item is string => typeof item === "string" && Boolean(item.trim()));
-  }
-  return proposed as unknown as FeedbackRecord;
-}
-
-function truncate(value: unknown, maxLength: number): string {
-  const text = String(value ?? "");
-  return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
-}
-
-function compactLines(values: unknown[]): string {
-  return values.filter((value) => typeof value === "string" && value.trim()).join(String.fromCharCode(10));
-}
-
-function buildTelegramFields(output: Omit<AnswerRunOutput, "telegram_enabled" | "telegram_skip_reason" | "telegram_bot_token" | "telegram_message" | "telegram_answer_message">): Pick<
-  AnswerRunOutput,
-  "telegram_enabled" | "telegram_skip_reason" | "telegram_bot_token" | "telegram_message" | "telegram_answer_message"
-> {
-  const chatId = String(output.telegram_chat_id ?? process.env.TELEGRAM_CHAT_ID ?? "").trim();
-  const token = String(process.env.TELEGRAM_BOT_TOKEN ?? "").trim();
-  const missingConfig: string[] = [];
-  if (!token) missingConfig.push("TELEGRAM_BOT_TOKEN");
-  if (!chatId) missingConfig.push("telegram_chat_id or TELEGRAM_CHAT_ID");
-  const evidence = Array.isArray(output.answer_record?.evidence_used) ? output.answer_record.evidence_used : [];
-  const text = compactLines([
-    "KB answer completed",
-    `Question: ${truncate(output.question, 500)}`,
-    "Answer:",
-    truncate(output.answer, 2600),
-    output.output_path ? `Output: ${output.output_path}` : "",
-    evidence.length ? `Evidence: ${evidence.slice(0, 6).join(", ")}` : "",
-    `Feedback decision: ${output.proposed_feedback?.decision ?? "unknown"}`,
-    output.approval_required ? "Feedback approval required: yes" : "Feedback approval required: no"
-  ]);
-
-  const telegramMessage = missingConfig.length
-    ? null
-    : {
-        chat_id: chatId,
-        text,
-        disable_web_page_preview: true
-      };
-
-  return {
-    telegram_enabled: missingConfig.length === 0,
-    telegram_skip_reason: missingConfig.length ? `Missing Telegram runtime configuration: ${missingConfig.join(", ")}` : null,
-    telegram_bot_token: token,
-    telegram_message: telegramMessage,
-    telegram_answer_message: telegramMessage
-  };
+    : {};
 }
 
 async function main(): Promise<void> {
@@ -285,49 +151,201 @@ async function main(): Promise<void> {
   const log = createLogger("answer-run");
   let lockContext: unknown = null;
 
-  log.info("answer-run started");
+  log.info({ phase: "startup" }, "answer-run: started");
 
   try {
+    // ── 1. read and normalize input ───────────────────────────────────────────
+
     const input = await readJsonInput<AnswerRunInput>(args.input);
     lockContext = input;
+
     const normalized = normalizeInput(input);
     lockContext = normalized;
-    log.info({ question: normalized.question.slice(0, 100) }, "search starting");
+
+    log.info(
+      {
+        phase: "normalize-input",
+        question_length: normalized.question.length,
+        question_preview: normalized.question.slice(0, 80),
+        limit: normalized.limit,
+        telegram_chat_id: normalized.telegram_chat_id,
+        telegram_command: normalized.telegram_command
+      },
+      "answer-run: [normalize-input] input normalized"
+    );
+
+    // ── 2. search wiki ────────────────────────────────────────────────────────
+
+    log.info(
+      {
+        phase: "search",
+        question_length: normalized.question.length,
+        limit: normalized.limit
+      },
+      "answer-run: [search] querying wiki for relevant documents"
+    );
+
     const retrieval = await runToolJson<SearchResult>("search", {
       vault: args.vault,
       args: ["--limit", String(normalized.limit), normalized.question]
     });
-    log.info("answer-context starting");
+
+    log.info(
+      {
+        phase: "search",
+        results: retrieval.results?.length ?? 0,
+        top_result: retrieval.results?.[0]?.path ?? null,
+        top_score: retrieval.results?.[0]?.score ?? null
+      },
+      "answer-run: [search] wiki search completed"
+    );
+
+    // ── 3. build answer context ───────────────────────────────────────────────
+
+    log.info(
+      { phase: "answer-context", search_results: retrieval.results?.length ?? 0 },
+      "answer-run: [answer-context] building answer context packet"
+    );
+
     const context = await runToolJson<AnswerContextPacket>("answer-context", {
       vault: args.vault,
-      input: {
-        question: normalized.question,
-        retrieval
-      }
+      input: { question: normalized.question, retrieval }
     });
-    log.info("answer LLM call starting");
+
+    log.info(
+      {
+        phase: "answer-context",
+        context_docs: context.context_docs?.length ?? 0,
+        evidence_used: context.answer_record?.evidence_used?.length ?? 0
+      },
+      "answer-run: [answer-context] context packet ready"
+    );
+
+    // ── 4. LLM: generate answer ───────────────────────────────────────────────
+
+    log.info(
+      {
+        phase: "generate-answer/llm",
+        question_length: normalized.question.length,
+        context_docs: context.context_docs?.length ?? 0
+      },
+      "answer-run: [generate-answer/llm] requesting answer from LLM"
+    );
+
     const answerResponse = await chatCompletion(answerRequest(context));
     const answer = chatText(answerResponse, "LLM answer");
-    log.info("answer-record starting");
+    const answerMeta = llmMeta(answerResponse);
+
+    log.info(
+      {
+        phase: "generate-answer/llm",
+        model: answerMeta.model,
+        finish_reason: answerMeta.finish_reason,
+        answer_length: answer.length,
+        ...usageSummary(answerMeta)
+      },
+      "answer-run: [generate-answer/llm] answer received"
+    );
+
+    // ── 5. record answer ──────────────────────────────────────────────────────
+
+    log.info(
+      {
+        phase: "answer-record",
+        output_id: context.answer_record?.output_id,
+        question_length: normalized.question.length
+      },
+      "answer-run: [answer-record] persisting answer artifact"
+    );
+
     const answerRecordResult = await runToolJson<AnswerRecordResult>("answer-record", {
       vault: args.vault,
-      input: {
-        answer_record: context.answer_record,
-        answer
-      }
+      input: { answer_record: context.answer_record, answer }
     });
     const answerRecord = answerRecordResult.record;
-    log.info("feedback LLM call starting");
-    const feedbackResponse = await chatCompletion(feedbackRequest(context, answer, answerRecord));
+
+    log.info(
+      {
+        phase: "answer-record",
+        output_id: answerRecord.output_id,
+        output_path: answerRecordResult.output_path,
+        wrote: answerRecordResult.wrote
+      },
+      "answer-run: [answer-record] answer artifact written"
+    );
+
+    // ── 6. LLM: propose feedback ──────────────────────────────────────────────
+
+    log.info(
+      {
+        phase: "propose-feedback/llm",
+        output_id: answerRecord.output_id,
+        evidence_used: countOf(answerRecord.evidence_used)
+      },
+      "answer-run: [propose-feedback/llm] requesting feedback proposal from LLM"
+    );
+
+    const feedbackResponse = await chatCompletion(
+      feedbackRequest(context, answer, answerRecord)
+    );
     const proposedFeedback = parseFeedback(feedbackResponse, answerRecord);
-    log.info("feedback-record starting");
-    const feedbackValidation = await runToolJson<FeedbackValidation>("feedback-record", {
-      vault: args.vault,
-      input: proposedFeedback,
-      write: false
-    });
+    const feedbackMeta = llmMeta(feedbackResponse);
+
+    log.info(
+      {
+        phase: "propose-feedback/llm",
+        model: feedbackMeta.model,
+        finish_reason: feedbackMeta.finish_reason,
+        decision: proposedFeedback.decision,
+        candidates: countOf(proposedFeedback.candidate_items),
+        affected_notes: countOf(proposedFeedback.affected_notes),
+        ...usageSummary(feedbackMeta)
+      },
+      "answer-run: [propose-feedback/llm] feedback proposal received"
+    );
+
+    // ── 7. validate and record feedback ──────────────────────────────────────
+
+    log.info(
+      {
+        phase: "feedback-record",
+        output_id: answerRecord.output_id,
+        decision: proposedFeedback.decision
+      },
+      "answer-run: [feedback-record] validating feedback record (dry-run)"
+    );
+
+    const feedbackValidation = await runToolJson<FeedbackValidation>(
+      "feedback-record",
+      { vault: args.vault, input: proposedFeedback, write: false }
+    );
     const feedback = feedbackValidation.record;
-    const outputBase: Omit<AnswerRunOutput, "telegram_enabled" | "telegram_skip_reason" | "telegram_bot_token" | "telegram_message" | "telegram_answer_message"> = {
+
+    log.info(
+      {
+        phase: "feedback-record",
+        decision: feedback.decision,
+        record_path: feedbackValidation.record_path
+      },
+      "answer-run: [feedback-record] feedback record validated"
+    );
+
+    // ── 8. build output ───────────────────────────────────────────────────────
+
+    const approvalRequired = feedback.decision === "propagate";
+    const notification = buildAnswerNotification({
+      telegram_chat_id: normalized.telegram_chat_id,
+      question: normalized.question,
+      answer,
+      output_path: answerRecordResult.output_path,
+      evidence_used: Array.isArray(answerRecord.evidence_used)
+        ? answerRecord.evidence_used
+        : [],
+      feedback_decision: feedback.decision ?? "unknown",
+      approval_required: approvalRequired
+    });
+
+    const output: AnswerRunOutput = {
       status: "answer_recorded_feedback_proposed",
       question: normalized.question,
       answer,
@@ -336,14 +354,11 @@ async function main(): Promise<void> {
       output_path: answerRecordResult.output_path,
       proposed_feedback: feedback,
       feedback_validation: feedbackValidation,
-      approval_required: feedback.decision === "propagate",
+      approval_required: approvalRequired,
       apply_feedback_workflow: "KB - Apply Feedback",
-      approval_payload: {
-        approved: true,
-        feedback
-      },
-      llm_answer_meta: llmMeta(answerResponse),
-      llm_feedback_meta: llmMeta(feedbackResponse),
+      approval_payload: { approved: true, feedback },
+      llm_answer_meta: answerMeta,
+      llm_feedback_meta: feedbackMeta,
       retrieval,
       context_docs: context.context_docs,
       telegram_chat_id: normalized.telegram_chat_id,
@@ -352,13 +367,32 @@ async function main(): Promise<void> {
       telegram_polled: normalized.telegram_polled,
       telegram_command: normalized.telegram_command,
       telegram_lock_acquired: normalized.telegram_lock_acquired,
-      telegram_lock_id: normalized.telegram_lock_id
+      telegram_lock_id: normalized.telegram_lock_id,
+      ...notification
     };
 
-    log.info({ output_path: answerRecordResult.output_path }, "answer-run completed");
-    writeJsonStdout({ ...outputBase, ...buildTelegramFields(outputBase) }, args.pretty);
+    log.info(
+      {
+        phase: "done",
+        output_id: answerRecord.output_id,
+        output_path: answerRecordResult.output_path,
+        feedback_decision: feedback.decision,
+        approval_required: approvalRequired,
+        answer_length: answer.length,
+        evidence_used: countOf(answerRecord.evidence_used)
+      },
+      "answer-run: completed"
+    );
+
+    writeJsonStdout(output, args.pretty);
   } catch (error) {
-    log.error({ err: error instanceof Error ? error.message : String(error) }, "answer-run failed");
+    log.error(
+      {
+        phase: "error",
+        err: error instanceof Error ? error.message : String(error)
+      },
+      "answer-run: pipeline failed — releasing lock and re-throwing"
+    );
     await releaseTelegramLockAfterFailure(args.vault, lockContext, "answer-run");
     throw error;
   }
