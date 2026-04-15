@@ -34,8 +34,13 @@ function isSafeRelativePath(value: unknown): value is string {
   );
 }
 
+function slugFromPath(path: string): string {
+  return path.split("/").pop()?.replace(/\.md$/, "") ?? path;
+}
+
 function wikiLinkForDoc(doc: Pick<AnswerContextDoc, "title" | "path">): string {
-  return doc.title ? `[[${doc.title}]]` : `[[${doc.path}]]`;
+  const slug = slugFromPath(doc.path);
+  return doc.title ? `[[${slug}|${doc.title}]]` : `[[${slug}]]`;
 }
 
 function sectionValues(value: unknown): string[] {
@@ -229,10 +234,16 @@ export function parseAndGuardrailPlan(
 
   const baselineSourceNotePath = baselinePlan.page_actions?.[0]?.path;
   const baselineSourceNoteTitle = baselinePlan.page_actions?.[0]?.payload?.title;
-  const baselineSourceNoteLink =
-    typeof baselineSourceNoteTitle === "string" && baselineSourceNoteTitle.trim()
-      ? `[[${baselineSourceNoteTitle}]]`
+  const baselineSourceNoteSlug =
+    typeof baselineSourceNotePath === "string"
+      ? slugFromPath(baselineSourceNotePath)
       : null;
+  const baselineSourceNoteLink =
+    baselineSourceNoteSlug && typeof baselineSourceNoteTitle === "string" && baselineSourceNoteTitle.trim()
+      ? `[[${baselineSourceNoteSlug}|${baselineSourceNoteTitle}]]`
+      : typeof baselineSourceNoteTitle === "string" && baselineSourceNoteTitle.trim()
+        ? `[[${baselineSourceNoteTitle}]]`
+        : null;
 
   const allowedSupportingLinks = new Set<string>(
     [

@@ -15,8 +15,13 @@ const ALLOWED_PAGE_PREFIXES = [
 
 export { ALLOWED_PAGE_PREFIXES };
 
+function slugFromPath(path: string): string {
+  return path.split("/").pop()?.replace(/\.md$/, "") ?? path;
+}
+
 function wikiLinkForDoc(doc: Pick<AnswerContextDoc, "title" | "path">): string {
-  return doc.title ? `[[${doc.title}]]` : `[[${doc.path}]]`;
+  const slug = slugFromPath(doc.path);
+  return doc.title ? `[[${slug}|${doc.title}]]` : `[[${slug}]]`;
 }
 
 function compactLines(values: (string | undefined | null)[]): string {
@@ -53,9 +58,15 @@ export function ingestPlanRequest(
   const baselineSourceNotePayload = baselinePlan.page_actions?.[0]?.payload;
   const baselineSourceNoteTitle =
     baselineSourceNotePayload?.title || sourcePayload.title;
-  const baselineSourceNoteLink = baselineSourceNoteTitle
-    ? `[[${baselineSourceNoteTitle}]]`
+  const baselineSourceNoteSlug = baselineSourceNotePath
+    ? slugFromPath(baselineSourceNotePath)
     : null;
+  const baselineSourceNoteLink =
+    baselineSourceNoteSlug && baselineSourceNoteTitle
+      ? `[[${baselineSourceNoteSlug}|${baselineSourceNoteTitle}]]`
+      : baselineSourceNoteTitle
+        ? `[[${baselineSourceNoteTitle}]]`
+        : null;
   const sourceRefs = [sourcePayload.raw_path, baselineSourceNotePath].filter(
     Boolean
   );
@@ -84,7 +95,7 @@ export function ingestPlanRequest(
           "You produce only valid JSON matching the Mutation Plan contract.",
           "This plan may be applied automatically and must not include a create action for the baseline source note.",
           // ── language ──────────────────────────────────────────────────────────
-          "Write all generated text content (titles, facts, descriptions, section values, summaries) in Spanish.",
+          "Write all generated text content (titles, facts, descriptions, section values, summaries) in Spanish. Do NOT translate proper nouns, names of people, companies, tools, books, films, articles, or any other named entity — keep them in their original form.",
           // ── knowledge boundary ────────────────────────────────────────────────
           "For concepts, entities, topics, and analyses, use only the provided wiki_context as knowledge support.",
           "Do not add model-prior, web-prior, or raw-content facts that are not present in wiki_context.",
@@ -93,9 +104,10 @@ export function ingestPlanRequest(
           "Every page_actions[].path must start exactly with one of: wiki/concepts/, wiki/entities/, wiki/topics/, or wiki/analyses/, except for one narrow update to the exact baseline source note path provided by source_note_update_allowed_path.",
           "Never write directly under wiki/, for example use wiki/concepts/servidor-lean.md instead of wiki/servidor-lean.md.",
           "Only propose small grounded changes under those allowed page path prefixes.",
-          // ── link integrity ────────────────────────────────────────────────────
-          "Every [[wiki link]] you write in any section (Sources, Related, Linked Notes, or any other) MUST exactly match either: (a) an entry from allowed_supporting_wiki_links for notes that already exist in the wiki, or (b) the exact payload.title value of a note you are creating in this same plan's page_actions.",
-          "Never construct a wiki link from memory, approximation, or partial title. If you cannot find an exact match, omit the link entirely.",
+          // ── link format and integrity ─────────────────────────────────────────
+          "All internal wiki links must use the format [[kebab-case-filename|Nombre legible]], where kebab-case-filename is the last path segment of the target file without the .md extension (e.g. [[servidor-lean|Lean Server]], [[gestion-del-conocimiento|Gestión del Conocimiento]]).",
+          "For existing notes: copy the link exactly from allowed_supporting_wiki_links. For new notes you create in this plan: derive the slug from the last segment of their page_actions[].path without .md, and use their payload.title as the display name.",
+          "Never construct a wiki link from memory or approximation. If you cannot find an exact match in allowed_supporting_wiki_links or in the page_actions of this plan, omit the link entirely.",
           // ── topics ────────────────────────────────────────────────────────────
           "Before creating a new topic, check wiki_context.supporting_notes for existing topics with overlapping scope. Prefer updating an existing topic over creating a redundant one.",
           "When the source has a clear reusable domain or theme, create or update a topic under wiki/topics/ for that domain.",
@@ -189,8 +201,8 @@ export function ingestPlanRequest(
                   payload: {
                     sections: {
                       "Linked Notes": [
-                        "[[Ejemplo Concepto]]",
-                        "[[Tema General]]"
+                        "[[ejemplo-concepto|Ejemplo Concepto]]",
+                        "[[tema-general|Tema General]]"
                       ]
                     }
                   }
