@@ -52,6 +52,7 @@ export function sourceNoteRequest(
           "Do not invent facts, links, names, dates, numbers, or claims not present in the source.",
           "Remove only boilerplate, navigation, ads, duplicated text, formatting noise, and irrelevant wrapper text.",
           "Do not propose wiki mutations. This step only prepares the wiki/sources note content.",
+          "Write all generated text (summary, raw_context, extracted_claims, open_questions) in Spanish, regardless of the source language.",
           "Return a JSON object with summary, raw_context, extracted_claims, and open_questions."
         ].join(" ")
       },

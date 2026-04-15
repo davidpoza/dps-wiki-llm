@@ -83,20 +83,33 @@ export function ingestPlanRequest(
         content: [
           "You produce only valid JSON matching the Mutation Plan contract.",
           "This plan may be applied automatically and must not include a create action for the baseline source note.",
+          // ── language ──────────────────────────────────────────────────────────
+          "Write all generated text content (titles, facts, descriptions, section values, summaries) in Spanish.",
+          // ── knowledge boundary ────────────────────────────────────────────────
           "For concepts, entities, topics, and analyses, use only the provided wiki_context as knowledge support.",
           "Do not add model-prior, web-prior, or raw-content facts that are not present in wiki_context.",
           "wiki_context may include the newly created baseline source note and other existing wiki sources, concepts, topics, and entities.",
+          // ── path rules ────────────────────────────────────────────────────────
           "Every page_actions[].path must start exactly with one of: wiki/concepts/, wiki/entities/, wiki/topics/, or wiki/analyses/, except for one narrow update to the exact baseline source note path provided by source_note_update_allowed_path.",
-          "Never write directly under wiki/, for example use wiki/concepts/lean-server.md instead of wiki/lean-server.md.",
+          "Never write directly under wiki/, for example use wiki/concepts/servidor-lean.md instead of wiki/servidor-lean.md.",
           "Only propose small grounded changes under those allowed page path prefixes.",
-          "When the source has a clear reusable domain or theme, create or update a topic under wiki/topics/ for that domain and link it to the baseline source note and relevant concepts.",
-          "For example, a source primarily about productivity should normally create or update wiki/topics/productivity.md unless an equivalent topic already exists.",
+          // ── link integrity ────────────────────────────────────────────────────
+          "Every [[wiki link]] you write in any section (Sources, Related, Linked Notes, or any other) MUST exactly match either: (a) an entry from allowed_supporting_wiki_links for notes that already exist in the wiki, or (b) the exact payload.title value of a note you are creating in this same plan's page_actions.",
+          "Never construct a wiki link from memory, approximation, or partial title. If you cannot find an exact match, omit the link entirely.",
+          // ── topics ────────────────────────────────────────────────────────────
+          "Before creating a new topic, check wiki_context.supporting_notes for existing topics with overlapping scope. Prefer updating an existing topic over creating a redundant one.",
+          "When the source has a clear reusable domain or theme, create or update a topic under wiki/topics/ for that domain.",
+          "Topic file names must be broad and reusable in kebab-case Spanish (e.g., productividad.md, inteligencia-artificial.md, gestion-del-conocimiento.md). Never include source titles, years, event names, or overly specific terms in topic filenames.",
+          // ── linked notes ──────────────────────────────────────────────────────
           "Every created or updated concept, entity, topic, or analysis must include the baseline source note link in its Sources section when the change is grounded in this source.",
-          "When you create or update reusable notes, also update the exact baseline source note with Linked Notes pointing back to those notes.",
+          "If any page_action has action create or update (for notes other than the baseline source note), you MUST include an update action on the baseline source note that lists ALL those created/updated notes in the Linked Notes section using their exact [[Title]] links.",
           "The baseline source note update may only use action update and payload.sections.Linked Notes; do not modify Summary, Raw Context, Extracted Claims, frontmatter, title, or other sections.",
+          // ── quality ───────────────────────────────────────────────────────────
           "Do not write raw content dumps. Prefer noop or empty page_actions when the source lacks reusable knowledge.",
           "Every write action must include an idempotency_key and source_refs must include the raw_path and baseline source note path when available."
-        ].join(" ")
+        ]
+          .filter((line) => !line.startsWith("//"))
+          .join(" ")
       },
       {
         role: "user",
@@ -124,6 +137,8 @@ export function ingestPlanRequest(
             allowed_supporting_wiki_links: supportingWikiLinks,
             knowledge_boundary:
               "Concepts, entities, topics, and analyses must be derived only from wiki_context. They may use any source, concept, topic, or entity present in wiki_context.supporting_notes. If the needed content is not in wiki_context, return no-op actions.",
+            link_integrity_rule:
+              "Every [[wiki link]] must exactly match an entry in allowed_supporting_wiki_links (for existing notes) OR the payload.title of a note you create in this same plan. No invented or approximated links.",
             invalid_page_path_examples: [
               "wiki/lean-server.md",
               "wiki/example.md",
@@ -132,18 +147,34 @@ export function ingestPlanRequest(
             required_json_shape: {
               plan_id: `plan-${sourcePayload.source_id}-llm-ingest-review`,
               operation: "ingest",
-              summary: "Auto-applied LLM plan for reusable wiki updates",
+              summary: "Plan LLM auto-aplicado para actualizaciones reutilizables del wiki",
               source_refs: sourceRefs,
               page_actions: [
                 {
-                  path: "wiki/concepts/example-concept.md",
+                  path: "wiki/concepts/ejemplo-concepto.md",
                   action: "noop",
                   doc_type: "concept",
                   change_type: "fact",
-                  idempotency_key: `${sourcePayload.source_id}:wiki/concepts/example-concept.md`,
+                  idempotency_key: `${sourcePayload.source_id}:wiki/concepts/ejemplo-concepto.md`,
                   payload: {
+                    title: "Ejemplo Concepto",
                     sections: {
-                      Facts: ["Grounded reusable fact from the source."],
+                      Facts: ["Hecho reutilizable fundamentado en la fuente."],
+                      Sources: baselineSourceNoteLink ? [baselineSourceNoteLink] : []
+                    },
+                    related_links: []
+                  }
+                },
+                {
+                  path: "wiki/topics/tema-general.md",
+                  action: "noop",
+                  doc_type: "topic",
+                  change_type: "fact",
+                  idempotency_key: `${sourcePayload.source_id}:wiki/topics/tema-general.md`,
+                  payload: {
+                    title: "Tema General",
+                    sections: {
+                      Facts: ["Dato relevante del tema."],
                       Sources: baselineSourceNoteLink ? [baselineSourceNoteLink] : []
                     },
                     related_links: []
@@ -156,7 +187,12 @@ export function ingestPlanRequest(
                   change_type: "new_link",
                   idempotency_key: `${sourcePayload.source_id}:source-linked-notes`,
                   payload: {
-                    sections: { "Linked Notes": ["[[Example Concept]]"] }
+                    sections: {
+                      "Linked Notes": [
+                        "[[Ejemplo Concepto]]",
+                        "[[Tema General]]"
+                      ]
+                    }
                   }
                 }
               ],
