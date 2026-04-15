@@ -58,7 +58,10 @@ vault/
 │   └── indexes/
 ├── outputs/
 ├── state/
-│   └── kb.db
+│   ├── kb.db                ← SQLite FTS index
+│   └── semantic/            ← vector index (gitignored, local only)
+│       ├── manifest.json
+│       └── notes/
 └── INDEX.md
 ```
 
@@ -74,11 +77,22 @@ n8n + LLM + Node scripts
 [STATE]
 wiki/ -> durable knowledge graph in markdown form
 
-[INDEX]
-SQLite FTS in state/kb.db
+[INDEX — lexical]
+SQLite FTS5 in state/kb.db
+  reindex.ts   → build
+  search.ts    → query (BM25)
 
-[QUERY]
-search.ts -> retrieve docs -> LLM answer synthesis
+[INDEX — semantic]
+ONNX vector index in state/semantic/  (gitignored, local only)
+  embed-index.ts     → build / incremental update
+  semantic-search.ts → query (cosine similarity)
+
+[QUERY — hybrid]
+hybrid-search.ts
+  → FTS leg + semantic leg in parallel
+  → min-max normalise each leg
+  → finalScore = 0.6 × semantic + 0.4 × lexical
+  → answer-run.ts / ingest-run.ts
 ```
 
 ---
@@ -89,7 +103,8 @@ This system is designed to run with:
 
 - self-hosted `n8n` as the orchestrator
 - Node.js scripts for deterministic local operations
-- SQLite FTS5 for retrieval
+- SQLite FTS5 for lexical retrieval
+- a local ONNX vector index for semantic retrieval (built by `embed-index.ts`, never committed to git)
 - a vault mounted locally, even if the canonical storage is WebDAV-backed
 
 The intended execution model is:
@@ -168,17 +183,24 @@ If the same raw event is seen multiple times because of sync noise, retries, or 
 ### 2. Answer Flow
 
 ```text
-user query
--> search.ts
+user query  [+ optional retrieval_mode: fts | semantic | hybrid]
+-> hybrid-search.ts (default when semantic index exists)
+   or search.ts (fallback / explicit fts mode)
+   or semantic-search.ts (explicit semantic mode)
 -> top-k candidate documents
--> markdown read
+-> answer-context.ts  (markdown read + context packet)
 -> LLM answer synthesis
--> output artifact or structured answer record
+-> answer-record.ts   (output artifact)
+-> feedback-record.ts (validate proposal, no wiki mutation)
 -> response
 ```
 
 The answer step should not update the wiki directly.
 First produce the answer, then run feedback evaluation.
+
+`retrieval_mode` defaults to `"hybrid"` in `answer-run.ts`.
+If the semantic index (`state/semantic/manifest.json`) does not exist, the mode
+falls back to `"fts"` automatically — no error, no configuration change required.
 
 ### 3. Feedback Loop
 
@@ -476,7 +498,7 @@ high | medium | low
 
 ## Indexing Model
 
-### SQLite Shape
+### Lexical Index (SQLite FTS5)
 
 ```text
 docs (
@@ -491,23 +513,73 @@ docs (
 docs_fts (FTS5)
 ```
 
-### Indexing Pipeline
+Pipeline:
 
 ```text
 wiki/**/*.md
 -> parse frontmatter
 -> extract body
 -> upsert docs
--> rebuild docs_fts
+-> rebuild docs_fts      (reindex.ts)
 ```
 
-### Query Pattern
+Query (BM25, scores are negative log-probability sums):
 
 ```sql
-SELECT path, title
+SELECT path, title, bm25(docs_fts) AS score
 FROM docs_fts
-WHERE MATCH query
+JOIN docs ON docs.id = docs_fts.rowid
+WHERE docs_fts MATCH query
+ORDER BY score
 LIMIT k;
+```
+
+### Semantic Index (Local Vector Index)
+
+Location: `state/semantic/` (gitignored, never committed)
+
+```text
+state/semantic/
+├── manifest.json           ← registry: {version, model, dimension, mode, items}
+└── notes/
+    └── wiki__foo.md_note.json   ← EmbeddingUnit per indexed note
+```
+
+Pipeline:
+
+```text
+wiki/**/*.md
+-> normalizeTextForEmbedding()   strip frontmatter, wikilinks, markdown syntax
+-> hashText()                    16-hex SHA-256 fingerprint
+-> compare with manifest hash    skip unchanged documents
+-> @xenova/transformers          CPU inference, INT8 quantised model
+-> mean-pool output tensor       [1, seq_len, dim] -> [dim]
+-> saveEmbeddingUnit()           write notes/<id>.json
+-> saveManifest()                update manifest.json   (embed-index.ts)
+```
+
+Query (cosine similarity, scores in [-1, 1]):
+
+```text
+query string
+-> normalizeTextForEmbedding()   same normalization as at index time
+-> @xenova/transformers          embed query
+-> cosineSimilarity(query, unit) per indexed unit
+-> sort descending
+-> top k                         (semantic-search.ts)
+```
+
+### Hybrid Query Pattern
+
+```text
+query
+-> search (BM25)         top 3k results
+-> semantic-search       top 3k results
+-> minMaxNormalise([BM25 scores]) -> [0, 1]
+-> minMaxNormalise([cosine scores]) -> [0, 1]
+-> finalScore = 0.6 × semantic + 0.4 × lexical  (per candidate)
+-> union of both result sets, ranked by finalScore
+-> top k                 (hybrid-search.ts)
 ```
 
 ---
@@ -544,8 +616,30 @@ LIMIT k;
 ### `search.ts`
 
 - input: query string
-- output: top-k documents as JSON
+- output: top-k documents as JSON (BM25 scores, negative)
 - should search `wiki/`-derived state first, not `raw/`
+
+### `embed-index.ts`
+
+- input: CLI flags (`--vault`, `--rebuild`)
+- output: JSON summary (`embedded`, `skipped`, `removed`, `total`); writes `state/semantic/` on disk
+- incremental by default: only re-embeds documents whose normalised-text hash has changed
+- must be run after `reindex` whenever wiki content changes significantly
+- `state/semantic/` is gitignored and local-only; it must be (re)built on each deployment
+
+### `semantic-search.ts`
+
+- input: positional query string, `--vault`, `--limit`
+- output: `SearchResult` JSON (same contract as `search.ts`, scores in [-1, 1])
+- requires the semantic index to exist; returns an empty result list if it does not
+- the query must be embedded with the same model used at index time
+
+### `hybrid-search.ts`
+
+- input: positional query string, `--vault`, `--limit`
+- output: `SearchResult` JSON with an extra `mode` field (`"hybrid"` or `"fts"`)
+- falls back to pure FTS when the semantic index is absent — no configuration change required
+- the `mode` field lets callers distinguish which path was taken for logging/debugging
 
 ### `answer-context.ts`
 
@@ -777,8 +871,9 @@ Used by `n8n`, `reindex.ts`, and `commit.ts`.
 
 ### 4. Search Result
 
-Produced by `search.ts`.
-Consumed by the answer workflow.
+Produced by `search.ts`, `semantic-search.ts`, and `hybrid-search.ts`.
+All three tools emit the same `SearchResult` shape so callers treat them uniformly.
+`hybrid-search.ts` adds an extra `mode` field.
 
 ```json
 {
@@ -789,11 +884,16 @@ Consumed by the answer workflow.
       "path": "wiki/concepts/model-context-protocol.md",
       "title": "Model Context Protocol",
       "doc_type": "concept",
-      "score": 12.8
+      "score": 0.87
     }
   ]
 }
 ```
+
+Score interpretation by tool:
+- `search.ts` — BM25 score (negative; more negative = less relevant; ordered ascending by SQLite)
+- `semantic-search.ts` — cosine similarity in [-1, 1]; higher = more relevant
+- `hybrid-search.ts` — fused normalised score in [0, 1]; higher = more relevant
 
 ### 5. Answer Record
 
@@ -906,7 +1006,10 @@ Used by `n8n` for logging and traceability.
 - `ingest-source.ts` -> normalized source payload
 - `plan-source-note.ts` or ingestion prompt -> mutation plan
 - `apply-update.ts` -> mutation plan in, mutation result out
-- `search.ts` -> search result
+- `search.ts` -> search result (BM25)
+- `embed-index.ts` -> writes `state/semantic/` (no stdout contract beyond status JSON)
+- `semantic-search.ts` -> search result (cosine similarity)
+- `hybrid-search.ts` -> search result (fused score) + `mode` field
 - `answer-context.ts` -> answer context packet
 - `answer-record.ts` or answer workflow -> answer record
 - feedback evaluation -> feedback record and optional mutation plan

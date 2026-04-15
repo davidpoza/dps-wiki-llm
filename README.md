@@ -39,8 +39,8 @@ The repo now includes the local toolchain plus compact importable n8n workflows 
 | `init-db.ts` | Creates the SQLite schema and FTS tables. | `state/kb.db` |
 | `ingest-source.ts` | Normalizes a `raw/**` artifact into the canonical source payload. | stdout JSON |
 | `youtube-transcript.ts` | Calls `yt-dlp` to fetch YouTube subtitles and writes them as a raw transcript artifact. | `raw/web/**` plus stdout JSON |
-| `ingest-run.ts` | Runs the full ingest path: optional YouTube transcript creation, source normalization, LLM source-note cleanup, baseline apply, reindex, commit, and optional guarded LLM wiki updates. | stdout JSON, `raw/**`, `wiki/**`, `state/**`, git commit |
-| `answer-run.ts` | Runs retrieval, answer synthesis, answer artifact persistence, and feedback-record validation without mutating `wiki/`. | stdout JSON, `outputs/**` |
+| `ingest-run.ts` | Runs the full ingest path: optional YouTube transcript creation, source normalization, LLM source-note cleanup, baseline apply, reindex, commit, and optional guarded LLM wiki updates. Uses hybrid search for wiki context retrieval when the semantic index is present. | stdout JSON, `raw/**`, `wiki/**`, `state/**`, git commit |
+| `answer-run.ts` | Runs retrieval, answer synthesis, answer artifact persistence, and feedback-record validation without mutating `wiki/`. Accepts `retrieval_mode` (`fts`/`semantic`/`hybrid`); defaults to `hybrid` when the semantic index exists. | stdout JSON, `outputs/**` |
 | `render-n8n-workflows.ts` | Legacy helper for rendering workflows that still contain n8n LLM HTTP nodes. The compact workflows no longer need it. | updated workflow JSON when applicable |
 | `plan-source-note.ts` | Builds a safe baseline Mutation Plan that creates the source note and root index entry, using an LLM-cleaned `source_note` when provided. | stdout JSON |
 | `apply-update.ts` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
@@ -49,6 +49,9 @@ The repo now includes the local toolchain plus compact importable n8n workflows 
 | `feedback-record.ts` | Writes feedback records and can derive a follow-up mutation plan. | `state/feedback/**` |
 | `reindex.ts` | Rebuilds the `docs` table and FTS index from `wiki/**/*.md`. | `state/kb.db` |
 | `search.ts` | Runs FTS queries and returns ranked results as JSON. | stdout JSON |
+| `embed-index.ts` | Builds or incrementally updates the local semantic vector index. Only re-embeds changed documents (hash diff). | `state/semantic/**`, stdout JSON |
+| `semantic-search.ts` | Embeds a query and retrieves top-K semantically similar documents via cosine similarity. | stdout JSON (SearchResult-compatible) |
+| `hybrid-search.ts` | Fuses FTS and semantic results with min-max normalisation and weighted scoring (60% semantic / 40% lexical). Falls back to FTS when the semantic index is absent. | stdout JSON (SearchResult-compatible) |
 | `lint.ts` | Performs structural wiki checks. | `state/maintenance/*-lint.{json,md}` |
 | `health-check.ts` | Performs deeper semantic and traceability checks. | `state/maintenance/*-health-check.{json,md}` |
 | `commit.ts` | Stages material paths, writes a structured change log, and creates a git commit. | `state/change-log/**`, git commit |
@@ -189,8 +192,11 @@ services:
 │       ├── workflow.puml
 │       └── workflow.svg
 └── tools/
+    ├── config.ts
     ├── init-db.ts
     ├── ingest-source.ts
+    ├── ingest-run.ts
+    ├── answer-run.ts
     ├── plan-source-note.ts
     ├── apply-update.ts
     ├── answer-context.ts
@@ -198,11 +204,17 @@ services:
     ├── feedback-record.ts
     ├── reindex.ts
     ├── search.ts
+    ├── embed-index.ts          ← semantic index builder
+    ├── semantic-search.ts      ← pure semantic retrieval
+    ├── hybrid-search.ts        ← fused FTS + semantic retrieval
     ├── lint.ts
     ├── health-check.ts
     ├── commit.ts
-    ├── config.ts
     └── lib/
+        ├── embedding-provider.ts         ← EmbeddingProvider interface
+        ├── local-transformers-provider.ts ← CPU inference via @xenova/transformers
+        ├── semantic-index.ts              ← manifest, cosine similarity, I/O
+        └── ...
 ```
 
 Expected vault layout:
@@ -212,6 +224,10 @@ vault/
 ├── raw/
 ├── wiki/
 ├── state/
+│   ├── kb.db              ← SQLite FTS index (reindex.ts)
+│   └── semantic/          ← vector index (embed-index.ts) — gitignored
+│       ├── manifest.json
+│       └── notes/
 └── outputs/
 ```
 
@@ -280,6 +296,33 @@ Run a search query:
 npm run --silent search -- --vault /path/to/vault "model context protocol" --limit 5
 ```
 
+Build the semantic vector index (run once after `reindex`, then again when wiki content changes):
+
+```bash
+npm run --silent embed-index -- --vault /path/to/vault
+# Force a full rebuild regardless of cached hashes:
+npm run --silent embed-index -- --vault /path/to/vault --rebuild
+```
+
+Query semantically (no keyword overlap required):
+
+```bash
+npm run --silent semantic-search -- --vault /path/to/vault "cómo organizo mi base de conocimiento" --limit 5
+```
+
+Query with hybrid fusion (FTS + semantic, recommended default):
+
+```bash
+npm run --silent hybrid-search -- --vault /path/to/vault "model context protocol" --limit 8
+```
+
+Run `answer-run` with an explicit retrieval mode:
+
+```bash
+echo '{"question":"¿qué es RAG?","retrieval_mode":"hybrid"}' | \
+  npm run --silent answer-run -- --vault /path/to/vault
+```
+
 Build answer context and persist an answer artifact after LLM synthesis:
 
 ```bash
@@ -320,15 +363,99 @@ npm run --silent commit -- --vault /path/to/vault --input ./commit.json
 - `--vault` is the root of the target vault and defaults to the current working directory.
 - `--input` is used by JSON-driven scripts such as `ingest-run.ts`, `answer-run.ts`, `ingest-source.ts`, `youtube-transcript.ts`, `plan-source-note.ts`, `apply-update.ts`, `answer-context.ts`, `answer-record.ts`, `feedback-record.ts`, and `commit.ts`.
 - `--db` can override the database path for `init-db.ts`, `reindex.ts`, and `search.ts`.
-- `--limit` controls result count in `search.ts`.
+- `--limit` controls result count in `search.ts`, `semantic-search.ts`, and `hybrid-search.ts`.
 - `--no-write` is supported by `feedback-record.ts`, `lint.ts`, and `health-check.ts`.
+- `--rebuild` is supported by `embed-index.ts` to force re-embedding of all documents.
 - Scripts emit machine-readable JSON on success.
 
 ## Configuration
 
-`tools/config.ts` is the central behavior configuration for the toolchain. It defines vault paths, ingest defaults, answer artifact defaults, search limits, SQLite schema and pragmas, valid mutation and feedback values, note lint thresholds, health-check thresholds, markdown section behavior, and report directories.
+`tools/config.ts` is the central behavior configuration for the toolchain. It defines vault paths, ingest defaults, answer artifact defaults, search limits, SQLite schema and pragmas, valid mutation and feedback values, note lint thresholds, health-check thresholds, markdown section behavior, report directories, and semantic index settings.
+
+The `semantic` block controls the vector index:
+
+```typescript
+semantic: {
+  dir: "state/semantic",   // index directory, relative to vault root
+  mode: "note",            // granularity: whole-file (phase 1)
+  minChars: 250,           // documents shorter than this are not indexed
+  topK: 8,                 // default result count for semantic-search
+  model: "Xenova/bge-m3",  // Hugging Face model identifier
+  batchSize: 16            // max texts per embedding batch
+}
+```
+
+Override the model or batch size without touching code by setting environment variables before running `embed-index` or `semantic-search`:
+
+```bash
+EMBED_MODEL=Xenova/bge-small-en-v1.5 npm run embed-index -- --vault .
+```
+
+(Environment variable support is not yet wired in code; `SYSTEM_CONFIG.semantic.model` is the current source of truth. The variables are reserved for a future config-override layer.)
 
 The canonical JSON payload contracts from `AGENTS.md` are represented as TypeScript interfaces in `tools/lib/contracts.ts`.
+
+## Embedding Model
+
+The semantic index uses `@xenova/transformers` to run a transformer model locally, fully offline after the first download.
+
+### Cómo se incorpora al proyecto
+
+| Aspecto | Detalle |
+|---|---|
+| **Dependencia** | `@xenova/transformers ^2.17.2` en `package.json` — sin servidor externo, sin API key |
+| **Modelo por defecto** | `Xenova/bge-m3` (multilingual, 1024 dimensiones, INT8 cuantizado) |
+| **Primera ejecución** | Descarga los pesos ONNX desde Hugging Face Hub → `~/.cache/huggingface/` |
+| **Ejecuciones siguientes** | Lee desde caché local, sin red, completamente offline |
+| **Inferencia** | CPU, ONNX Runtime embebido en el paquete npm — no requiere GPU ni instalación extra |
+| **Cuantización** | `quantized: true` (INT8): ~4× menor en disco, 2–4× más rápido en CPU, pérdida de calidad inapreciable para retrieval |
+| **Mean pooling** | El modelo produce un tensor `[1, seq_len, dim]`; se promedia sobre `seq_len` para obtener un vector `[dim]` por documento |
+| **L2 normalización** | `normalize: true` produce vectores unitarios; la similitud coseno es equivalente al producto escalar |
+| **Singleton** | El pipeline ONNX se carga una vez por proceso y se reutiliza para todas las llamadas sucesivas |
+| **Almacenamiento** | Los vectores se guardan en `state/semantic/notes/*.json` — gitignoreados, nunca se commitean |
+
+### Por qué no hay servidor externo
+
+El sistema corre en una VM personal con acceso VPN restringido. Cada embedding de documentos o consultas ocurre dentro del mismo proceso Node.js que ya ejecuta los scripts del toolchain — sin latencia de red, sin costes de API, sin dependencia de disponibilidad externa.
+
+### Ciclo de vida del índice
+
+```
+npm run embed-index -- --vault .          # primera vez: descarga modelo + indexa todo
+                                           # sucesivas: solo re-embebe documentos cambiados
+
+# Cuando el wiki cambia significativamente:
+npm run reindex -- --vault .              # reconstruye FTS (SQLite)
+npm run embed-index -- --vault .          # actualiza índice semántico (hash-diff)
+
+# Reconstrucción forzada de todos los embeddings:
+npm run embed-index -- --vault . --rebuild
+```
+
+### Trazas de log de la llamada al modelo
+
+Cada llamada de inferencia emite una traza estructurada en `state/logs/app.log`:
+
+```json
+{
+  "level": "info",
+  "script": "embedding-provider",
+  "phase": "inference",
+  "model": "Xenova/bge-m3",
+  "input_chars": 1247,
+  "input_preview": "Model Context Protocol es un estándar abierto que permite...",
+  "options": { "pooling": "mean", "normalize": true },
+  "duration_ms": 312,
+  "output_dim": 1024,
+  "output_norm": 1.000000
+}
+```
+
+La carga del pipeline también se registra:
+
+```json
+{ "phase": "model-load", "model": "Xenova/bge-m3", "quantized": true, "duration_ms": 4821 }
+```
 
 ## Operational Notes
 

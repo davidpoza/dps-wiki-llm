@@ -13,7 +13,8 @@ export const SYSTEM_CONFIG = {
     idempotencyLedgerPath: "state/runtime/idempotency-keys.json",
     feedbackDir: "state/feedback",
     maintenanceDir: "state/maintenance",
-    changeLogDir: "state/change-log"
+    changeLogDir: "state/change-log",
+    semanticDir: "state/semantic"
   },
   cli: {
     defaultVault: () => process.cwd(),
@@ -154,6 +155,14 @@ export const SYSTEM_CONFIG = {
     level: "info",
     maxSize: "10m",
     frequency: "daily"
+  },
+  semantic: {
+    dir: "state/semantic",
+    mode: "note",
+    minChars: 250,
+    topK: 8,
+    model: "Xenova/bge-m3",
+    batchSize: 16
   }
 } as const;
 

@@ -15,6 +15,9 @@ This document is the English reference for the repository's implementation. It e
 | `tools/plan-source-note.ts` | Builds the deterministic baseline ingestion plan for creating a source note. | Normalized Source Payload JSON via `--input` or `stdin`. | JSON containing `mutation_plan` and `commit_input`. |
 | `tools/reindex.ts` | Scans wiki markdown files and rebuilds the relational and FTS indexes. | CLI flags such as `--vault` and optional `--db`. | JSON with indexed document count and rebuilt status. |
 | `tools/search.ts` | Runs a full-text search query against `state/kb.db`. | Positional search query plus CLI flags. | JSON search result payload with ranked documents. |
+| `tools/embed-index.ts` | Builds or incrementally updates the local semantic (vector) index. | CLI flags `--vault` and optional `--rebuild`. | JSON summary; writes `state/semantic/` on disk. |
+| `tools/semantic-search.ts` | Embeds a query and retrieves the top-K semantically similar wiki documents. | Positional query plus CLI flags. | JSON SearchResult compatible with `search.ts` output. |
+| `tools/hybrid-search.ts` | Combines FTS (BM25) and semantic results via weighted score fusion. | Positional query plus CLI flags. | JSON SearchResult with `mode: "hybrid"` (or `"fts"` on fallback). |
 | `tools/answer-context.ts` | Reads retrieved wiki documents and builds the answer context packet. | Search Result JSON plus question via `--input` or `stdin`. | Answer Context Packet JSON. |
 | `tools/answer-record.ts` | Writes a generated answer artifact and emits the canonical answer record. | Answer text plus Answer Record JSON via `--input` or `stdin`. | JSON with record, output path, and write status. |
 | `tools/apply-update.ts` | Applies a canonical mutation plan to markdown files and index pages. | Mutation Plan JSON via `--input` or `stdin`. | Mutation Result JSON. |
@@ -38,6 +41,9 @@ This document is the English reference for the repository's implementation. It e
 | `tools/lib/run-tool.ts` | Helper for macro scripts to call sibling compiled tool scripts with JSON passed through temporary files. | Avoids large command-line arguments and keeps script composition explicit. |
 | `tools/lib/text.ts` | Shared hashing, slugging, truncation, and summary helpers. | Keeps artifact naming deterministic across scripts. |
 | `tools/lib/wiki-inspect.ts` | Wiki loading, metadata extraction, link parsing, and graph analysis. | Powers reindexing, linting, and health checks. |
+| `tools/lib/embedding-provider.ts` | `EmbeddingProvider` interface — the single abstraction point for all text-embedding backends. | Allows swapping local, remote, or stub implementations without changing callers. |
+| `tools/lib/local-transformers-provider.ts` | CPU-local embedding implementation using `@xenova/transformers` (ONNX Runtime). | Downloads the model on first use; all subsequent runs are fully offline. |
+| `tools/lib/semantic-index.ts` | Core data layer for the semantic index: manifest CRUD, text normalization, cosine similarity, and per-document embedding I/O. | Consumed by `embed-index`, `semantic-search`, and `hybrid-search`. |
 
 ## Execution Model
 
@@ -82,6 +88,7 @@ This is the only local script that turns a raw event into a normalized ingestion
 - Accepts a raw event or Telegram `/ingest` payload and keeps the `raw/**` trigger boundary intact.
 - For YouTube ingest payloads, calls `youtube-transcript.ts` first and returns a handled failure JSON if subtitles cannot be written.
 - Calls `ingest-source.ts`, obtains an LLM-cleaned `source_note`, builds the baseline plan with `plan-source-note.ts`, applies it, reindexes, and commits.
+- For wiki context retrieval (step 9), checks whether `state/semantic/manifest.json` exists: uses `hybrid-search` when the semantic index is available, falls back to `search` otherwise.
 - Requests a second LLM Mutation Plan for reusable wiki updates, validates it with guardrails, and applies only safe non-empty plans.
 - Emits Telegram message payloads for n8n to send, without requiring n8n to hold the ingest business logic.
 
@@ -114,6 +121,40 @@ The implementation is intentionally full-rebuild and deterministic rather than i
 
 It searches only derived wiki state, never `raw/`.
 
+### `tools/embed-index.ts`
+
+- Scans every `*.md` file under `wiki/` recursively.
+- For each file: normalises the text (strips frontmatter, wikilinks, markdown syntax), computes a 16-hex SHA-256 fingerprint, and compares it against the stored hash in `state/semantic/manifest.json`.
+- Files whose hash has not changed since the last run are skipped with no model inference (incremental strategy).
+- New and changed files are embedded with `createLocalTransformersProvider` and written as individual JSON units under `state/semantic/notes/`.
+- Manifest entries for files that were deleted from disk are pruned so stale vectors cannot pollute future search results.
+- The `--rebuild` flag bypasses the hash check and re-embeds all documents unconditionally.
+- On first run (no manifest yet) all documents are embedded; subsequent runs are fast incremental updates.
+
+Must be run at least once before `semantic-search` or `hybrid-search` can return semantic results.
+
+### `tools/semantic-search.ts`
+
+- Accepts the query as the first positional argument (same convention as `search.ts`).
+- Loads the full manifest and all embedding units from `state/semantic/` into memory.
+- Embeds the query using the same model that was used to build the index (model mismatch would produce vectors in different spaces, giving meaningless scores).
+- Scores every indexed unit with cosine similarity and returns the top `--limit` results.
+- Output is structurally identical to the `SearchResult` contract produced by `search.ts`, so callers treat both uniformly.
+- Returns an empty result list (not an error) when the index has not been built yet.
+
+Brute-force nearest-neighbour is used intentionally: at personal-wiki scale it is faster than ANN due to zero setup cost.
+
+### `tools/hybrid-search.ts`
+
+- Checks whether `state/semantic/manifest.json` exists; if not, falls back to pure FTS (no error).
+- When the index is available, spawns `search` and `semantic-search` in parallel, each fetching `limit × 3` candidates (over-fetch so documents exclusive to one leg can still rank in the final top-K).
+- Applies min-max normalisation independently to each result list, mapping both to `[0, 1]`.  This is necessary because BM25 scores from SQLite FTS5 are negative log-probability sums while cosine similarities are in `[-1, 1]`.
+- Computes a weighted linear combination: `finalScore = 0.6 × semanticNorm + 0.4 × lexicalNorm`.
+- Sorts the fused candidates by descending score and returns the top `--limit` results.
+- The `mode` field in the output is `"hybrid"` or `"fts"` so callers can tell which path was taken.
+
+Used by `answer-run.ts` (default mode) and `ingest-run.ts` (wiki context retrieval) when the semantic index is present.
+
 ### `tools/answer-context.ts`
 
 - Accepts a question and Search Result JSON.
@@ -134,8 +175,11 @@ The answer artifact is operational output; it does not mutate the semantic wiki.
 ### `tools/answer-run.ts`
 
 - Accepts a direct question or Telegram update payload.
-- Calls `search.ts` and `answer-context.ts` to retrieve bounded wiki evidence.
-- Calls the LLM for answer synthesis, persists the result with `answer-record.ts`, and validates the feedback proposal with `feedback-record.ts --no-write`.
+- Reads the optional `retrieval_mode` field from the input (`"fts"`, `"semantic"`, or `"hybrid"`; defaults to `"hybrid"`).
+- Checks whether `state/semantic/manifest.json` exists; if the requested mode requires the semantic index and it is absent, falls back to `"fts"` automatically.
+- Routes the retrieval step to `hybrid-search`, `semantic-search`, or `search` accordingly.
+- Calls `answer-context.ts` to retrieve bounded wiki evidence, then the LLM for answer synthesis.
+- Persists the result with `answer-record.ts` and validates the feedback proposal with `feedback-record.ts --no-write`.
 - Returns an approval payload for `KB - Apply Feedback` when feedback decision is `propagate`.
 - Emits Telegram message payloads for n8n to send, while preserving the rule that answers do not mutate `wiki/`.
 
@@ -268,6 +312,38 @@ The helper is intentionally small so scripts can share naming behavior without a
 - Produces graph structures for inbound links, broken links, and ambiguous targets.
 
 This module is the shared read-model for indexing and maintenance workflows.
+
+### `tools/lib/embedding-provider.ts`
+
+- Defines the `EmbeddingProvider` interface with three members: `model` (string identifier for provenance), `dimension` (vector length), and `embed(texts)` (returns one vector per input).
+- Purely a type/contract definition; no I/O or dependencies.
+- Allows unit tests to inject a stub provider without loading any ML models.
+- Allows future providers (remote API, different local runtime) to be added without changing `embed-index.ts` or `semantic-search.ts`.
+
+### `tools/lib/local-transformers-provider.ts`
+
+- Implements `EmbeddingProvider` using `@xenova/transformers` (ONNX Runtime, CPU only).
+- Uses a dynamic `import()` so the WASM bootstrap and model cache initialization only run when the first `embed` call is made, keeping cold-start time low for tools that do not use embeddings.
+- Loads quantised (INT8) model weights (`quantized: true`), which are ~4× smaller and faster on CPU with negligible quality loss for retrieval tasks.
+- Handles two output tensor shapes across `@xenova/transformers` API versions: `tolist()` (older) and `.data`/`.dims` (newer).
+- Applies mean pooling over the sequence-length axis to reduce the per-token output tensor `[1, seq_len, dim]` to a single `[dim]` document vector — the standard approach for bi-encoder retrieval models (BGE, E5, Sentence-Transformers).
+- Processes texts one at a time within the configured batch to avoid attention-mask distortion from padding mixed-length sequences together.
+- The pipeline singleton is module-scoped, so multiple calls to `createLocalTransformersProvider` in the same process share one loaded ONNX session.
+
+### `tools/lib/semantic-index.ts`
+
+Provides four groups of exports:
+
+**Types:** `EmbeddingUnit` (the persisted record for one note, including its vector and hash), `ManifestItem` (path + hash entry in the registry), `SemanticManifest` (top-level index file schema).
+
+**Path helpers:** `semanticDirPath`, `manifestPath`, and the private `embeddingFilePath` which converts a note ID to a safe flat filename (path separators replaced by `__`, `#` replaced by `_`).
+
+**I/O helpers:** `loadManifest` / `saveManifest` for the registry file; `saveEmbeddingUnit` / `loadEmbeddingUnit` / `loadAllEmbeddingUnits` for per-note JSON files. All readers return `null` or a sentinel instead of throwing on missing files.
+
+**Algorithms:**
+- `normalizeTextForEmbedding` — strips YAML frontmatter, converts `[[wikilinks]]` to plain text, removes markdown link/image syntax, removes bare URLs, strips heading markers (`##`), and collapses all whitespace to a single space. The result is a clean single-line string for the tokeniser.
+- `hashText` — first 16 hex characters of SHA-256 over the normalised text. 64 bits of collision resistance is sufficient for change detection across a personal wiki.
+- `cosineSimilarity` — pure TypeScript dot-product-over-norms implementation; handles mismatched lengths and zero-norm vectors by returning 0.
 
 ## Common CLI Conventions
 

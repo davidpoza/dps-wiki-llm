@@ -2,6 +2,8 @@
 
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
+import { resolveVaultRoot, pathExists } from "./lib/fs-utils.js";
+import { manifestPath } from "./lib/semantic-index.js";
 import type { LlmMeta } from "./lib/llm.js";
 import { chatCompletion, llmMeta } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
@@ -342,17 +344,21 @@ async function main(): Promise<void> {
     // ── 9. retrieve wiki context ──────────────────────────────────────────────
 
     const wikiContextQuery = buildWikiContextQuery(sourcePayload, sourceNote);
+    const vaultRoot = resolveVaultRoot(args.vault);
+    const hasSemanticIndex = await pathExists(manifestPath(vaultRoot));
+    const wikiContextSearchTool = hasSemanticIndex ? "hybrid-search" : "search";
 
     log.info(
       {
         phase: "wiki-context/search",
         query_length: wikiContextQuery.length,
-        limit: INGEST_WIKI_CONTEXT_LIMIT
+        limit: INGEST_WIKI_CONTEXT_LIMIT,
+        search_tool: wikiContextSearchTool
       },
       "ingest-run: [wiki-context/search] retrieving related wiki docs"
     );
 
-    const wikiContextRetrieval = await runToolJson<SearchResult>("search", {
+    const wikiContextRetrieval = await runToolJson<SearchResult>(wikiContextSearchTool, {
       vault: args.vault,
       args: ["--limit", String(INGEST_WIKI_CONTEXT_LIMIT), wikiContextQuery]
     });
@@ -361,7 +367,8 @@ async function main(): Promise<void> {
       {
         phase: "wiki-context/search",
         results: wikiContextRetrieval.results?.length ?? 0,
-        top_result: wikiContextRetrieval.results?.[0]?.path ?? null
+        top_result: wikiContextRetrieval.results?.[0]?.path ?? null,
+        search_tool: wikiContextSearchTool
       },
       "ingest-run: [wiki-context/search] search completed"
     );

@@ -2,6 +2,8 @@
 
 import { SYSTEM_CONFIG } from "./config.js";
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { resolveVaultRoot, pathExists } from "./lib/fs-utils.js";
+import { manifestPath } from "./lib/semantic-index.js";
 import { createLogger } from "./lib/logger.js";
 import type { LlmMeta } from "./lib/llm.js";
 import { chatCompletion, chatText, llmMeta } from "./lib/llm.js";
@@ -72,9 +74,12 @@ function stripTelegramCommand(text: string): string {
   return text.replace(/^\/(?:ask|answer|query)(?:@\w+)?\s*/i, "").trim();
 }
 
+type RetrievalMode = "fts" | "semantic" | "hybrid";
+
 function normalizeInput(input: AnswerRunInput): {
   question: string;
   limit: number;
+  retrieval_mode: RetrievalMode;
   telegram_chat_id: unknown;
   telegram_message_id: unknown;
   telegram_update_id: unknown;
@@ -118,9 +123,14 @@ function normalizeInput(input: AnswerRunInput): {
       ? Number(body.limit)
       : SYSTEM_CONFIG.cli.defaultSearchLimit;
 
+  const rawMode = typeof body.retrieval_mode === "string" ? body.retrieval_mode : "hybrid";
+  const retrieval_mode: RetrievalMode =
+    rawMode === "fts" || rawMode === "semantic" || rawMode === "hybrid" ? rawMode : "hybrid";
+
   return {
     question,
     limit,
+    retrieval_mode,
     telegram_chat_id: telegramChatId,
     telegram_message_id: telegramMessage?.message_id ?? null,
     telegram_update_id: body.update_id ?? null,
@@ -176,16 +186,34 @@ async function main(): Promise<void> {
 
     // ── 2. search wiki ────────────────────────────────────────────────────────
 
+    const vaultRoot = resolveVaultRoot(args.vault);
+    const hasSemanticIndex = await pathExists(manifestPath(vaultRoot));
+    const resolvedMode =
+      normalized.retrieval_mode === "hybrid" || normalized.retrieval_mode === "semantic"
+        ? hasSemanticIndex
+          ? normalized.retrieval_mode
+          : "fts"
+        : "fts";
+
     log.info(
       {
         phase: "search",
         question_length: normalized.question.length,
-        limit: normalized.limit
+        limit: normalized.limit,
+        retrieval_mode: resolvedMode,
+        has_semantic_index: hasSemanticIndex
       },
       "answer-run: [search] querying wiki for relevant documents"
     );
 
-    const retrieval = await runToolJson<SearchResult>("search", {
+    const searchTool =
+      resolvedMode === "hybrid"
+        ? "hybrid-search"
+        : resolvedMode === "semantic"
+          ? "semantic-search"
+          : "search";
+
+    const retrieval = await runToolJson<SearchResult>(searchTool, {
       vault: args.vault,
       args: ["--limit", String(normalized.limit), normalized.question]
     });
@@ -195,7 +223,8 @@ async function main(): Promise<void> {
         phase: "search",
         results: retrieval.results?.length ?? 0,
         top_result: retrieval.results?.[0]?.path ?? null,
-        top_score: retrieval.results?.[0]?.score ?? null
+        top_score: retrieval.results?.[0]?.score ?? null,
+        retrieval_mode: resolvedMode
       },
       "answer-run: [search] wiki search completed"
     );
