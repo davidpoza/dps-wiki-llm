@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/logo.svg" alt="dps-wiki-llm logo" width="132">
+  <img src="docs/assets/logo.png" alt="dps-wiki-llm logo" width="132">
   <h1>dps-wiki-llm</h1>
   <p><strong>Deterministic Node.js tooling for a persistent markdown-based knowledge system.</strong></p>
   <p><code>raw/</code> for events, <code>wiki/</code> for curated state, <code>state/</code> for indexes and logs, and <code>outputs/</code> for artifacts.</p>
