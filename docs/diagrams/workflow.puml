@@ -28,40 +28,51 @@ actor "User query" as userQuery
 
 rectangle "raw/**\nEvent stream" as raw #E7F5FF
 rectangle "n8n trigger\n(raw/** only)" as n8n #FFF3BF
-rectangle "ingest-source.ts\nnormalized source payload" as ingest #DFF3E4
-rectangle "LLM source cleaner\nnormalized source note" as sourceCleaner #FFF3BF
-rectangle "plan-source-note.ts\nbaseline source note plan" as baselinePlanner #DFF3E4
-rectangle "LLM planner\noptional richer Mutation Plan" as planner #FFF3BF
-rectangle "apply-update.ts\nidempotent file updates" as apply #DFF3E4
-rectangle "reindex.ts\nSQLite FTS rebuild" as reindex #DFF3E4
-rectangle "commit.ts\nchange log + git commit" as commit #DFF3E4
+
+rectangle "ingest-run.ts\norchestrator" as ingestRun #DFF3E4 {
+  rectangle "ingest-source.ts\nnormalized source payload" as ingest #DFF3E4
+  rectangle "LLM source cleaner\nnormalized source note" as sourceCleaner #FFF3BF
+  rectangle "plan-source-note.ts\nbaseline source note plan" as baselinePlanner #DFF3E4
+  rectangle "LLM planner\noptional richer Mutation Plan" as planner #FFF3BF
+  rectangle "apply-update.ts\nidempotent file updates" as apply #DFF3E4
+  rectangle "reindex.ts\nSQLite FTS rebuild" as reindex #DFF3E4
+  rectangle "commit.ts\nchange log + git commit" as commit #DFF3E4
+  rectangle "embed-index.ts\nincremental vector index update" as embedIndex #DFF3E4
+}
 
 database "state/kb.db\nFTS index" as db #E7F5FF
+database "state/semantic/\nvector index" as semantic #E7F5FF
 folder "wiki/\ncurated knowledge" as wiki #E7F5FF
 folder "outputs/\nanswer artifacts" as outputs #E7F5FF
 
-rectangle "search.ts\nretrieve top-k docs" as search #DFF3E4
+rectangle "hybrid-search.ts\nFTS + semantic fusion" as hybridSearch #DFF3E4
 rectangle "answer-context.ts\nread wiki docs" as answerContext #DFF3E4
 rectangle "LLM answer synthesis" as answer #FFF3BF
+rectangle "answer-run.ts\norchestrator" as answerRun #DFF3E4
 rectangle "answer-record.ts\nwrite output artifact" as answerRecord #DFF3E4
 rectangle "feedback-record.ts\nfeedback decision + optional plan" as feedback #DFF3E4
 
 rawEvent --> raw
 raw --> n8n : file event
-n8n --> ingest
+n8n --> ingestRun
+
 ingest --> sourceCleaner
 sourceCleaner --> baselinePlanner
+baselinePlanner --> apply : baseline Mutation Plan
 ingest --> planner : optional richer plan
-baselinePlanner --> apply : Mutation Plan
-planner --> apply : Mutation Plan
+planner --> apply : LLM Mutation Plan
 apply --> wiki : create or update notes
 apply --> reindex
 reindex --> db
 reindex --> commit
+commit --> embedIndex : after all mutations
+embedIndex --> semantic : hash-diff re-embed
 
-userQuery --> search
-search --> db : FTS query
-search --> answerContext : Search Result
+userQuery --> answerRun
+answerRun --> hybridSearch
+hybridSearch --> db : FTS query
+hybridSearch --> semantic : cosine similarity
+hybridSearch --> answerContext : ranked results
 answerContext --> answer : markdown context
 answer --> answerRecord : answer text
 answerRecord --> outputs : Answer Record
@@ -74,9 +85,16 @@ ONLY trigger on raw/**
 NEVER trigger on wiki/**
 end note
 
-note bottom of apply
-Consumes the canonical Mutation Plan JSON
-and preserves idempotency keys in state/runtime.
+note bottom of embedIndex
+Incremental: only re-embeds
+documents changed in this ingest.
+First run downloads the model.
+end note
+
+note bottom of hybridSearch
+Falls back to FTS-only
+when semantic index is absent.
+60% semantic / 40% lexical.
 end note
 
 @enduml

@@ -120,6 +120,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_MODEL=${LLM_MODEL}
       - LLM_ANSWER_TEMPERATURE=0.2
+      - LOG_LEVEL=${LOG_LEVEL:-info}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
 
@@ -146,6 +147,7 @@ services:
       - LLM_API_KEY_HEADER=${LLM_API_KEY_HEADER}
       - LLM_MODEL=${LLM_MODEL}
       - LLM_ANSWER_TEMPERATURE=0.2
+      - LOG_LEVEL=${LOG_LEVEL:-info}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
 
@@ -184,18 +186,32 @@ services:
 ├── README.md
 ├── package.json
 ├── tsconfig.json
+├── .env.sample
+├── Dockerfile                  ← n8n + toolchain image (node:22 Debian)
+├── Dockerfile.runner           ← external n8n task runner image
 ├── docs/
+│   ├── production-runbook.md
 │   ├── code-reference.md
 │   ├── assets/
 │   │   └── logo.svg
 │   └── diagrams/
 │       ├── workflow.puml
 │       └── workflow.svg
+├── n8n/
+│   ├── README.md
+│   └── workflows/
+│       ├── kb-answer-blueprint.json
+│       ├── kb-apply-feedback.json
+│       ├── kb-embed-index.json         ← incremental + full-rebuild triggers
+│       ├── kb-ingest-raw-blueprint.json
+│       ├── kb-monthly-health-check.json
+│       ├── kb-reindex-wiki.json
+│       └── kb-weekly-lint.json
 └── tools/
     ├── config.ts
     ├── init-db.ts
     ├── ingest-source.ts
-    ├── ingest-run.ts
+    ├── ingest-run.ts               ← full ingest pipeline (includes embed-index step)
     ├── answer-run.ts
     ├── plan-source-note.ts
     ├── apply-update.ts
@@ -204,17 +220,44 @@ services:
     ├── feedback-record.ts
     ├── reindex.ts
     ├── search.ts
-    ├── embed-index.ts          ← semantic index builder
-    ├── semantic-search.ts      ← pure semantic retrieval
-    ├── hybrid-search.ts        ← fused FTS + semantic retrieval
+    ├── embed-index.ts              ← semantic index builder (incremental hash-diff)
+    ├── semantic-search.ts          ← pure semantic retrieval
+    ├── hybrid-search.ts            ← fused FTS + semantic retrieval
+    ├── youtube-transcript.ts       ← yt-dlp subtitle extraction
+    ├── bot-lock.ts                 ← Telegram bot lock CLI
+    ├── log-tail.ts                 ← tail app.log as JSON for n8n
+    ├── render-n8n-workflows.ts     ← legacy workflow renderer
     ├── lint.ts
     ├── health-check.ts
     ├── commit.ts
+    ├── services/
+    │   ├── ingest/
+    │   │   ├── normalize-event.ts      ← raw event normalization + YouTube fetch
+    │   │   ├── build-source-note.ts    ← LLM source-note prompt builder
+    │   │   ├── build-llm-plan.ts       ← wiki context query + ingest plan prompt
+    │   │   └── guardrail-plan.ts       ← mutation plan validation
+    │   ├── answers/
+    │   │   ├── generate-answer.ts      ← LLM answer prompt builder
+    │   │   └── propose-feedback.ts     ← LLM feedback prompt builder
+    │   └── notifications/
+    │       └── telegram.ts             ← Telegram message builders
     └── lib/
-        ├── embedding-provider.ts         ← EmbeddingProvider interface
+        ├── cli.ts                      ← parseArgs, readJsonInput, writeJsonStdout
+        ├── config.ts                   → re-exported from ../config.ts
+        ├── contracts.ts                ← shared TypeScript payload interfaces
+        ├── db.ts                       ← SQLite helpers
+        ├── embedding-provider.ts       ← EmbeddingProvider interface
+        ├── frontmatter.ts              ← YAML frontmatter parse/serialize
+        ├── fs-utils.ts                 ← vault path resolution, file helpers
+        ├── llm.ts                      ← chatCompletion, logging (debug: prompts)
         ├── local-transformers-provider.ts ← CPU inference via @xenova/transformers
-        ├── semantic-index.ts              ← manifest, cosine similarity, I/O
-        └── ...
+        ├── logger.ts                   ← pino rotating logger factory
+        ├── markdown.ts                 ← markdown section manipulation
+        ├── run-tool.ts                 ← execFile wrapper for sub-tool calls
+        ├── semantic-index.ts           ← manifest, cosine similarity, I/O
+        ├── telegram-lock.ts            ← atomic filesystem bot lock
+        ├── text.ts                     ← text normalization helpers
+        └── wiki-inspect.ts             ← wiki note reading helpers
 ```
 
 Expected vault layout:
@@ -376,12 +419,12 @@ The `semantic` block controls the vector index:
 
 ```typescript
 semantic: {
-  dir: "state/semantic",   // index directory, relative to vault root
-  mode: "note",            // granularity: whole-file (phase 1)
-  minChars: 250,           // documents shorter than this are not indexed
-  topK: 8,                 // default result count for semantic-search
-  model: "Xenova/bge-m3",  // Hugging Face model identifier
-  batchSize: 16            // max texts per embedding batch
+  dir: "state/semantic",                   // index directory, relative to vault root
+  mode: "note",                            // granularity: whole-file (phase 1)
+  minChars: 250,                           // documents shorter than this are not indexed
+  topK: 8,                                 // default result count for semantic-search
+  model: "Xenova/multilingual-e5-small",   // Hugging Face model identifier
+  batchSize: 16                            // max texts per embedding batch
 }
 ```
 
@@ -404,12 +447,12 @@ The semantic index uses `@xenova/transformers` to run a transformer model locall
 | Aspecto | Detalle |
 |---|---|
 | **Dependencia** | `@xenova/transformers ^2.17.2` en `package.json` — sin servidor externo, sin API key |
-| **Modelo por defecto** | `Xenova/bge-m3` (multilingual, 1024 dimensiones, INT8 cuantizado) |
+| **Modelo por defecto** | `Xenova/multilingual-e5-small` (100 idiomas, 384 dimensiones, INT8 cuantizado) |
 | **Primera ejecución** | Descarga los pesos ONNX desde Hugging Face Hub → `~/.cache/huggingface/` |
 | **Ejecuciones siguientes** | Lee desde caché local, sin red, completamente offline |
 | **Inferencia** | CPU, ONNX Runtime embebido en el paquete npm — no requiere GPU ni instalación extra |
 | **Cuantización** | `quantized: true` (INT8): ~4× menor en disco, 2–4× más rápido en CPU, pérdida de calidad inapreciable para retrieval |
-| **Mean pooling** | El modelo produce un tensor `[1, seq_len, dim]`; se promedia sobre `seq_len` para obtener un vector `[dim]` por documento |
+| **Mean pooling** | El modelo produce un tensor `[1, seq_len, dim]`; se promedia sobre `seq_len` para obtener un vector `[dim]` por documento. Cuando el pipeline aplica pooling internamente devuelve `[1, dim]` directamente. |
 | **L2 normalización** | `normalize: true` produce vectores unitarios; la similitud coseno es equivalente al producto escalar |
 | **Singleton** | El pipeline ONNX se carga una vez por proceso y se reutiliza para todas las llamadas sucesivas |
 | **Almacenamiento** | Los vectores se guardan en `state/semantic/notes/*.json` — gitignoreados, nunca se commitean |
@@ -441,12 +484,12 @@ Cada llamada de inferencia emite una traza estructurada en `state/logs/app.log`:
   "level": "info",
   "script": "embedding-provider",
   "phase": "inference",
-  "model": "Xenova/bge-m3",
+  "model": "Xenova/multilingual-e5-small",
   "input_chars": 1247,
   "input_preview": "Model Context Protocol es un estándar abierto que permite...",
   "options": { "pooling": "mean", "normalize": true },
   "duration_ms": 312,
-  "output_dim": 1024,
+  "output_dim": 384,
   "output_norm": 1.000000
 }
 ```
@@ -454,7 +497,7 @@ Cada llamada de inferencia emite una traza estructurada en `state/logs/app.log`:
 La carga del pipeline también se registra:
 
 ```json
-{ "phase": "model-load", "model": "Xenova/bge-m3", "quantized": true, "duration_ms": 4821 }
+{ "phase": "model-load", "model": "Xenova/multilingual-e5-small", "quantized": true, "duration_ms": 4821 }
 ```
 
 ## Operational Notes
