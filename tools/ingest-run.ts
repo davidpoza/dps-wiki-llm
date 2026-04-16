@@ -2,8 +2,11 @@
 
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
-import { resolveVaultRoot, pathExists } from "./lib/fs-utils.js";
+import { resolveVaultRoot, resolveWithinRoot, pathExists, loadJsonFile, writeJsonFile } from "./lib/fs-utils.js";
 import { manifestPath } from "./lib/semantic-index.js";
+import { getGitHead, gitResetHard } from "./lib/git.js";
+import { PipelineTx } from "./lib/pipeline-tx.js";
+import { SYSTEM_CONFIG } from "./config.js";
 import type { LlmMeta } from "./lib/llm.js";
 import { chatCompletion, llmMeta } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
@@ -146,6 +149,7 @@ async function main(): Promise<void> {
   const args = parseArgs();
   const log = createLogger("ingest-run");
   let lockContext: unknown = null;
+  const tx = new PipelineTx();
 
   log.info({ phase: "startup" }, "ingest-run: started");
 
@@ -281,7 +285,31 @@ async function main(): Promise<void> {
       "ingest-run: [plan-source-note] baseline plan ready"
     );
 
-    // ── 6. apply baseline ─────────────────────────────────────────────────────
+    // ── 6. set up transaction rollback + apply baseline ───────────────────────
+
+    const vaultRoot = resolveVaultRoot(args.vault);
+    const idempotencyLedgerAbsPath = resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.idempotencyLedgerPath);
+    const preRunIdempotencyKeys = await loadJsonFile<Record<string, unknown>>(idempotencyLedgerAbsPath, {});
+    const preRunGitSha = await getGitHead(vaultRoot);
+
+    log.info(
+      { phase: "tx-setup", git_sha: preRunGitSha ?? "none", idempotency_keys: Object.keys(preRunIdempotencyKeys).length },
+      "ingest-run: [tx-setup] transaction checkpoint captured"
+    );
+
+    tx.onRollback("git-reset-hard", async () => {
+      if (!preRunGitSha) {
+        log.warn("pipeline-tx: git-reset-hard skipped — no git HEAD was captured");
+        return;
+      }
+      await gitResetHard(vaultRoot, preRunGitSha);
+    });
+    tx.onRollback("restore-idempotency-keys", async () => {
+      await writeJsonFile(idempotencyLedgerAbsPath, preRunIdempotencyKeys);
+    });
+    tx.onRollback("reindex", async () => {
+      await runToolJson("reindex", { vault: args.vault });
+    });
 
     log.info(
       {
@@ -346,7 +374,6 @@ async function main(): Promise<void> {
     // ── 9. retrieve wiki context ──────────────────────────────────────────────
 
     const wikiContextQuery = buildWikiContextQuery(sourcePayload, sourceNote);
-    const vaultRoot = resolveVaultRoot(args.vault);
     const hasSemanticIndex = await pathExists(manifestPath(vaultRoot));
     const wikiContextSearchTool = hasSemanticIndex ? "hybrid-search" : "search";
 
@@ -647,9 +674,10 @@ async function main(): Promise<void> {
 
     log.error(
       { phase: "error", err: reason },
-      "ingest-run: pipeline failed — writing structured failure output and releasing lock"
+      "ingest-run: pipeline failed — rolling back mutations and releasing lock"
     );
 
+    await tx.rollback(log);
     await releaseTelegramLockAfterFailure(args.vault, lockContext, "ingest-run");
 
     // IMPORTANT: write a failure JSON to stdout and exit with code 0 instead of re-throwing.

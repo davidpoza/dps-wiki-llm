@@ -162,9 +162,11 @@ raw event
 -> idempotency / duplicate check
 -> LLM ingestion prompt
 -> structured JSON plan
+[transaction checkpoint: git HEAD + idempotency-keys snapshot]
 -> apply-update.ts
 -> reindex.ts
 -> commit.ts
+[on any failure: git reset --hard <pre-run-sha> → restore idempotency-keys → reindex]
 ```
 
 Expected plan shape:
@@ -612,6 +614,7 @@ query
 - parses markdown and frontmatter
 - updates SQLite rows
 - rebuilds the FTS index
+- ROLLBACK failures are logged at `error` level and include the error message; they are not silently swallowed
 
 ### `search.ts`
 
@@ -654,6 +657,7 @@ query
 - writes the answer artifact under `outputs/`
 - emits the canonical answer record for feedback evaluation
 - should not mutate the wiki
+- `answer-run.ts` tracks the written artifact path; if any subsequent step fails, the artifact is deleted before re-throwing (transactional cleanup)
 
 ### `apply-update.ts`
 
@@ -1266,6 +1270,38 @@ If the vault is mounted locally from WebDAV or similar storage:
 - reindex `wiki/` after controlled updates, not because `wiki/` itself changed
 
 This is critical because reacting to `wiki/` mutations creates feedback loops.
+
+---
+
+## Pipeline Reliability
+
+### LLM Retry
+
+`lib/llm.ts` wraps every `chatCompletion` call with exponential-backoff retry (up to 3 attempts, base delay 15 s).
+Only retryable status codes (429, 5xx) and network errors trigger a retry.
+Client errors (4xx except 429) are thrown immediately.
+
+### Transactional Rollback — `lib/pipeline-tx.ts`
+
+`PipelineTx` implements a saga-style compensating transaction:
+
+```text
+tx = new PipelineTx()
+tx.onRollback("name", async () => { /* compensating action */ })
+// ... mutation steps ...
+// on failure:
+await tx.rollback(log)  // executes handlers in registration order; each is isolated
+```
+
+Handlers execute in registration order (not reverse).
+A failure in one handler is logged at `error` level and does not prevent remaining handlers from running.
+If no handlers were registered (failure before any mutation), `rollback()` is a no-op.
+
+`lib/git.ts` provides `getGitHead(cwd)` (returns null when git is unavailable) and `gitResetHard(cwd, sha)` for use inside compensating actions.
+
+### `EMBED_MODEL` Environment Override
+
+`resolvedEmbedModel()` in `config.ts` reads the `EMBED_MODEL` environment variable and falls back to `SYSTEM_CONFIG.semantic.model`. All tools that load the vector index (`embed-index.ts`, `semantic-search.ts`, `hybrid-search.ts`, `lib/semantic-index.ts`, `lib/local-transformers-provider.ts`) call this function instead of accessing the config value directly, so the model can be changed per-deployment without a code rebuild.
 
 ---
 

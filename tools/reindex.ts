@@ -58,8 +58,11 @@ async function main(): Promise<void> {
   } catch (error) {
     try {
       db.exec("ROLLBACK;");
-    } catch {
-      // Ignore rollback failures after partial transaction state.
+    } catch (rollbackError) {
+      log.error(
+        { rollbackError: rollbackError instanceof Error ? rollbackError.message : String(rollbackError) },
+        "reindex: ROLLBACK failed after transaction error — index may be inconsistent"
+      );
     }
     throw error;
   } finally {

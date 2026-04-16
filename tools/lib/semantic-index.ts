@@ -24,7 +24,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { ensureDirectory, loadJsonFile, writeJsonFile } from "./fs-utils.js";
-import { SYSTEM_CONFIG } from "../config.js";
+import { resolvedEmbedModel, SYSTEM_CONFIG } from "../config.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -146,7 +146,7 @@ export interface SemanticManifest {
  */
 const EMPTY_MANIFEST: SemanticManifest = {
   version: 1,
-  model: SYSTEM_CONFIG.semantic.model,
+  model: resolvedEmbedModel(),
   dimension: 1024,
   mode: "note",
   last_rebuild_at: new Date(0).toISOString(),

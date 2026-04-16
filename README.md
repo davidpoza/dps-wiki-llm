@@ -39,8 +39,8 @@ The repo now includes the local toolchain plus compact importable n8n workflows 
 | `init-db.ts` | Creates the SQLite schema and FTS tables. | `state/kb.db` |
 | `ingest-source.ts` | Normalizes a `raw/**` artifact into the canonical source payload. | stdout JSON |
 | `youtube-transcript.ts` | Calls `yt-dlp` to fetch YouTube subtitles and writes them as a raw transcript artifact. | `raw/web/**` plus stdout JSON |
-| `ingest-run.ts` | Runs the full ingest path: optional YouTube transcript creation, source normalization, LLM source-note cleanup, baseline apply, reindex, commit, and optional guarded LLM wiki updates. Uses hybrid search for wiki context retrieval when the semantic index is present. | stdout JSON, `raw/**`, `wiki/**`, `state/**`, git commit |
-| `answer-run.ts` | Runs retrieval, answer synthesis, answer artifact persistence, and feedback-record validation without mutating `wiki/`. Accepts `retrieval_mode` (`fts`/`semantic`/`hybrid`); defaults to `hybrid` when the semantic index exists. | stdout JSON, `outputs/**` |
+| `ingest-run.ts` | Runs the full ingest path: optional YouTube transcript creation, source normalization, LLM source-note cleanup, baseline apply, reindex, commit, and optional guarded LLM wiki updates. Uses hybrid search for wiki context retrieval when the semantic index is present. Transactional: on failure after the first mutation, rolls back via `git reset --hard`, restores the idempotency-key ledger, and rebuilds the FTS index. | stdout JSON, `raw/**`, `wiki/**`, `state/**`, git commit |
+| `answer-run.ts` | Runs retrieval, answer synthesis, answer artifact persistence, and feedback-record validation without mutating `wiki/`. Accepts `retrieval_mode` (`fts`/`semantic`/`hybrid`); defaults to `hybrid` when the semantic index exists. Deletes the answer artifact from `outputs/` if any step after writing it fails. | stdout JSON, `outputs/**` |
 | `render-n8n-workflows.ts` | Legacy helper for rendering workflows that still contain n8n LLM HTTP nodes. The compact workflows no longer need it. | updated workflow JSON when applicable |
 | `plan-source-note.ts` | Builds a safe baseline Mutation Plan that creates the source note and root index entry, using an LLM-cleaned `source_note` when provided. | stdout JSON |
 | `apply-update.ts` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
@@ -249,10 +249,12 @@ services:
         ├── embedding-provider.ts       ← EmbeddingProvider interface
         ├── frontmatter.ts              ← YAML frontmatter parse/serialize
         ├── fs-utils.ts                 ← vault path resolution, file helpers
-        ├── llm.ts                      ← chatCompletion, logging (debug: prompts)
+        ├── git.ts                      ← getGitHead, gitResetHard (used by pipeline-tx)
+        ├── llm.ts                      ← chatCompletion with exponential-backoff retry (3×, 429/5xx)
         ├── local-transformers-provider.ts ← CPU inference via @xenova/transformers
         ├── logger.ts                   ← pino rotating logger factory
         ├── markdown.ts                 ← markdown section manipulation
+        ├── pipeline-tx.ts              ← PipelineTx saga: register compensating actions, rollback on failure
         ├── run-tool.ts                 ← execFile wrapper for sub-tool calls
         ├── semantic-index.ts           ← manifest, cosine similarity, I/O
         ├── telegram-lock.ts            ← atomic filesystem bot lock
@@ -428,13 +430,13 @@ semantic: {
 }
 ```
 
-Override the model or batch size without touching code by setting environment variables before running `embed-index` or `semantic-search`:
+Override the model without touching code by setting `EMBED_MODEL` before running `embed-index`, `semantic-search`, or any tool that loads the vector index:
 
 ```bash
 EMBED_MODEL=Xenova/bge-small-en-v1.5 npm run embed-index -- --vault .
 ```
 
-(Environment variable support is not yet wired in code; `SYSTEM_CONFIG.semantic.model` is the current source of truth. The variables are reserved for a future config-override layer.)
+`resolvedEmbedModel()` in `config.ts` reads `EMBED_MODEL` from the environment and falls back to `SYSTEM_CONFIG.semantic.model` when the variable is absent. The LLM model is similarly overridable via `LLM_MODEL`.
 
 The canonical JSON payload contracts from `AGENTS.md` are represented as TypeScript interfaces in `tools/lib/contracts.ts`.
 
@@ -505,7 +507,9 @@ La carga del pipeline también se registra:
 - `apply-update.ts` enforces `create`, `update`, and `noop` actions and tracks idempotency keys in `state/runtime/idempotency-keys.json`.
 - `ingest-source.ts` accepts only `raw/**` paths and emits a normalized source payload.
 - `plan-source-note.ts` builds the baseline source note plan. `ingest-run.ts` requires an LLM-cleaned `source_note` before mutating `wiki/`, then proposes and auto-applies richer wiki propagation only after guardrail validation.
-- `reindex.ts` indexes markdown derived from `wiki/`, not `raw/`.
+- `ingest-run.ts` is transactional: a git HEAD checkpoint and an idempotency-key snapshot are taken before the first mutation. On any failure, `PipelineTx` runs three compensating actions in order — `git reset --hard <pre-run-sha>`, restore `idempotency-keys.json`, rebuild FTS via `reindex`. If the failure occurs before the first mutation, rollback is a no-op.
+- `answer-run.ts` tracks the answer artifact path written by `answer-record.ts`. If any step after that write fails, the artifact is deleted before re-throwing.
+- `reindex.ts` indexes markdown derived from `wiki/`, not `raw/`. ROLLBACK failures are logged at `error` level instead of being silently swallowed.
 - `search.ts` queries the FTS index and returns ranked results with `path`, `title`, `doc_type`, and `score`.
 - `answer-context.ts` reads retrieved wiki markdown for LLM context; `answer-run.ts` stores the answer under `outputs/` with `answer-record.ts` and returns feedback for review.
 - `lint.ts` focuses on structure and maintainability.

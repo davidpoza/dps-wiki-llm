@@ -93,6 +93,66 @@ function authorizationHeaderValue(headerName: string, apiKey: string): string {
   return `Bearer ${apiKey}`;
 }
 
+const LLM_MAX_ATTEMPTS = 3;
+const LLM_RETRY_BASE_MS = 15000;
+
+function isRetryableStatus(status: number): boolean {
+  return status >= 500 || status === 429;
+}
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit
+): Promise<{ response: Response; text: string; body: unknown }> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= LLM_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 1) {
+      const delayMs = LLM_RETRY_BASE_MS * 2 ** (attempt - 2);
+      log.warn({ attempt, delayMs }, "llm: retrying after transient error");
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (networkError) {
+      lastError = networkError instanceof Error ? networkError : new Error(String(networkError));
+      log.warn({ attempt, error: lastError.message }, "llm: network error");
+      continue;
+    }
+
+    const text = await response.text();
+    let body: unknown;
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      body = { raw_response: text };
+    }
+
+    if (!response.ok) {
+      if (isRetryableStatus(response.status) && attempt < LLM_MAX_ATTEMPTS) {
+        const detail =
+          body && typeof body === "object" && "error" in body && typeof body.error === "object" && body.error
+            ? String((body.error as { message?: unknown }).message ?? text.slice(0, 200))
+            : text.slice(0, 200);
+        lastError = new Error(`LLM request failed with HTTP ${response.status}: ${detail}`);
+        log.warn({ attempt, status: response.status, detail }, "llm: retryable HTTP error");
+        continue;
+      }
+      const detail =
+        body && typeof body === "object" && "error" in body && typeof body.error === "object" && body.error
+          ? String((body.error as { message?: unknown }).message ?? text.slice(0, 1000))
+          : text.slice(0, 1000);
+      throw new Error(`LLM request failed with HTTP ${response.status}: ${detail}`);
+    }
+
+    return { response, text, body };
+  }
+
+  throw lastError ?? new Error("LLM request failed after retries");
+}
+
 export async function chatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
   const resolvedRequest = withConfiguredModel(request);
 
@@ -110,27 +170,11 @@ export async function chatCompletion(request: ChatCompletionRequest): Promise<Ch
     "llm: outgoing request"
   );
 
-  const response = await fetch(chatCompletionsUrl(), {
+  const { body } = await fetchWithRetry(chatCompletionsUrl(), {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(resolvedRequest)
   });
-  const text = await response.text();
-  let body: unknown;
-
-  try {
-    body = text ? JSON.parse(text) : {};
-  } catch {
-    body = { raw_response: text };
-  }
-
-  if (!response.ok) {
-    const detail =
-      body && typeof body === "object" && "error" in body && typeof body.error === "object" && body.error
-        ? String((body.error as { message?: unknown }).message ?? text.slice(0, 1000))
-        : text.slice(0, 1000);
-    throw new Error(`LLM request failed with HTTP ${response.status}: ${detail}`);
-  }
 
   const result = body as ChatCompletionResponse;
   const choice = Array.isArray(result.choices) ? result.choices[0] : undefined;

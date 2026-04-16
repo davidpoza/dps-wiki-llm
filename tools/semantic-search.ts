@@ -33,7 +33,7 @@
 import { parseArgs, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
 import { resolveVaultRoot } from "./lib/fs-utils.js";
-import { SYSTEM_CONFIG } from "./config.js";
+import { resolvedEmbedModel, SYSTEM_CONFIG } from "./config.js";
 import { createLocalTransformersProvider } from "./lib/local-transformers-provider.js";
 import {
   loadManifest,
@@ -111,7 +111,7 @@ async function main(): Promise<void> {
       query: args.query,
       query_chars: args.query.length,
       limit: args.limit,
-      model: SYSTEM_CONFIG.semantic.model
+      model: resolvedEmbedModel()
     },
     "semantic-search: started"
   );

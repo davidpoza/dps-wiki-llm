@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import fs from "node:fs/promises";
+import path from "node:path";
 import { SYSTEM_CONFIG } from "./config.js";
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
 import { resolveVaultRoot, pathExists } from "./lib/fs-utils.js";
@@ -160,6 +162,7 @@ async function main(): Promise<void> {
   const args = parseArgs();
   const log = createLogger("answer-run");
   let lockContext: unknown = null;
+  let answerArtifactAbsPath: string | null = null;
 
   log.info({ phase: "startup" }, "answer-run: started");
 
@@ -293,6 +296,10 @@ async function main(): Promise<void> {
     });
     const answerRecord = answerRecordResult.record;
 
+    if (answerRecordResult.wrote && answerRecordResult.output_path) {
+      answerArtifactAbsPath = path.join(resolveVaultRoot(args.vault), answerRecordResult.output_path);
+    }
+
     log.info(
       {
         phase: "answer-record",
@@ -420,8 +427,21 @@ async function main(): Promise<void> {
         phase: "error",
         err: error instanceof Error ? error.message : String(error)
       },
-      "answer-run: pipeline failed — releasing lock and re-throwing"
+      "answer-run: pipeline failed — rolling back and releasing lock"
     );
+
+    if (answerArtifactAbsPath) {
+      try {
+        await fs.unlink(answerArtifactAbsPath);
+        log.info({ path: answerArtifactAbsPath }, "answer-run: rollback — answer artifact deleted");
+      } catch (unlinkErr) {
+        log.error(
+          { path: answerArtifactAbsPath, err: unlinkErr instanceof Error ? unlinkErr.message : String(unlinkErr) },
+          "answer-run: rollback — failed to delete answer artifact"
+        );
+      }
+    }
+
     await releaseTelegramLockAfterFailure(args.vault, lockContext, "answer-run");
     throw error;
   }

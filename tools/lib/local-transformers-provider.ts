@@ -23,7 +23,7 @@
 
 import type { EmbeddingProvider } from "./embedding-provider.js";
 import { createLogger } from "./logger.js";
-import { SYSTEM_CONFIG } from "../config.js";
+import { resolvedEmbedModel, SYSTEM_CONFIG } from "../config.js";
 
 // Module-level logger — created lazily on the first embedding call so the
 // vault path is already resolved from argv at that point.
@@ -206,7 +206,7 @@ function extractVector(output: unknown): number[] {
  * console.log(vec.length); // e.g. 1024 for bge-m3
  */
 export function createLocalTransformersProvider(
-  model = SYSTEM_CONFIG.semantic.model
+  model = resolvedEmbedModel()
 ): EmbeddingProvider {
   return {
     model,

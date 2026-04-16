@@ -43,7 +43,7 @@ import path from "node:path";
 import { parseArgs, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
 import { resolveVaultRoot } from "./lib/fs-utils.js";
-import { SYSTEM_CONFIG } from "./config.js";
+import { resolvedEmbedModel, SYSTEM_CONFIG } from "./config.js";
 import { createLocalTransformersProvider } from "./lib/local-transformers-provider.js";
 import {
   loadManifest,
@@ -155,7 +155,7 @@ async function main(): Promise<void> {
       vault: vaultRoot,
       wiki_dir: wikiDir,
       rebuild: forceRebuild,
-      model: SYSTEM_CONFIG.semantic.model,
+      model: resolvedEmbedModel(),
       min_chars: SYSTEM_CONFIG.semantic.minChars,
       batch_size: SYSTEM_CONFIG.semantic.batchSize
     },

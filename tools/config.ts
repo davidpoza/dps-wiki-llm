@@ -169,3 +169,7 @@ export const SYSTEM_CONFIG = {
 export function configuredSet<T extends string>(values: readonly T[]): ReadonlySet<T> {
   return new Set(values);
 }
+
+export function resolvedEmbedModel(): string {
+  return process.env.EMBED_MODEL?.trim() || SYSTEM_CONFIG.semantic.model;
+}
