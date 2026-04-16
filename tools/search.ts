@@ -68,9 +68,12 @@ function parseSearchArgs() {
       ? args.limit
       : SYSTEM_CONFIG.cli.defaultSearchLimit;
   let query: string | null = null;
+  let docType: string | null = null;
   let skipNext = false;
 
-  for (const token of process.argv.slice(2)) {
+  for (let i = 0; i < process.argv.slice(2).length; i++) {
+    const token = process.argv.slice(2)[i];
+
     if (skipNext) {
       skipNext = false;
       continue;
@@ -78,6 +81,11 @@ function parseSearchArgs() {
 
     if (["--vault", "--input", "--db", "--limit"].includes(token)) {
       skipNext = true;
+      continue;
+    }
+
+    if (token === "--doc-type") {
+      docType = process.argv.slice(2)[++i] ?? null;
       continue;
     }
 
@@ -101,7 +109,8 @@ function parseSearchArgs() {
   return {
     ...args,
     query: query.trim(),
-    limit
+    limit,
+    docType
   };
 }
 
@@ -142,16 +151,29 @@ async function main(): Promise<void> {
   let rows: Array<{ path: string; title: string; doc_type: string; score: number }>;
   try {
     ensureSchema(db);
-    const statement = db.prepare(`
-      SELECT d.path, d.title, d.doc_type, bm25(docs_fts) AS score
-      FROM docs_fts
-      JOIN docs d ON d.id = docs_fts.rowid
-      WHERE docs_fts MATCH ?
-      ORDER BY score
-      LIMIT ?;
-    `);
+    const statement = args.docType
+      ? db.prepare(`
+          SELECT d.path, d.title, d.doc_type, bm25(docs_fts) AS score
+          FROM docs_fts
+          JOIN docs d ON d.id = docs_fts.rowid
+          WHERE docs_fts MATCH ? AND d.doc_type = ?
+          ORDER BY score
+          LIMIT ?;
+        `)
+      : db.prepare(`
+          SELECT d.path, d.title, d.doc_type, bm25(docs_fts) AS score
+          FROM docs_fts
+          JOIN docs d ON d.id = docs_fts.rowid
+          WHERE docs_fts MATCH ?
+          ORDER BY score
+          LIMIT ?;
+        `);
 
-    rows = statement.all(ftsQuery, args.limit) as Array<{ path: string; title: string; doc_type: string; score: number }>;
+    rows = (
+      args.docType
+        ? statement.all(ftsQuery, args.docType, args.limit)
+        : statement.all(ftsQuery, args.limit)
+    ) as Array<{ path: string; title: string; doc_type: string; score: number }>;
   } finally {
     db.close();
   }

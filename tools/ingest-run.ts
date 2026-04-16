@@ -38,7 +38,8 @@ import type {
   TelegramMessage
 } from "./services/notifications/telegram.js";
 
-const INGEST_WIKI_CONTEXT_LIMIT = 8;
+const INGEST_WIKI_CONTEXT_LIMIT = 6;
+const INGEST_TOPIC_CONTEXT_LIMIT = 4;
 
 type ToolPlanOutput = {
   source_payload: NormalizedSourcePayload;
@@ -353,22 +354,42 @@ async function main(): Promise<void> {
       {
         phase: "wiki-context/search",
         query_length: wikiContextQuery.length,
-        limit: INGEST_WIKI_CONTEXT_LIMIT,
+        general_limit: INGEST_WIKI_CONTEXT_LIMIT,
+        topic_limit: INGEST_TOPIC_CONTEXT_LIMIT,
         search_tool: wikiContextSearchTool
       },
       "ingest-run: [wiki-context/search] retrieving related wiki docs"
     );
 
-    const wikiContextRetrieval = await runToolJson<SearchResult>(wikiContextSearchTool, {
-      vault: args.vault,
-      args: ["--limit", String(INGEST_WIKI_CONTEXT_LIMIT), wikiContextQuery]
-    });
+    const [generalRetrieval, topicRetrieval] = await Promise.all([
+      runToolJson<SearchResult>(wikiContextSearchTool, {
+        vault: args.vault,
+        args: ["--limit", String(INGEST_WIKI_CONTEXT_LIMIT), wikiContextQuery]
+      }),
+      runToolJson<SearchResult>(wikiContextSearchTool, {
+        vault: args.vault,
+        args: ["--limit", String(INGEST_TOPIC_CONTEXT_LIMIT), "--doc-type", "topic", wikiContextQuery]
+      })
+    ]);
+
+    // Merge: topics fill guaranteed slots; general results deduplicated against them.
+    const seenPaths = new Set(topicRetrieval.results.map((r) => r.path));
+    const mergedResults = [
+      ...topicRetrieval.results,
+      ...generalRetrieval.results.filter((r) => !seenPaths.has(r.path))
+    ];
+
+    const wikiContextRetrieval: SearchResult = {
+      ...generalRetrieval,
+      results: mergedResults
+    };
 
     log.info(
       {
         phase: "wiki-context/search",
-        results: wikiContextRetrieval.results?.length ?? 0,
-        top_result: wikiContextRetrieval.results?.[0]?.path ?? null,
+        general_results: generalRetrieval.results.length,
+        topic_results: topicRetrieval.results.length,
+        merged_results: mergedResults.length,
         search_tool: wikiContextSearchTool
       },
       "ingest-run: [wiki-context/search] search completed"

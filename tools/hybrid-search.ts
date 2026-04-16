@@ -89,17 +89,20 @@ function parseHybridSearchArgs() {
       : SYSTEM_CONFIG.cli.defaultSearchLimit;
 
   let query: string | null = null;
-  let skipNext = false;
+  let docType: string | null = null;
+  const tokens = process.argv.slice(2);
 
-  for (const token of process.argv.slice(2)) {
-    if (skipNext) {
-      skipNext = false;
-      continue;
-    }
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
 
     // Skip the value that follows a known key-value flag.
     if (["--vault", "--input", "--db", "--limit"].includes(token)) {
-      skipNext = true;
+      i++;
+      continue;
+    }
+
+    if (token === "--doc-type") {
+      docType = tokens[++i] ?? null;
       continue;
     }
 
@@ -118,7 +121,7 @@ function parseHybridSearchArgs() {
     throw new Error("Expected search query as the first positional argument");
   }
 
-  return { ...args, query: query.trim(), limit };
+  return { ...args, query: query.trim(), limit, docType };
 }
 
 // ── Score normalisation ────────────────────────────────────────────────────────
@@ -183,6 +186,8 @@ async function main(): Promise<void> {
     "hybrid-search: semantic index presence checked"
   );
 
+  const docTypeArgs = args.docType ? ["--doc-type", args.docType] : [];
+
   if (!hasIndex) {
     // Graceful degradation: if embed-index has never been run, fall back to
     // pure FTS rather than returning an error.
@@ -194,7 +199,7 @@ async function main(): Promise<void> {
     const ftsStart = Date.now();
     const ftsResult = await runToolJson<SearchResult>("search", {
       vault: args.vault,
-      args: ["--limit", String(args.limit), args.query]
+      args: ["--limit", String(args.limit), ...docTypeArgs, args.query]
     });
 
     log.info(
@@ -230,11 +235,11 @@ async function main(): Promise<void> {
   const [ftsResult, semanticResult] = await Promise.all([
     runToolJson<SearchResult>("search", {
       vault: args.vault,
-      args: ["--limit", String(internalLimit), args.query]
+      args: ["--limit", String(internalLimit), ...docTypeArgs, args.query]
     }),
     runToolJson<SearchResult>("semantic-search", {
       vault: args.vault,
-      args: ["--limit", String(internalLimit), args.query]
+      args: ["--limit", String(internalLimit), ...docTypeArgs, args.query]
     })
   ]);
 

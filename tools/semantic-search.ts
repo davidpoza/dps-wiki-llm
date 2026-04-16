@@ -63,17 +63,20 @@ function parseSemanticSearchArgs() {
       : SYSTEM_CONFIG.semantic.topK;
 
   let query: string | null = null;
-  let skipNext = false;
+  let docType: string | null = null;
+  const tokens = process.argv.slice(2);
 
-  for (const token of process.argv.slice(2)) {
-    if (skipNext) {
-      skipNext = false;
-      continue;
-    }
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
 
     // Skip the value that follows a known key-value flag.
     if (["--vault", "--input", "--db", "--limit"].includes(token)) {
-      skipNext = true;
+      i++;
+      continue;
+    }
+
+    if (token === "--doc-type") {
+      docType = tokens[++i] ?? null;
       continue;
     }
 
@@ -92,7 +95,7 @@ function parseSemanticSearchArgs() {
     throw new Error("Expected search query as the first positional argument");
   }
 
-  return { ...args, query: query.trim(), limit };
+  return { ...args, query: query.trim(), limit, docType };
 }
 
 // ── Entry point ────────────────────────────────────────────────────────────────
@@ -174,7 +177,8 @@ async function main(): Promise<void> {
 
   // Score every indexed unit against the query vector.
   const scoringStart = Date.now();
-  const scored = units.map((unit) => ({
+  const candidates = args.docType ? units.filter((u) => u.doc_type === args.docType) : units;
+  const scored = candidates.map((unit) => ({
     path: unit.path,
     title: unit.title,
     doc_type: unit.doc_type,
