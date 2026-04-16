@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_IMAGE=node:22-alpine
+ARG NODE_IMAGE=node:22
 ARG N8N_VERSION=latest
 
 FROM ${NODE_IMAGE} AS kb-build
@@ -19,11 +19,13 @@ ARG N8N_VERSION=latest
 USER root
 
 RUN set -eux; \
-  apk add --no-cache ca-certificates git openssh-client python3 py3-pip tini su-exec gcompat; \
-  apk add --no-cache --virtual .build-deps make g++; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends \
+    ca-certificates git openssh-client tini \
+    python3 python3-pip; \
+  rm -rf /var/lib/apt/lists/*; \
   npm install -g "n8n@${N8N_VERSION}"; \
   python3 -m pip install --no-cache-dir --break-system-packages yt-dlp; \
-  apk del .build-deps; \
   npm cache clean --force
 
 WORKDIR /app

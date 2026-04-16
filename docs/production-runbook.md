@@ -42,7 +42,7 @@ services:
 
 The workflow command nodes already call `node /app/dist/tools/<tool>.js ...`, so they will use the scripts baked into this image.
 
-The image intentionally uses `node:22-alpine` and installs `n8n` from npm instead of extending `n8nio/n8n:latest`, because recent official n8n images do not expose a supported package manager for adding OS tools. This keeps `git` available for `commit.ts` and `yt-dlp` available for YouTube subtitle ingestion.
+The image intentionally uses `node:22` (Debian) and installs `n8n` from npm instead of extending `n8nio/n8n:latest`, because recent official n8n images do not expose a supported package manager for adding OS tools. This keeps `git` available for `commit.ts` and `yt-dlp` available for YouTube subtitle ingestion. Debian is required (not Alpine) because `onnxruntime-node` — used by the local embedding pipeline — ships glibc binaries that fail on musl/Alpine even with compatibility shims.
 
 The GitHub Actions workflow at `.github/workflows/docker-publish.yml` publishes the n8n image to GitHub Container Registry as `ghcr.io/<owner>/<repo>` and the runner image as `ghcr.io/<owner>/<repo>-runner`. It runs only on `main`, version tags like `v1.0.0`, and manual dispatch; pull requests do not build or publish the images.
 
