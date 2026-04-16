@@ -25,13 +25,17 @@ The system SHALL write all log output exclusively to a rotating log file at `{va
 ### Requirement: Logging configuration is defined in config.ts
 The system SHALL expose a `logging` configuration object in `tools/config.ts` with the following fields:
 - `dir(vaultRoot: string): string` — absolute path to the log directory (e.g. `{vault}/state/logs`)
-- `level: string` — default log level (e.g. `"info"`)
+- `level: string` — effective log level, read from the `LOG_LEVEL` environment variable; falls back to `"info"` when unset. Accepted values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`.
 - `maxSize: string` — max file size before rotation (e.g. `"10m"`)
 - `frequency: string` — time-based rotation frequency (e.g. `"daily"`)
 
 #### Scenario: Operator inspects logging config
 - **WHEN** a developer reads `tools/config.ts`
 - **THEN** they find a `logging` key with `dir`, `level`, `maxSize`, and `frequency` fields
+
+#### Scenario: Operator sets LOG_LEVEL=debug
+- **WHEN** the process starts with `LOG_LEVEL=debug`
+- **THEN** all `debug`-level log lines are written to `app.log`, including `llm-request` entries with the full messages array and `llm-response` entries with the complete response text
 
 #### Scenario: Logger resolves log directory from vault root
 - **WHEN** a script calls `createLogger(name)` with vault root configured

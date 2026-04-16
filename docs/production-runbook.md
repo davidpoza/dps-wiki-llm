@@ -27,6 +27,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_MODEL=${LLM_MODEL}
       - LLM_ANSWER_TEMPERATURE=0.2
+      - LOG_LEVEL=${LOG_LEVEL:-info}
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE}
       - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME}
       - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL}
@@ -59,7 +60,10 @@ N8N_BLOCK_ENV_ACCESS_IN_NODE=false
 TELEGRAM_BOT_TOKEN=<secret>
 TELEGRAM_CHAT_ID=<allowed chat id>
 TELEGRAM_BOT_LOCK_TTL_MS=<optional stale-lock timeout; defaults to 1800000>
+LOG_LEVEL=info
 ```
+
+`LOG_LEVEL` controls the minimum level written to `state/logs/app.log`. Accepted values (pino): `trace`, `debug`, `info`, `warn`, `error`, `fatal`. Default is `info`. Set to `debug` to capture full LLM prompt and response payloads in the log — every outgoing message array and the complete response text will appear as `llm-request` and `llm-response` entries.
 
 `LLM_MODEL` is optional so the model can be changed outside the workflow. The compact workflows do not contain n8n HTTP Request nodes for the LLM; `answer-run.ts` and `ingest-run.ts` call an OpenAI-compatible chat completions API from Node.js.
 
@@ -108,6 +112,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL}
       - LLM_MODEL=${LLM_MODEL}
       - LLM_ANSWER_TEMPERATURE=0.2
+      - LOG_LEVEL=${LOG_LEVEL:-info}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME}

@@ -1,0 +1,140 @@
+{
+  "name": "KB - Embed Index",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [0],
+              "triggerAtHour": 3,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Weekly Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -560,
+        -80
+      ],
+      "notesInFlow": true,
+      "notes": "Runs weekly on Sunday at 03:00. Disable if you prefer manual-only runs."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst rebuild = input.rebuild === true || input.rebuild === 'true';\nreturn [{ json: { rebuild } }];"
+      },
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "name": "Resolve Flags",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        20
+      ],
+      "notesInFlow": true,
+      "notes": "Pass { \"rebuild\": true } as input to force a full re-embedding of all documents."
+    },
+    {
+      "parameters": {
+        "command": "=node /app/dist/tools/embed-index.js --vault /data/vault{{ $json.rebuild ? ' --rebuild' : '' }}",
+        "executeOnce": true
+      },
+      "id": "d4e5f6a7-b8c9-0123-defa-234567890123",
+      "name": "Run embed-index",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        20,
+        20
+      ],
+      "notesInFlow": true,
+      "notes": "First run downloads the local transformer model (~80 MB). Subsequent runs are incremental (hash-diff). Pass --rebuild to re-embed all docs."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nconst stderr = $input.first().json.stderr ?? '';\nif (!stdout.trim()) {\n  throw new Error('embed-index returned empty stdout. stderr: ' + stderr.slice(0, 500));\n}\nconst result = JSON.parse(stdout);\nif (result.status !== 'ok') {\n  throw new Error('embed-index failed: ' + JSON.stringify(result));\n}\nreturn [{ json: result }];"
+      },
+      "id": "e5f6a7b8-c9d0-1234-efab-345678901234",
+      "name": "Parse Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        20
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Resolve Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Schedule": {
+      "main": [
+        [
+          {
+            "node": "Resolve Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Flags": {
+      "main": [
+        [
+          {
+            "node": "Run embed-index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run embed-index": {
+      "main": [
+        [
+          {
+            "node": "Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

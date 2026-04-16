@@ -13,6 +13,7 @@ This directory contains importable n8n workflow JSON files aligned with the scri
 - `LLM_BASE_URL` configured for the OpenAI-compatible provider
 - optional `LLM_API_KEY_HEADER` configured in that same command runtime when the provider expects the raw API key in a header other than `Authorization`
 - optional `LLM_MODEL` configured when you want to pin a model
+- optional `LOG_LEVEL` to control log verbosity (`info` by default; set to `debug` to record full LLM prompts and responses in `state/logs/app.log`)
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` configured when you want answer input/output and ingest logs over Telegram
 
 If your paths differ, update the command strings and watched paths after importing.

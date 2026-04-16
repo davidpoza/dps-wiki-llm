@@ -1,3 +1,7 @@
+import { createLogger } from "./logger.js";
+
+const log = createLogger("llm");
+
 type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -90,10 +94,26 @@ function authorizationHeaderValue(headerName: string, apiKey: string): string {
 }
 
 export async function chatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+  const resolvedRequest = withConfiguredModel(request);
+
+  log.debug(
+    {
+      phase: "llm-request",
+      model: resolvedRequest.model ?? null,
+      temperature: resolvedRequest.temperature ?? null,
+      message_count: resolvedRequest.messages.length,
+      messages: resolvedRequest.messages.map((m) => ({
+        role: m.role,
+        content: m.content
+      }))
+    },
+    "llm: outgoing request"
+  );
+
   const response = await fetch(chatCompletionsUrl(), {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify(withConfiguredModel(request))
+    body: JSON.stringify(resolvedRequest)
   });
   const text = await response.text();
   let body: unknown;
@@ -112,7 +132,29 @@ export async function chatCompletion(request: ChatCompletionRequest): Promise<Ch
     throw new Error(`LLM request failed with HTTP ${response.status}: ${detail}`);
   }
 
-  return body as ChatCompletionResponse;
+  const result = body as ChatCompletionResponse;
+  const choice = Array.isArray(result.choices) ? result.choices[0] : undefined;
+  const content = choice?.message?.content;
+  const responseText = Array.isArray(content)
+    ? content.map((p) => (typeof p === "string" ? p : (p as { text?: string })?.text ?? "")).join("")
+    : typeof content === "string"
+      ? content
+      : choice?.text ?? "";
+
+  log.debug(
+    {
+      phase: "llm-response",
+      id: typeof result.id === "string" ? result.id : null,
+      model: typeof result.model === "string" ? result.model : null,
+      finish_reason: typeof choice?.finish_reason === "string" ? choice.finish_reason : null,
+      usage: result.usage ?? null,
+      response_length: responseText.length,
+      response: responseText
+    },
+    "llm: response received"
+  );
+
+  return result;
 }
 
 export function chatText(response: ChatCompletionResponse, label: string): string {

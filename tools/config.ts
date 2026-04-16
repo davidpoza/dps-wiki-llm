@@ -152,7 +152,7 @@ export const SYSTEM_CONFIG = {
   },
   logging: {
     dir: (vaultRoot: string) => `${vaultRoot}/state/logs`,
-    level: "info",
+    level: process.env.LOG_LEVEL?.trim() || "info",
     maxSize: "10m",
     frequency: "daily"
   },
