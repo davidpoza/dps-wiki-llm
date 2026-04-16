@@ -8,7 +8,7 @@ import { getGitHead, gitResetHard } from "./lib/git.js";
 import { PipelineTx } from "./lib/pipeline-tx.js";
 import { SYSTEM_CONFIG } from "./config.js";
 import type { LlmMeta } from "./lib/llm.js";
-import { chatCompletion, llmMeta } from "./lib/llm.js";
+import { chatCompletion, chatText, extractJson, llmMeta } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { releaseTelegramLockAfterFailure } from "./lib/telegram-lock.js";
 import type {
@@ -466,7 +466,47 @@ async function main(): Promise<void> {
       baselinePlanOutput.mutation_plan,
       wikiContext.context_docs
     );
-    const ingestPlanResponse = await chatCompletion(ingestPlanReqBody);
+    let ingestPlanResponse = await chatCompletion(ingestPlanReqBody);
+
+    // If the model returned non-JSON (common with free/weak models that ignore
+    // response_format or the system-prompt JSON instruction), send a correction
+    // message and retry once before handing off to guardrail-plan.
+    let ingestPlanJsonValid = false;
+    try {
+      extractJson(chatText(ingestPlanResponse, "ingest plan JSON validation"));
+      ingestPlanJsonValid = true;
+    } catch {
+      // Response was not valid JSON — attempt correction retry below.
+    }
+
+    if (!ingestPlanJsonValid) {
+      let priorContent = "";
+      try {
+        priorContent = chatText(ingestPlanResponse, "ingest plan prior content");
+      } catch {
+        // Prior response had no extractable text — correction message still sent.
+      }
+
+      log.warn(
+        { phase: "ingest-plan/llm", prior_content_length: priorContent.length },
+        "ingest-run: [ingest-plan/llm] response was not valid JSON — sending correction and retrying"
+      );
+
+      const correctionRequest = {
+        ...ingestPlanReqBody,
+        messages: [
+          ...ingestPlanReqBody.messages,
+          ...(priorContent ? [{ role: "assistant" as const, content: priorContent }] : []),
+          {
+            role: "user" as const,
+            content:
+              "Your previous response was not valid JSON. Return ONLY the JSON object, starting with { and ending with }. No markdown, no wiki links, no prose — only the JSON."
+          }
+        ]
+      };
+      ingestPlanResponse = await chatCompletion(correctionRequest);
+    }
+
     const ingestPlanMeta = llmMeta(ingestPlanResponse);
 
     log.info(
@@ -474,6 +514,7 @@ async function main(): Promise<void> {
         phase: "ingest-plan/llm",
         model: ingestPlanMeta.model,
         finish_reason: ingestPlanMeta.finish_reason,
+        json_valid_on_first_attempt: ingestPlanJsonValid,
         ...usageSummary(ingestPlanMeta)
       },
       "ingest-run: [ingest-plan/llm] LLM plan response received"

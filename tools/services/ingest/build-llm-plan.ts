@@ -88,6 +88,7 @@ export function ingestPlanRequest(
   return {
     stream: false,
     temperature: 0,
+    response_format: { type: "json_object" },
     messages: [
       {
         role: "system",
