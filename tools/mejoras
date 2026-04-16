@@ -1,0 +1,102 @@
+---                                                                                                                                                                 
+  Mejoras Técnicas
+                                                                                                                                                                      
+  Alta Prioridad                                                                                                                                                    
+
+  1. Silent failure en reindex.ts — el ROLLBACK falla silenciosamente, dejando wiki e índice potencialmente desincronizados. Solución mínima: loguear el error en vez 
+  de ignorarlo.
+                                                                                                                                                                      
+  2. Config override via env vars está a medias — LLM_MODEL y EMBED_MODEL están documentados como variables de entorno pero no están conectados a SYSTEM_CONFIG.      
+  Cualquier deploy diferente requiere recompilar.
+                                                                                                                                                                      
+  3. Sin reintentos en llamadas LLM — un error de red mata el pipeline completo. Un backoff exponencial con 3 intentos para chatCompletion() haría el sistema mucho   
+  más resiliente.
+                                                                                                                                                                      
+  4. Sin lock general para escrituras concurrentes — telegram-lock.ts solo protege el bot. Si dos workflows corren apply-update simultáneamente, hay race condition.  
+  Se necesita un lock a nivel de vault antes de escrituras en la DB.
+                                                                                                                                                                      
+  ---                                                                                                                                                               
+  Media Prioridad
+                 
+  5. Configuración semántica duplicada — batchSize, minChars, topK, y el nombre del modelo aparecen en embed-index.ts, hybrid-search.ts, y semantic-search.ts por
+  separado. Centralizar en SYSTEM_CONFIG.semantic (ya existe parcialmente) y eliminar las copias.                                                                     
+  
+  6. Validación del JSON de respuesta LLM — guardrail-plan.ts no incluye la respuesta cruda en el mensaje de error cuando el JSON es inválido. Debugging en producción
+   se vuelve tedioso.                                                                                                                                               
+                                                                                                                                                                      
+  7. Stop words cargadas desde código — la lista está hardcodeada en search.ts. Moverla a un archivo JSON en state/ o config/ permite ajustar sin rebuild.            
+  
+  8. wiki-inspect.ts es O(n²) en wikis grandes — la construcción de mapas de aliases e inbound-counts usa iteración anidada. Para >500 notas empieza a pesar.         
+  Refactorizar a índices por mapa único.                                                                                                                            
+                                                                                                                                                                      
+  ---                                                                                                                                                               
+  Baja Prioridad
+                                                                                                                                                                      
+  9. Versionado del índice semántico sin migración — manifest.json tiene version: 1 pero no hay lógica de migración. Si el schema cambia, el único camino es --rebuild
+   sin aviso. Agregar detección de versión con warning.                                                                                                               
+                                                                                                                                                                    
+  10. Temperature hardcodeada en feedback — propose-feedback.ts usa temperature: 0 directo mientras que answer-run lee la env var. Inconsistencia que puede generar   
+  comportamientos distintos entre modos.                                                                                                                            
+                                                                                                                                                                      
+  ---                                                                                                                                                               
+  Mejoras de Lógica de Negocio
+                                                                                                                                                                      
+  Alta Prioridad
+                                                                                                                                                                      
+  11. Ingesta en batch — cada evento dispara un pipeline completo y separado. Para importar 50 bookmarks se hacen 50 runs, 50 llamadas LLM, 50 reindexados. Un        
+  batch-ingest.ts que agrupe eventos, llame al LLM una vez con contexto múltiple, e indexe al final, reduciría costos y tiempo dramáticamente.
+                                                                                                                                                                      
+  12. Sin graceful degradation cuando la búsqueda devuelve 0 resultados — si hybrid-search no encuentra nada relevante para el ingest plan, el LLM planificador igual 
+  corre y puede proponer mutaciones sin ningún anclaje en la wiki existente. Agregar un umbral mínimo de resultados: si no hay contexto suficiente, solo aplicar el
+  baseline sin fase 2.                                                                                                                                                
+                                                                                                                                                                    
+  ---
+  Media Prioridad
+                 
+  13. Validación de frontmatter por tipo de nota — las notas source deberían requerir source_ref y captured_at, las concept deberían requerir aliases, etc. Hoy
+  health-check.ts detecta campos faltantes pero no puede autocorregir ni bloquear ingesta. Agregar validación en guardrail-plan.ts para notas nuevas.                 
+  
+  14. Estado pending_approval en feedback — solo existen applied, rejected, deferred. No hay forma de marcar algo como "necesita revisión humana antes de continuar". 
+  Agregar este estado + un workflow n8n de aprobación explicit desbloquea casos de uso donde el LLM no está seguro.                                                 
+                                                                                                                                                                      
+  15. Ciclos de mantenimiento automáticos — lint.ts y health-check.ts existen pero son solo manuales. El README los marca como "inactivos en el primer corte de       
+  producción". Activarlos en n8n como cron semanal/mensual es trabajo mínimo con alto valor para mantener la wiki sana.
+                                                                                                                                                                      
+  16. Soporte multiidioma configurable — el idioma de salida del LLM está hardcodeado a español en los prompts. Extraerlo a una env var WIKI_LANGUAGE permitiría      
+  reusar el stack para otras comunidades o proyectos sin tocar código.
+                                                                                                                                                                      
+  ---                                                                                                                                                               
+  Baja Prioridad
+                
+  17. Stubs automáticos para links rotos — health-check.ts detecta [[enlaces]] que apuntan a notas inexistentes pero no hace nada. Un modo --fix que genere stubs
+  vacíos con frontmatter mínimo cerraría el loop sin requerir intervención manual para cada link roto.                                                                
+  
+  18. Migración de schema de wiki — no hay herramienta para actualizar frontmatter en masa cuando cambia el schema (por ejemplo, renombrar un campo). Un migrate.ts   
+  con transformaciones declarativas evitaría tener que hacerlo a mano nota por nota.                                                                                
+                                                                                                                                                                      
+  ---                                                                                                                                                               
+  Resumen de Priorización
+
+  ┌─────┬───────────────────────────────────┬─────────┬──────────┬─────────┐
+  │  #  │              Mejora               │  Tipo   │ Esfuerzo │ Impacto │
+  ├─────┼───────────────────────────────────┼─────────┼──────────┼─────────┤                                                                                          
+  │ 1   │ Silent rollback failure           │ Técnico │ Bajo     │ Alto    │
+  ├─────┼───────────────────────────────────┼─────────┼──────────┼─────────┤                                                                                          
+  │ 2   │ Env vars config override          │ Técnico │ Bajo     │ Alto    │                                                                                        
+  ├─────┼───────────────────────────────────┼─────────┼──────────┼─────────┤
+  │ 11  │ Batch ingest                      │ Negocio │ Medio    │ Alto    │
+  ├─────┼───────────────────────────────────┼─────────┼──────────┼─────────┤                                                                                          
+  │ 3   │ Reintentos LLM                    │ Técnico │ Bajo     │ Medio   │
+  ├─────┼───────────────────────────────────┼─────────┼──────────┼─────────┤                                                                                          
+  │ 12  │ Graceful degradation sin contexto │ Negocio │ Bajo     │ Medio   │                                                                                        
+  ├─────┼───────────────────────────────────┼─────────┼──────────┼─────────┤                                                                                          
+  │ 4   │ Lock general vault                │ Técnico │ Medio    │ Medio   │
+  ├─────┼───────────────────────────────────┼─────────┼──────────┼─────────┤                                                                                          
+  │ 14  │ Estado pending_approval           │ Negocio │ Medio    │ Medio   │                                                                                        
+  ├─────┼───────────────────────────────────┼─────────┼──────────┼─────────┤                                                                                          
+  │ 13  │ Validación frontmatter por tipo   │ Negocio │ Medio    │ Medio   │                                                                                        
+  ├─────┼───────────────────────────────────┼─────────┼──────────┼─────────┤                                                                                          
+  │ 15  │ Cron mantenimiento automático     │ Negocio │ Bajo     │ Medio   │
+  └─────┴───────────────────────────────────┴─────────┴──────────┴─────────┘                                                                                          
+                                                                                                                                                                    
+  ¿Quieres que empiece a implementar alguna de estas? Las de esfuerzo bajo y alto impacto (#1, #2, #3, #12) serían un buen punto de partida.    

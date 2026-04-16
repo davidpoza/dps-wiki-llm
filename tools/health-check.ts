@@ -4,23 +4,54 @@ import { parseArgs, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
 import {
   ensureDirectory,
+  pathExists,
   resolveVaultRoot,
   resolveWithinRoot,
   writeJsonFile,
   writeTextFile
 } from "./lib/fs-utils.js";
 import { analyzeWikiGraph, loadWikiDocs } from "./lib/wiki-inspect.js";
+import { manifestPath } from "./lib/semantic-index.js";
+import { runToolJson } from "./lib/run-tool.js";
 import { SYSTEM_CONFIG } from "./config.js";
-import type { MaintenanceFinding, MaintenanceResult, MissingPage, Severity, WikiDoc, WikiGraph } from "./lib/contracts.js";
+import { buildHealthCheckNotification } from "./services/notifications/telegram.js";
+import type {
+  CommitInput,
+  MaintenanceFinding,
+  MaintenanceResult,
+  MissingPage,
+  MutationPlan,
+  MutationResult,
+  SearchResult,
+  Severity,
+  WikiDoc,
+  WikiGraph
+} from "./lib/contracts.js";
 
 /**
  * Run deeper semantic and traceability validation over the wiki graph.
+ * Also resolves broken wiki links by searching for candidate notes,
+ * applies fixes, and emits a Telegram notification.
  */
+
+interface LinkResolution {
+  source_path: string;
+  broken_target: string;
+  candidate_path: string;
+  candidate_title: string;
+  score: number;
+}
+
+interface NewLinkCandidate {
+  source_path: string;
+  source_title: string;
+  candidate_path: string;
+  candidate_title: string;
+  score: number;
+}
 
 /**
  * Create a filesystem-safe timestamp used in report filenames.
- *
- * @returns {string}
  */
 function nowStamp(): string {
   return new Date().toISOString().replaceAll(":", "-");
@@ -28,15 +59,6 @@ function nowStamp(): string {
 
 /**
  * Normalize a health-check finding into the shared maintenance result shape.
- *
- * @param {"critical" | "warning" | "suggestion"} severity
- * @param {string} targetPath
- * @param {string} issueType
- * @param {string} description
- * @param {string} recommendedAction
- * @param {boolean} [autoFixable=false]
- * @param {Record<string, any>} [extra={}]
- * @returns {Record<string, any>}
  */
 function buildFinding(
   severity: Severity,
@@ -60,9 +82,6 @@ function buildFinding(
 
 /**
  * Sort findings by severity before path-level tie breaking.
- *
- * @param {string} severity
- * @returns {number}
  */
 function severityRank(severity: Severity): number {
   return SYSTEM_CONFIG.maintenance.severityOrder[severity];
@@ -70,9 +89,6 @@ function severityRank(severity: Severity): number {
 
 /**
  * Compute the age of a note in whole days from its updated timestamp.
- *
- * @param {string} updatedAt
- * @returns {number | null}
  */
 function ageInDays(updatedAt: string): number | null {
   const date = new Date(updatedAt);
@@ -85,10 +101,6 @@ function ageInDays(updatedAt: string): number | null {
 
 /**
  * Check whether a named markdown section exists and contains content.
- *
- * @param {{ sectionMap: Map<string, { content: string }> }} doc
- * @param {string} sectionName
- * @returns {boolean}
  */
 function sectionHasContent(doc: WikiDoc, sectionName: string): boolean {
   const section = doc.sectionMap.get(sectionName.toLowerCase());
@@ -97,10 +109,6 @@ function sectionHasContent(doc: WikiDoc, sectionName: string): boolean {
 
 /**
  * Read an array-valued frontmatter field while discarding falsey entries.
- *
- * @param {{ frontmatter: Record<string, any> }} doc
- * @param {string} key
- * @returns {any[]}
  */
 function frontmatterArray(doc: WikiDoc, key: string): unknown[] {
   const value = doc.frontmatter[key];
@@ -109,13 +117,6 @@ function frontmatterArray(doc: WikiDoc, key: string): unknown[] {
 
 /**
  * Decide whether a note has explicit or linked source support.
- *
- * @param {{ frontmatter: Record<string, any>, relativePath: string }} doc
- * @param {{
- *   resolvedLinks: Map<string, string[]>
- * }} graph
- * @param {Map<string, { docType: string }>} docsByPath
- * @returns {boolean}
  */
 function hasSourceSupport(doc: WikiDoc, graph: WikiGraph, docsByPath: Map<string, WikiDoc>): boolean {
   const [sourceIdsKey, sourceRefsKey] = SYSTEM_CONFIG.health.sourceSupportFrontmatterKeys;
@@ -137,9 +138,6 @@ function hasSourceSupport(doc: WikiDoc, graph: WikiGraph, docsByPath: Map<string
 
 /**
  * Collapse broken-link data into unique missing-page targets.
- *
- * @param {{ brokenLinks: Map<string, { normalized: string }[]> }} graph
- * @returns {Array<{ target: string, referenced_from: string[] }>}
  */
 function collectMissingPages(graph: WikiGraph): MissingPage[] {
   const missing = new Map<string, MissingPage>();
@@ -159,18 +157,317 @@ function collectMissingPages(graph: WikiGraph): MissingPage[] {
 }
 
 /**
- * Render a short markdown summary that mirrors the JSON health-check result.
- *
- * @param {{
- *   run_id: string,
- *   kind: string,
- *   findings: Record<string, any>[],
- *   missing_pages: Array<{ target: string, referenced_from: string[] }>,
- *   stats: { docs: number }
- * }} result
- * @returns {string}
+ * For each broken link, search the wiki for a candidate note that could resolve it.
+ * Returns only candidates not already linked from the source doc.
  */
-function renderSummary(result: MaintenanceResult & { missing_pages: MissingPage[] }): string {
+async function resolveBrokenLinks(
+  docs: WikiDoc[],
+  graph: WikiGraph,
+  vaultRoot: string,
+  searchTool: string,
+  log: ReturnType<typeof createLogger>
+): Promise<LinkResolution[]> {
+  const resolutions: LinkResolution[] = [];
+  let totalBrokenLinks = 0;
+
+  for (const doc of docs) {
+    const broken = graph.brokenLinks.get(doc.relativePath) ?? [];
+    totalBrokenLinks += broken.length;
+  }
+
+  log.info(
+    { phase: "resolve-broken-links/start", total_broken_links: totalBrokenLinks, search_tool: searchTool },
+    "health-check: [resolve-broken-links] starting link resolution search"
+  );
+
+  const alreadyResolved = new Set<string>(
+    docs.flatMap((doc) => graph.resolvedLinks.get(doc.relativePath) ?? [])
+  );
+
+  for (const doc of docs) {
+    const broken = graph.brokenLinks.get(doc.relativePath) ?? [];
+    if (broken.length === 0) continue;
+
+    const docResolvedPaths = new Set(graph.resolvedLinks.get(doc.relativePath) ?? []);
+
+    for (const link of broken) {
+      let searchResult: SearchResult;
+      try {
+        searchResult = await runToolJson<SearchResult>(searchTool, {
+          vault: vaultRoot,
+          args: [link.normalized, "--limit", "3"]
+        });
+      } catch (err) {
+        log.warn(
+          {
+            phase: "resolve-broken-links/search",
+            source_path: doc.relativePath,
+            target: link.normalized,
+            err: err instanceof Error ? err.message : String(err)
+          },
+          "health-check: [resolve-broken-links] search failed for target — skipping"
+        );
+        continue;
+      }
+
+      const top = searchResult.results[0];
+      if (!top) {
+        log.info(
+          { phase: "resolve-broken-links/search", source_path: doc.relativePath, target: link.normalized, candidates: 0 },
+          "health-check: [resolve-broken-links] no candidates found"
+        );
+        continue;
+      }
+
+      if (docResolvedPaths.has(top.path)) {
+        log.info(
+          {
+            phase: "resolve-broken-links/search",
+            source_path: doc.relativePath,
+            target: link.normalized,
+            candidate_path: top.path,
+            skipped: "already_linked"
+          },
+          "health-check: [resolve-broken-links] candidate already linked — skipping"
+        );
+        continue;
+      }
+
+      log.info(
+        {
+          phase: "resolve-broken-links/search",
+          source_path: doc.relativePath,
+          target: link.normalized,
+          candidate_path: top.path,
+          candidate_title: top.title,
+          score: top.score
+        },
+        "health-check: [resolve-broken-links] candidate found"
+      );
+
+      resolutions.push({
+        source_path: doc.relativePath,
+        broken_target: link.normalized,
+        candidate_path: top.path,
+        candidate_title: top.title,
+        score: top.score
+      });
+
+      // Track to avoid duplicate resolutions for the same source+candidate pair
+      docResolvedPaths.add(top.path);
+    }
+  }
+
+  log.info(
+    { phase: "resolve-broken-links/done", resolutions_found: resolutions.length },
+    "health-check: [resolve-broken-links] link resolution search completed"
+  );
+
+  return resolutions;
+}
+
+/**
+ * Apply a set of link additions (grouped by source_path) to the Related section of each doc.
+ */
+async function applyLinks(
+  items: Array<{ source_path: string; candidate_path: string; candidate_title: string }>,
+  planId: string,
+  summary: string,
+  phase: string,
+  vaultRoot: string,
+  log: ReturnType<typeof createLogger>
+): Promise<MutationResult> {
+  const bySource = new Map<string, typeof items>();
+  for (const item of items) {
+    const bucket = bySource.get(item.source_path) ?? [];
+    bucket.push(item);
+    bySource.set(item.source_path, bucket);
+  }
+
+  const pageActions = Array.from(bySource.entries()).map(([sourcePath, group]) => {
+    const links = group.map((item) => {
+      const slug = item.candidate_path.split("/").pop()?.replace(/\.md$/, "") ?? item.candidate_path;
+      return `[[${slug}|${item.candidate_title}]]`;
+    });
+
+    return {
+      path: sourcePath,
+      action: "update" as const,
+      change_type: "link_addition",
+      payload: {
+        sections: {
+          Related: links
+        }
+      }
+    };
+  });
+
+  const plan: MutationPlan = {
+    plan_id: planId,
+    operation: "health-check",
+    summary,
+    source_refs: [],
+    page_actions: pageActions,
+    index_updates: [],
+    post_actions: { reindex: false, commit: false }
+  };
+
+  log.info(
+    { phase, plan_id: planId, page_actions: pageActions.length },
+    `health-check: [${phase}] applying link mutations`
+  );
+
+  const result = await runToolJson<MutationResult>("apply-update", {
+    vault: vaultRoot,
+    input: plan
+  });
+
+  log.info(
+    { phase, created: result.created.length, updated: result.updated.length, skipped: result.skipped.length },
+    `health-check: [${phase}] mutations applied`
+  );
+
+  return result;
+}
+
+/**
+ * Apply link resolutions (broken link fixes) to the Related section of each source doc.
+ */
+async function applyLinkResolutions(
+  resolutions: LinkResolution[],
+  vaultRoot: string,
+  log: ReturnType<typeof createLogger>
+): Promise<MutationResult> {
+  return applyLinks(
+    resolutions,
+    `health-check-link-fix-${new Date().toISOString().slice(0, 10)}`,
+    `Health check link resolutions: ${resolutions.length} link(s) resolved`,
+    "apply-link-fixes",
+    vaultRoot,
+    log
+  );
+}
+
+/**
+ * Apply discovered new links to the Related section of each doc.
+ */
+async function applyDiscoveredLinks(
+  candidates: NewLinkCandidate[],
+  vaultRoot: string,
+  log: ReturnType<typeof createLogger>
+): Promise<MutationResult> {
+  return applyLinks(
+    candidates,
+    `health-check-new-links-${new Date().toISOString().slice(0, 10)}`,
+    `Health check new link discovery: ${candidates.length} link(s) added`,
+    "apply-new-links",
+    vaultRoot,
+    log
+  );
+}
+
+/**
+ * For each typed doc, search the wiki for relevant notes not yet linked and return candidates.
+ */
+async function discoverNewLinks(
+  docs: WikiDoc[],
+  graph: WikiGraph,
+  vaultRoot: string,
+  searchTool: string,
+  log: ReturnType<typeof createLogger>
+): Promise<NewLinkCandidate[]> {
+  const typedDocs = docs.filter((doc) => SYSTEM_CONFIG.wiki.typedDocTypes.includes(doc.docType) || doc.docType === "source");
+
+  log.info(
+    { phase: "discover-new-links/start", typed_docs: typedDocs.length, search_tool: searchTool },
+    "health-check: [discover-new-links] starting new link discovery"
+  );
+
+  const candidates: NewLinkCandidate[] = [];
+
+  for (const doc of typedDocs) {
+    const resolvedPaths = new Set(graph.resolvedLinks.get(doc.relativePath) ?? []);
+
+    let searchResult: SearchResult;
+    try {
+      searchResult = await runToolJson<SearchResult>(searchTool, {
+        vault: vaultRoot,
+        args: [doc.title, "--limit", "5"]
+      });
+    } catch (err) {
+      log.warn(
+        {
+          phase: "discover-new-links/search",
+          source_path: doc.relativePath,
+          err: err instanceof Error ? err.message : String(err)
+        },
+        "health-check: [discover-new-links] search failed — skipping doc"
+      );
+      continue;
+    }
+
+    const newCandidates = searchResult.results
+      .filter((r) => r.path !== doc.relativePath && !resolvedPaths.has(r.path))
+      .slice(0, 3);
+
+    if (newCandidates.length === 0) {
+      log.info(
+        { phase: "discover-new-links/search", source_path: doc.relativePath, new_candidates: 0 },
+        "health-check: [discover-new-links] no new candidates found"
+      );
+      continue;
+    }
+
+    for (const candidate of newCandidates) {
+      log.info(
+        {
+          phase: "discover-new-links/search",
+          source_path: doc.relativePath,
+          source_title: doc.title,
+          candidate_path: candidate.path,
+          candidate_title: candidate.title,
+          score: candidate.score
+        },
+        "health-check: [discover-new-links] new candidate found"
+      );
+
+      candidates.push({
+        source_path: doc.relativePath,
+        source_title: doc.title,
+        candidate_path: candidate.path,
+        candidate_title: candidate.title,
+        score: candidate.score
+      });
+
+      // Track to avoid duplicates within the same doc
+      resolvedPaths.add(candidate.path);
+    }
+  }
+
+  log.info(
+    { phase: "discover-new-links/done", candidates_found: candidates.length },
+    "health-check: [discover-new-links] new link discovery completed"
+  );
+
+  return candidates;
+}
+
+/**
+ * Render a short markdown summary that mirrors the JSON health-check result.
+ */
+function countApplied(r: Pick<MutationResult, "created" | "updated" | "skipped"> | null): number {
+  return r ? r.updated.length + r.created.length : 0;
+}
+
+function renderSummary(
+  result: MaintenanceResult & {
+    missing_pages: MissingPage[];
+    link_resolutions: LinkResolution[];
+    discovered_links: NewLinkCandidate[];
+    applied_link_fixes: Pick<MutationResult, "created" | "updated" | "skipped"> | null;
+    applied_new_links: Pick<MutationResult, "created" | "updated" | "skipped"> | null;
+  }
+): string {
   const lines = [
     `# Health Check Report: ${result.run_id}`,
     "",
@@ -178,6 +475,8 @@ function renderSummary(result: MaintenanceResult & { missing_pages: MissingPage[
     `- Files scanned: ${result.stats.docs}`,
     `- Findings: ${result.findings.length}`,
     `- Missing pages: ${result.missing_pages.length}`,
+    `- Broken links resolved: ${result.link_resolutions.length} (applied: ${countApplied(result.applied_link_fixes)})`,
+    `- New links discovered: ${result.discovered_links.length} (applied: ${countApplied(result.applied_new_links)})`,
     ""
   ];
 
@@ -201,6 +500,20 @@ function renderSummary(result: MaintenanceResult & { missing_pages: MissingPage[
     }
   }
 
+  if (result.link_resolutions.length > 0) {
+    lines.push("", "## Broken Links Resolved");
+    for (const r of result.link_resolutions) {
+      lines.push(`- [[${r.broken_target}]] in ${r.source_path} → ${r.candidate_path} (score: ${r.score.toFixed(3)})`);
+    }
+  }
+
+  if (result.discovered_links.length > 0) {
+    lines.push("", "## New Links Discovered");
+    for (const r of result.discovered_links) {
+      lines.push(`- ${r.source_path} (${r.source_title}) → ${r.candidate_path} (${r.candidate_title}, score: ${r.score.toFixed(3)})`);
+    }
+  }
+
   return `${lines.join("\n")}\n`;
 }
 
@@ -208,11 +521,31 @@ async function main(): Promise<void> {
   const args = parseArgs();
   const log = createLogger("health-check");
   const vaultRoot = resolveVaultRoot(args.vault);
-  log.info("health-check started");
+
+  log.info({ phase: "startup", vault_root: vaultRoot }, "health-check: started");
+
   const docs = await loadWikiDocs(vaultRoot);
   const graph = analyzeWikiGraph(docs);
   const docsByPath = new Map(docs.map((doc) => [doc.relativePath, doc]));
+
+  const totalBrokenLinks = Array.from(graph.brokenLinks.values()).reduce((sum, arr) => sum + arr.length, 0);
+
+  log.info(
+    {
+      phase: "analyze-graph",
+      docs: docs.length,
+      alias_map_size: graph.aliasMap.size,
+      total_broken_links: totalBrokenLinks,
+      ambiguous_targets: Array.from(graph.ambiguousTargets.values()).reduce((sum, arr) => sum + arr.length, 0)
+    },
+    "health-check: [analyze-graph] wiki graph analyzed"
+  );
+
   const findings: MaintenanceFinding[] = [];
+
+  // ── per-doc checks ────────────────────────────────────────────────────────
+
+  log.info({ phase: "check-docs", docs: docs.length }, "health-check: [check-docs] running per-doc checks");
 
   for (const doc of docs) {
     if (doc.docType === "unknown") {
@@ -342,6 +675,111 @@ async function main(): Promise<void> {
     );
   }
 
+  log.info(
+    {
+      phase: "check-docs",
+      findings: findings.length,
+      critical: findings.filter((f) => f.severity === "critical").length,
+      warning: findings.filter((f) => f.severity === "warning").length,
+      suggestion: findings.filter((f) => f.severity === "suggestion").length,
+      missing_pages: missingPages.length
+    },
+    "health-check: [check-docs] per-doc checks completed"
+  );
+
+  // ── broken link resolution ─────────────────────────────────────────────────
+
+  const hasSemanticIndex = await pathExists(manifestPath(vaultRoot));
+  const searchTool = hasSemanticIndex ? "hybrid-search" : "search";
+
+  log.info(
+    { phase: "resolve-broken-links/start", search_tool: searchTool, has_semantic_index: hasSemanticIndex },
+    "health-check: [resolve-broken-links] starting broken link resolution"
+  );
+
+  const linkResolutions = await resolveBrokenLinks(docs, graph, vaultRoot, searchTool, log);
+
+  // ── apply link resolutions ─────────────────────────────────────────────────
+
+  let appliedLinkFixes: Pick<MutationResult, "created" | "updated" | "skipped"> | null = null;
+
+  if (linkResolutions.length > 0) {
+    const mutationResult = await applyLinkResolutions(linkResolutions, vaultRoot, log);
+    appliedLinkFixes = {
+      created: mutationResult.created,
+      updated: mutationResult.updated,
+      skipped: mutationResult.skipped
+    };
+  }
+
+  // ── discover new links ────────────────────────────────────────────────────
+
+  log.info(
+    { phase: "discover-new-links/start", search_tool: searchTool },
+    "health-check: [discover-new-links] starting new link discovery"
+  );
+
+  const discoveredLinks = await discoverNewLinks(docs, graph, vaultRoot, searchTool, log);
+
+  // ── apply discovered links ────────────────────────────────────────────────
+
+  let appliedNewLinks: Pick<MutationResult, "created" | "updated" | "skipped"> | null = null;
+
+  if (discoveredLinks.length > 0) {
+    const mutationResult = await applyDiscoveredLinks(discoveredLinks, vaultRoot, log);
+    appliedNewLinks = {
+      created: mutationResult.created,
+      updated: mutationResult.updated,
+      skipped: mutationResult.skipped
+    };
+  }
+
+  // ── reindex + commit if any links were applied ────────────────────────────
+
+  const allAffected = [
+    ...(appliedLinkFixes?.updated ?? []),
+    ...(appliedLinkFixes?.created ?? []),
+    ...(appliedNewLinks?.updated ?? []),
+    ...(appliedNewLinks?.created ?? [])
+  ];
+  const uniqueAffected = [...new Set(allAffected)];
+
+  if (uniqueAffected.length > 0) {
+    log.info({ phase: "reindex", affected: uniqueAffected.length }, "health-check: [reindex] rebuilding search index");
+    await runToolJson("reindex", { vault: vaultRoot });
+    log.info({ phase: "reindex" }, "health-check: [reindex] index rebuilt");
+
+    const fixCount = countApplied(appliedLinkFixes);
+    const newCount = countApplied(appliedNewLinks);
+    const commitInput: CommitInput = {
+      operation: "health-check",
+      summary: `Health check: ${fixCount} broken link(s) resolved, ${newCount} new link(s) added`,
+      source_refs: [],
+      affected_notes: uniqueAffected,
+      paths_to_stage: [...uniqueAffected, SYSTEM_CONFIG.paths.dbPath],
+      feedback_record_ref: null,
+      mutation_result_ref: null,
+      commit_message: `health-check: ${fixCount} broken + ${newCount} new link(s) applied`
+    };
+
+    log.info(
+      { phase: "commit", affected: uniqueAffected.length },
+      "health-check: [commit] committing link changes"
+    );
+
+    const commitResult = await runToolJson<Record<string, unknown>>("commit", {
+      vault: vaultRoot,
+      input: commitInput
+    });
+
+    log.info(
+      { phase: "commit", commit_sha: commitResult.commit_sha ?? null },
+      "health-check: [commit] committed"
+    );
+  }
+
+  // ── sort findings ──────────────────────────────────────────────────────────
+
   findings.sort((left, right) => {
     const severityDelta = severityRank(left.severity) - severityRank(right.severity);
     if (severityDelta !== 0) {
@@ -351,18 +789,29 @@ async function main(): Promise<void> {
     return `${left.path}:${left.issue_type}`.localeCompare(`${right.path}:${right.issue_type}`);
   });
 
-  const result: MaintenanceResult & { missing_pages: MissingPage[] } = {
-    run_id: `health-check-${new Date().toISOString().slice(0, 10)}`,
-    kind: "health-check",
-    stats: {
-      docs: docs.length,
-      findings: findings.length,
-      critical: findings.filter((item) => item.severity === "critical").length,
-      warning: findings.filter((item) => item.severity === "warning").length,
-      suggestion: findings.filter((item) => item.severity === "suggestion").length
-    },
+  // ── write report ───────────────────────────────────────────────────────────
+
+  const runId = `health-check-${new Date().toISOString().slice(0, 10)}`;
+  const statsObj = {
+    docs: docs.length,
+    findings: findings.length,
+    critical: findings.filter((item) => item.severity === "critical").length,
+    warning: findings.filter((item) => item.severity === "warning").length,
+    suggestion: findings.filter((item) => item.severity === "suggestion").length
+  };
+
+  const result = {
+    run_id: runId,
+    kind: "health-check" as const,
+    stats: statsObj,
     findings,
-    missing_pages: missingPages
+    missing_pages: missingPages,
+    link_resolutions: linkResolutions,
+    applied_link_fixes: appliedLinkFixes,
+    discovered_links: discoveredLinks,
+    applied_new_links: appliedNewLinks,
+    report_path: undefined as string | undefined,
+    summary_path: undefined as string | undefined
   };
 
   if (args.write) {
@@ -377,8 +826,60 @@ async function main(): Promise<void> {
     result.summary_path = `${SYSTEM_CONFIG.paths.maintenanceDir}/${stamp}-health-check.md`;
   }
 
-  log.info({ docs: result.stats.docs, findings: result.stats.findings, critical: result.stats.critical }, "health-check completed");
-  writeJsonStdout(result, args.pretty);
+  // ── telegram notification ──────────────────────────────────────────────────
+
+  const topCritical = findings
+    .filter((f) => f.severity === "critical")
+    .slice(0, 5)
+    .map((f) => ({ path: f.path, issue_type: f.issue_type }));
+
+  const appliedFixCount = countApplied(appliedLinkFixes);
+  const appliedNewCount = countApplied(appliedNewLinks);
+
+  const telegramFields = buildHealthCheckNotification({
+    run_id: runId,
+    stats: statsObj,
+    missing_pages: missingPages.length,
+    link_resolutions: linkResolutions.length,
+    applied_fixes: appliedFixCount,
+    discovered_links: discoveredLinks.length,
+    applied_new_links: appliedNewCount,
+    top_critical_findings: topCritical,
+    report_path: result.report_path
+  });
+
+  log.info(
+    {
+      phase: "telegram",
+      enabled: telegramFields.telegram_enabled,
+      skip_reason: telegramFields.telegram_skip_reason ?? null
+    },
+    "health-check: [telegram] notification built"
+  );
+
+  // ── final output ───────────────────────────────────────────────────────────
+
+  const output = {
+    ...result,
+    ...telegramFields
+  };
+
+  log.info(
+    {
+      phase: "done",
+      docs: statsObj.docs,
+      findings: statsObj.findings,
+      critical: statsObj.critical,
+      missing_pages: missingPages.length,
+      link_resolutions: linkResolutions.length,
+      applied_fixes: appliedFixCount,
+      discovered_links: discoveredLinks.length,
+      applied_new_links: appliedNewCount
+    },
+    "health-check: completed"
+  );
+
+  writeJsonStdout(output, args.pretty);
 }
 
 main().catch((error) => {

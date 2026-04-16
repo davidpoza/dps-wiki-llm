@@ -118,6 +118,45 @@ export function buildIngestFailureNotification(
   return { ...baseFields(missingConfig, token, msg), telegram_ingest_failure_message: msg };
 }
 
+// ─── Health check ─────────────────────────────────────────────────────────────
+
+export type HealthCheckNotificationParams = {
+  run_id: string;
+  stats: { docs: number; findings: number; critical: number; warning: number; suggestion: number };
+  missing_pages: number;
+  link_resolutions: number;
+  applied_fixes: number;
+  discovered_links: number;
+  applied_new_links: number;
+  top_critical_findings: Array<{ path: string; issue_type: string }>;
+  report_path?: string | null;
+};
+
+export function buildHealthCheckNotification(
+  params: HealthCheckNotificationParams
+): TelegramBaseFields & { telegram_health_check_message: TelegramMessage | null } {
+  const { token, chatId, missingConfig } = resolveTelegramConfig(null);
+  const criticalLines = params.top_critical_findings.slice(0, 5).map(
+    (f) => `  ${f.path} — ${f.issue_type}`
+  );
+  const text = compactLines([
+    "KB Health Check completado",
+    `Run: ${params.run_id}`,
+    `Docs escaneados: ${params.stats.docs}`,
+    `Findings: ${params.stats.findings} (critical: ${params.stats.critical}, warning: ${params.stats.warning}, suggestion: ${params.stats.suggestion})`,
+    `Missing pages: ${params.missing_pages}`,
+    `Links resueltos (broken): ${params.link_resolutions}`,
+    params.applied_fixes > 0 ? `Links aplicados (broken): ${params.applied_fixes}` : "",
+    `Links nuevos descubiertos: ${params.discovered_links}`,
+    params.applied_new_links > 0 ? `Links nuevos aplicados: ${params.applied_new_links}` : "",
+    params.stats.critical > 0 ? "Issues críticos:" : "",
+    ...criticalLines,
+    params.report_path ? `Reporte: ${params.report_path}` : ""
+  ]);
+  const msg = makeMessage(missingConfig, chatId, text);
+  return { ...baseFields(missingConfig, token, msg), telegram_health_check_message: msg };
+}
+
 // ─── Answer success ───────────────────────────────────────────────────────────
 
 export type AnswerNotificationParams = {

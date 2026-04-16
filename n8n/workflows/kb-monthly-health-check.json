@@ -46,7 +46,7 @@
         16
       ],
       "notesInFlow": true,
-      "notes": "By default health-check.ts writes JSON and Markdown reports into state/maintenance/."
+      "notes": "Runs health-check: validates wiki quality, resolves broken links via search, writes reports to state/maintenance/, and emits Telegram notification fields."
     },
     {
       "parameters": {
@@ -60,6 +60,57 @@
         20,
         16
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.telegram_enabled) }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "7a3c1b2d-4e5f-6a7b-8c9d-0e1f2a3b4c5d",
+      "name": "Check Telegram Enabled",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        300,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.telegram_message) }}",
+        "options": {}
+      },
+      "id": "9b8a7c6d-5e4f-3a2b-1c0d-ef9e8d7c6b5a",
+      "name": "Send Telegram Health Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        -80
+      ],
+      "notesInFlow": true,
+      "notes": "Sends the health check report to Telegram via Bot API. Requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID env vars.",
+      "continueOnFail": true
     }
   ],
   "connections": {
@@ -94,6 +145,29 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Parse Health Result": {
+      "main": [
+        [
+          {
+            "node": "Check Telegram Enabled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Telegram Enabled": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Health Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     }
   },
