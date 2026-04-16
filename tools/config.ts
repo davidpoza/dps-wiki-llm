@@ -161,7 +161,7 @@ export const SYSTEM_CONFIG = {
     mode: "note",
     minChars: 250,
     topK: 8,
-    model: "Xenova/bge-m3",
+    model: "Xenova/multilingual-e5-small",
     batchSize: 16
   }
 } as const;
