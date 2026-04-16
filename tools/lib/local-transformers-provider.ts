@@ -132,9 +132,19 @@ function extractVector(output: unknown): number[] {
   const data = output as { data?: Float32Array; dims?: number[] } & { tolist?: () => unknown };
 
   if (typeof data?.tolist === "function") {
-    const nested = data.tolist() as unknown[][][];
-    // nested[0] => [seq_tokens][dim] – mean pool
-    const tokens = nested[0];
+    const nested = data.tolist() as unknown[][];
+    const first = nested[0];
+
+    // Already pooled: tolist() returned [[v1, v2, ..., vdim]] where first is
+    // the final embedding vector (array of numbers). This happens when the
+    // pipeline applies mean pooling internally and returns a [1, dim] tensor.
+    if (typeof first[0] === "number") {
+      return first as number[];
+    }
+
+    // Not pooled: tolist() returned [[[v1, ..., vdim], ...]] where first is
+    // [seq_tokens][dim]. Mean-pool over the sequence length dimension.
+    const tokens = first as unknown[][];
     const dim = tokens[0].length;
     const result = new Array<number>(dim).fill(0);
 
@@ -142,7 +152,6 @@ function extractVector(output: unknown): number[] {
       for (let i = 0; i < dim; i++) result[i] += token[i] as number;
     }
 
-    // Divide each dimension by the number of tokens to compute the mean.
     for (let i = 0; i < dim; i++) result[i] /= tokens.length;
     return result;
   }

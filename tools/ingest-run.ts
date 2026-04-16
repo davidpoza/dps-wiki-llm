@@ -64,6 +64,7 @@ type IngestRunOutput = TelegramBaseFields & {
   llm_mutation_result: MutationResult | null;
   llm_reindex_result: ReindexResult | null;
   llm_commit_result: CommitResult | null;
+  embed_index_result: Record<string, unknown>;
   llm_ingest_meta: LlmMeta;
   telegram_chat_id: unknown;
   telegram_message_id: unknown;
@@ -512,7 +513,26 @@ async function main(): Promise<void> {
       );
     }
 
-    // ── 13. build output ──────────────────────────────────────────────────────
+    // ── 13. embed-index (incremental) ────────────────────────────────────────
+
+    log.info({ phase: "embed-index" }, "ingest-run: [embed-index] updating semantic index");
+
+    const embedIndexResult = await runToolJson<Record<string, unknown>>("embed-index", {
+      vault: args.vault
+    });
+
+    log.info(
+      {
+        phase: "embed-index",
+        embedded: embedIndexResult.embedded ?? null,
+        skipped: embedIndexResult.skipped ?? null,
+        total: embedIndexResult.total ?? null,
+        model: embedIndexResult.model ?? null
+      },
+      "ingest-run: [embed-index] semantic index updated"
+    );
+
+    // ── 14. build output ──────────────────────────────────────────────────────
 
     const source = baselinePlanOutput.source_payload;
     const status = llmMutationResult
@@ -553,6 +573,7 @@ async function main(): Promise<void> {
       llm_mutation_result: llmMutationResult,
       llm_reindex_result: llmReindexResult,
       llm_commit_result: llmCommitResult,
+      embed_index_result: embedIndexResult,
       llm_ingest_meta: ingestPlanMeta,
       telegram_chat_id: rawEvent.telegram_chat_id ?? null,
       telegram_message_id: rawEvent.telegram_message_id ?? null,
@@ -577,7 +598,8 @@ async function main(): Promise<void> {
         llm_updated: countOf(llmMutationResult?.updated),
         guardrail_rejections: rejections.length,
         baseline_commit_sha: baselineCommitResult.commit_sha ?? null,
-        llm_commit_sha: llmCommitResult?.commit_sha ?? null
+        llm_commit_sha: llmCommitResult?.commit_sha ?? null,
+        embed_indexed: embedIndexResult.embedded ?? null
       },
       "ingest-run: completed"
     );
