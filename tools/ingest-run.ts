@@ -361,7 +361,7 @@ async function main(): Promise<void> {
       "ingest-run: [wiki-context/search] retrieving related wiki docs"
     );
 
-    const [generalRetrieval, topicRetrieval] = await Promise.all([
+    const [generalRetrieval, topicRetrievalRaw] = await Promise.all([
       runToolJson<SearchResult>(wikiContextSearchTool, {
         vault: args.vault,
         args: ["--limit", String(INGEST_WIKI_CONTEXT_LIMIT), wikiContextQuery]
@@ -369,13 +369,19 @@ async function main(): Promise<void> {
       runToolJson<SearchResult>(wikiContextSearchTool, {
         vault: args.vault,
         args: ["--limit", String(INGEST_TOPIC_CONTEXT_LIMIT), "--doc-type", "topic", wikiContextQuery]
+      }).catch((err: unknown) => {
+        log.warn(
+          { phase: "wiki-context/search", err: err instanceof Error ? err.message : String(err) },
+          "ingest-run: [wiki-context/search] topic-specific search failed — skipping topic slots"
+        );
+        return { query: wikiContextQuery, limit: INGEST_TOPIC_CONTEXT_LIMIT, results: [] } as SearchResult;
       })
     ]);
 
     // Merge: topics fill guaranteed slots; general results deduplicated against them.
-    const seenPaths = new Set(topicRetrieval.results.map((r) => r.path));
+    const seenPaths = new Set(topicRetrievalRaw.results.map((r) => r.path));
     const mergedResults = [
-      ...topicRetrieval.results,
+      ...topicRetrievalRaw.results,
       ...generalRetrieval.results.filter((r) => !seenPaths.has(r.path))
     ];
 
@@ -388,7 +394,7 @@ async function main(): Promise<void> {
       {
         phase: "wiki-context/search",
         general_results: generalRetrieval.results.length,
-        topic_results: topicRetrieval.results.length,
+        topic_results: topicRetrievalRaw.results.length,
         merged_results: mergedResults.length,
         search_tool: wikiContextSearchTool
       },
