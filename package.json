@@ -30,7 +30,8 @@
     "log-tail": "node dist/tools/log-tail.js",
     "embed-index": "node dist/tools/embed-index.js",
     "semantic-search": "node dist/tools/semantic-search.js",
-    "hybrid-search": "node dist/tools/hybrid-search.js"
+    "hybrid-search": "node dist/tools/hybrid-search.js",
+    "gen-home": "node dist/tools/gen-home.js"
   },
   "engines": {
     "node": ">=22.5.0"
