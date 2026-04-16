@@ -169,6 +169,23 @@ function injectTopicTags(
   };
 }
 
+function injectDefaultConfidence(plan: MutationPlan, defaultConfidence: string): MutationPlan {
+  const injected = plan.page_actions.map((a) => {
+    if (a.action !== "create") return a;
+    const existingFrontmatter = (a.payload?.frontmatter ?? {}) as Record<string, unknown>;
+    if (existingFrontmatter.confidence) return a;
+    return {
+      ...a,
+      payload: {
+        ...a.payload,
+        frontmatter: { ...existingFrontmatter, confidence: defaultConfidence }
+      }
+    };
+  });
+
+  return { ...plan, page_actions: injected };
+}
+
 function usageSummary(meta: LlmMeta): Record<string, unknown> {
   const usage = meta.usage as Record<string, unknown> | undefined;
   return usage
@@ -571,7 +588,8 @@ async function main(): Promise<void> {
 
     const sourceNotePath = baselinePlanOutput.mutation_plan.page_actions[0]?.path ?? "";
     const topicSlugs = topicSlugsFromPlan(guardrailedPlan);
-    const llmMutationPlan = injectTopicTags(guardrailedPlan, sourceNotePath, topicSlugs);
+    const planWithTags = injectTopicTags(guardrailedPlan, sourceNotePath, topicSlugs);
+    const llmMutationPlan = injectDefaultConfidence(planWithTags, SYSTEM_CONFIG.health.defaultConfidence);
     const hasChanges = guardrailHasChanges || topicSlugs.length > 0;
 
     log.info(

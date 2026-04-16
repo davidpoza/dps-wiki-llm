@@ -133,6 +133,8 @@ export const SYSTEM_CONFIG = {
   },
   health: {
     dayInMs: 24 * 60 * 60 * 1000,
+    confidenceLevels: ["low", "medium", "high"] as readonly string[],
+    defaultConfidence: "low",
     lowConfidenceValue: "low",
     staleLowConfidenceWarningDays: 30,
     staleLowConfidenceCriticalDays: 90,

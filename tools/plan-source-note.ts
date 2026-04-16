@@ -125,7 +125,8 @@ function frontmatterFor(payload: NormalizedSourcePayload): Record<string, unknow
     source_ref: payload.raw_path,
     source_id: payload.source_id,
     captured_at: payload.captured_at,
-    updated
+    updated,
+    confidence: SYSTEM_CONFIG.health.defaultConfidence
   };
 
   if (payload.checksum) {
