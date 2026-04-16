@@ -134,6 +134,41 @@ function countOf(values: unknown): number {
   return Array.isArray(values) ? values.length : 0;
 }
 
+function topicSlugsFromPlan(plan: MutationPlan): string[] {
+  return (plan.page_actions ?? [])
+    .filter((a) => a.doc_type === "topic" && a.action !== "noop")
+    .map((a) => a.path.split("/").pop()?.replace(/\.md$/, "") ?? "")
+    .filter(Boolean);
+}
+
+function injectTopicTags(
+  plan: MutationPlan,
+  sourceNotePath: string,
+  topicSlugs: string[]
+): MutationPlan {
+  if (topicSlugs.length === 0 || !sourceNotePath) {
+    return plan;
+  }
+
+  return {
+    ...plan,
+    page_actions: [
+      ...plan.page_actions,
+      {
+        path: sourceNotePath,
+        action: "update",
+        doc_type: "source",
+        change_type: "tag_update",
+        payload: {
+          frontmatter: {
+            tags: topicSlugs
+          }
+        }
+      }
+    ]
+  };
+}
+
 function usageSummary(meta: LlmMeta): Record<string, unknown> {
   const usage = meta.usage as Record<string, unknown> | undefined;
   return usage
@@ -527,11 +562,21 @@ async function main(): Promise<void> {
       "ingest-run: [guardrail-plan] validating LLM plan"
     );
 
-    const { plan: llmMutationPlan, rejections, hasChanges } = parseAndGuardrailPlan(
+    const { plan: guardrailedPlan, rejections, hasChanges: guardrailHasChanges } = parseAndGuardrailPlan(
       ingestPlanResponse,
       baselinePlanOutput.mutation_plan,
       wikiContext.context_docs,
       log
+    );
+
+    const sourceNotePath = baselinePlanOutput.mutation_plan.page_actions[0]?.path ?? "";
+    const topicSlugs = topicSlugsFromPlan(guardrailedPlan);
+    const llmMutationPlan = injectTopicTags(guardrailedPlan, sourceNotePath, topicSlugs);
+    const hasChanges = guardrailHasChanges || topicSlugs.length > 0;
+
+    log.info(
+      { phase: "inject-topic-tags", source_note_path: sourceNotePath, topic_slugs: topicSlugs },
+      `ingest-run: [inject-topic-tags] injected ${topicSlugs.length} topic tag(s) into source note`
     );
 
     // ── 12. apply LLM plan (conditional) ─────────────────────────────────────
