@@ -6,6 +6,17 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 
+// Polyfill Promise.try for Node.js versions that don't support it natively
+// (required by pdfjs-dist bundled inside @opendocsg/pdf2md → unpdf)
+if (typeof (Promise as unknown as Record<string, unknown>).try !== "function") {
+  (Promise as unknown as Record<string, unknown>).try = function <T>(
+    fn: (...args: unknown[]) => T | PromiseLike<T>,
+    ...args: unknown[]
+  ): Promise<T> {
+    return new Promise<T>((resolve) => resolve(fn(...args)));
+  };
+}
+
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 const pdf2md = require("@opendocsg/pdf2md") as (pdfBuffer: ArrayBuffer) => Promise<string>;
