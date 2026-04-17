@@ -16,6 +16,8 @@ import { analyzeWikiGraph, loadWikiDocs } from "./lib/wiki-inspect.js";
 import { loadManifest, loadAllEmbeddingUnits, cosineSimilarity, manifestPath } from "./lib/semantic-index.js";
 import { chatCompletion, chatText, extractJson } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
+import { hybridSearch } from "./lib/hybrid-search-fn.js";
+import { ftsSearch } from "./lib/fts-search-fn.js";
 import { SYSTEM_CONFIG } from "./config.js";
 import { buildHealthCheckNotification } from "./services/notifications/telegram.js";
 import type {
@@ -184,11 +186,13 @@ function collectMissingPages(graph: WikiGraph): MissingPage[] {
  * For each broken link, search the wiki for a candidate note that could resolve it.
  * Returns only candidates not already linked from the source doc.
  */
+type SearchFn = (query: string, limit: number) => Promise<SearchResult>;
+
 async function resolveBrokenLinks(
   docs: WikiDoc[],
   graph: WikiGraph,
   vaultRoot: string,
-  searchTool: string,
+  searchFn: SearchFn,
   excludedPaths: Set<string>,
   log: ReturnType<typeof createLogger>
 ): Promise<LinkResolution[]> {
@@ -201,7 +205,7 @@ async function resolveBrokenLinks(
   }
 
   log.info(
-    { phase: "resolve-broken-links/start", total_broken_links: totalBrokenLinks, search_tool: searchTool },
+    { phase: "resolve-broken-links/start", total_broken_links: totalBrokenLinks },
     "health-check: [resolve-broken-links] starting link resolution search"
   );
 
@@ -218,10 +222,7 @@ async function resolveBrokenLinks(
     for (const link of broken) {
       let searchResult: SearchResult;
       try {
-        searchResult = await runToolJson<SearchResult>(searchTool, {
-          vault: vaultRoot,
-          args: [link.normalized, "--limit", "3"]
-        });
+        searchResult = await searchFn(link.normalized, 3);
       } catch (err) {
         log.warn(
           {
@@ -398,14 +399,14 @@ async function discoverNewLinks(
   docs: WikiDoc[],
   graph: WikiGraph,
   vaultRoot: string,
-  searchTool: string,
+  searchFn: SearchFn,
   excludedPaths: Set<string>,
   log: ReturnType<typeof createLogger>
 ): Promise<NewLinkCandidate[]> {
   const typedDocs = docs.filter((doc) => SYSTEM_CONFIG.wiki.typedDocTypes.includes(doc.docType) || doc.docType === "source");
 
   log.info(
-    { phase: "discover-new-links/start", typed_docs: typedDocs.length, search_tool: searchTool },
+    { phase: "discover-new-links/start", typed_docs: typedDocs.length },
     "health-check: [discover-new-links] starting new link discovery"
   );
 
@@ -416,10 +417,7 @@ async function discoverNewLinks(
 
     let searchResult: SearchResult;
     try {
-      searchResult = await runToolJson<SearchResult>(searchTool, {
-        vault: vaultRoot,
-        args: [doc.title, "--limit", "5"]
-      });
+      searchResult = await searchFn(doc.title, 5);
     } catch (err) {
       log.warn(
         {
@@ -1121,14 +1119,16 @@ async function main(): Promise<void> {
   // ── broken link resolution ─────────────────────────────────────────────────
 
   const hasSemanticIndex = await pathExists(manifestPath(vaultRoot));
-  const searchTool = hasSemanticIndex ? "hybrid-search" : "search";
+  const searchFn: SearchFn = hasSemanticIndex
+    ? (query, limit) => hybridSearch(query, { vault: vaultRoot, limit })
+    : (query, limit) => ftsSearch(query, { vault: vaultRoot, limit });
 
   log.info(
-    { phase: "resolve-broken-links/start", search_tool: searchTool, has_semantic_index: hasSemanticIndex },
+    { phase: "resolve-broken-links/start", has_semantic_index: hasSemanticIndex },
     "health-check: [resolve-broken-links] starting broken link resolution"
   );
 
-  const linkResolutions = await resolveBrokenLinks(docs, graph, vaultRoot, searchTool, new Set(), log);
+  const linkResolutions = await resolveBrokenLinks(docs, graph, vaultRoot, searchFn, new Set(), log);
 
   // ── apply link resolutions ─────────────────────────────────────────────────
 
@@ -1159,12 +1159,12 @@ async function main(): Promise<void> {
   // ── discover new links ────────────────────────────────────────────────────
 
   log.info(
-    { phase: "discover-new-links/start", search_tool: searchTool },
+    { phase: "discover-new-links/start" },
     "health-check: [discover-new-links] starting new link discovery"
   );
 
   const deletedSynonymPaths = new Set(synonymMergeResult.merged_pairs.map((p) => p.deleted));
-  const discoveredLinks = await discoverNewLinks(docs, graph, vaultRoot, searchTool, deletedSynonymPaths, log);
+  const discoveredLinks = await discoverNewLinks(docs, graph, vaultRoot, searchFn, deletedSynonymPaths, log);
 
   // ── apply discovered links ────────────────────────────────────────────────
 
