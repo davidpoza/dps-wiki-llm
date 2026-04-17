@@ -93,6 +93,7 @@ export interface SearchResultItem {
 export interface SearchResult {
   query: string;
   limit: number;
+  mode?: string;
   db_path?: string;
   results: SearchResultItem[];
 }

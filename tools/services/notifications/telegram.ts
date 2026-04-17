@@ -157,6 +157,37 @@ export function buildHealthCheckNotification(
   return { ...baseFields(missingConfig, token, msg), telegram_health_check_message: msg };
 }
 
+// ─── Search results ───────────────────────────────────────────────────────────
+
+export type SearchNotificationParams = {
+  telegram_chat_id: unknown;
+  query: string;
+  retrieval: {
+    mode?: string;
+    results: Array<{ path: string; title: string; doc_type: string; score: number }>;
+  };
+};
+
+export function buildSearchNotification(
+  params: SearchNotificationParams
+): TelegramBaseFields & { telegram_search_message: TelegramMessage | null } {
+  const { token, chatId, missingConfig } = resolveTelegramConfig(params.telegram_chat_id);
+  const results = Array.isArray(params.retrieval.results) ? params.retrieval.results : [];
+  const resultLines = results.slice(0, 10).map((r, i) => {
+    const score = typeof r.score === "number" ? r.score.toFixed(3) : "?";
+    return `${i + 1}. ${r.title || r.path} [${r.doc_type}] (${score})\n   ${r.path}`;
+  });
+  const text = compactLines([
+    "KB search completed",
+    `Query: ${truncateText(params.query, 300)}`,
+    params.retrieval.mode ? `Mode: ${params.retrieval.mode}` : "",
+    `Results: ${results.length}`,
+    ...resultLines
+  ]);
+  const msg = makeMessage(missingConfig, chatId, text);
+  return { ...baseFields(missingConfig, token, msg), telegram_search_message: msg };
+}
+
 // ─── Answer success ───────────────────────────────────────────────────────────
 
 export type AnswerNotificationParams = {

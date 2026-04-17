@@ -99,7 +99,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nif (response.ok === false) {\n  throw new Error('Telegram getUpdates failed: ' + (response.description ?? 'unknown error'));\n}\nconst updates = Array.isArray(response.result) ? response.result : [];\nif (!updates.length) return [];\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst update = updates[0];\nconst message = update.message ?? update.edited_message ?? null;\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : '';\nconst text = typeof message?.text === 'string' ? message.text.trim() : '';\nfunction markProcessed() { if (Number.isSafeInteger(Number(update.update_id))) staticData.telegram_last_update_id = Number(update.update_id); }\nfunction telegramCommand(value) { const match = value.match(/^\\/(\\w+)(?:@\\w+)?(?:\\s|$)/); return match ? match[1].toLowerCase() : 'ask'; }\nif (!message || !text) { markProcessed(); return []; }\nif (allowedTelegramChatId && chatId !== allowedTelegramChatId) { markProcessed(); return []; }\nconst command = telegramCommand(text);\nif (!['ask', 'answer', 'query', 'ingest'].includes(command)) { markProcessed(); return []; }\nreturn [{ json: { body: update, telegram_polled: true, telegram_command: command } }];"
+        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nif (response.ok === false) {\n  throw new Error('Telegram getUpdates failed: ' + (response.description ?? 'unknown error'));\n}\nconst updates = Array.isArray(response.result) ? response.result : [];\nif (!updates.length) return [];\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst update = updates[0];\nconst message = update.message ?? update.edited_message ?? null;\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : '';\nconst text = typeof message?.text === 'string' ? message.text.trim() : '';\nfunction markProcessed() { if (Number.isSafeInteger(Number(update.update_id))) staticData.telegram_last_update_id = Number(update.update_id); }\nfunction telegramCommand(value) { const match = value.match(/^\\/(\\w+)(?:@\\w+)?(?:\\s|$)/); return match ? match[1].toLowerCase() : 'ask'; }\nif (!message || !text) { markProcessed(); return []; }\nif (allowedTelegramChatId && chatId !== allowedTelegramChatId) { markProcessed(); return []; }\nconst command = telegramCommand(text);\nif (!['ask', 'answer', 'query', 'ingest', 'search'].includes(command)) { markProcessed(); return []; }\nreturn [{ json: { body: update, telegram_polled: true, telegram_command: command } }];"
       },
       "id": "telegram-prepare-updates",
       "name": "Prepare Telegram Updates",
@@ -396,6 +396,146 @@
         2920,
         -100
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.telegram_command }}",
+              "value2": "search"
+            }
+          ]
+        }
+      },
+      "id": "telegram-is-search",
+      "name": "Is Telegram Search Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst payload = {\n  ...body,\n  telegram_polled: Boolean(input.telegram_polled),\n  telegram_command: input.telegram_command ?? body.telegram_command ?? null,\n  telegram_lock_acquired: Boolean(input.telegram_lock_acquired),\n  telegram_lock_id: input.telegram_lock_id ?? body.telegram_lock_id ?? null\n};\nreturn [{\n  json: {\n    ...payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
+      },
+      "id": "search-build-payload",
+      "name": "Build Search Run Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/search-run.js --vault /data/vault --compact\" }}",
+        "executeOnce": true
+      },
+      "id": "search-run",
+      "name": "Run search-run.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        420
+      ],
+      "notesInFlow": true,
+      "notes": "Runs hybrid search (falls back to FTS when semantic index is unavailable) and formats results for Telegram."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('search-run.ts returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "search-parse-run",
+      "name": "Parse Search Run Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.telegram_enabled) }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "search-should-send",
+      "name": "Should Send Telegram Search Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.telegram_message) }}",
+        "options": {}
+      },
+      "id": "search-send-telegram",
+      "name": "Send Telegram Search Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2360,
+        320
+      ],
+      "notesInFlow": true,
+      "notes": "Sends search results as a plain-text Telegram message. Requires TELEGRAM_BOT_TOKEN and a chat id.",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = ($node['Parse Search Run Result'] && $node['Parse Search Run Result'].json) ? $node['Parse Search Run Result'].json : $json;\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nif (data.telegram_polled && Number.isSafeInteger(Number(data.telegram_update_id))) {\n  staticData.telegram_last_update_id = Number(data.telegram_update_id);\n}\nreturn [{ json: data }];"
+      },
+      "id": "search-finalize",
+      "name": "Finalize Search Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "executeOnce": true
+      },
+      "id": "search-release-lock",
+      "name": "Release Bot Lock After Search",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2920,
+        420
+      ]
     }
   ],
   "connections": {
@@ -499,7 +639,98 @@
         ],
         [
           {
+            "node": "Is Telegram Search Command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Telegram Search Command?": {
+      "main": [
+        [
+          {
+            "node": "Build Search Run Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Build Answer Run Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Search Run Payload": {
+      "main": [
+        [
+          {
+            "node": "Run search-run.ts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run search-run.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Search Run Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Search Run Result": {
+      "main": [
+        [
+          {
+            "node": "Should Send Telegram Search Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Send Telegram Search Log?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Search Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Search Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Search Log": {
+      "main": [
+        [
+          {
+            "node": "Finalize Search Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Search Response": {
+      "main": [
+        [
+          {
+            "node": "Release Bot Lock After Search",
             "type": "main",
             "index": 0
           }

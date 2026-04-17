@@ -17,6 +17,7 @@
     "render-n8n-workflows": "node dist/tools/render-n8n-workflows.js",
     "ingest-run": "node dist/tools/ingest-run.js",
     "answer-run": "node dist/tools/answer-run.js",
+    "search-run": "node dist/tools/search-run.js",
     "plan-source-note": "node dist/tools/plan-source-note.js",
     "apply-update": "node dist/tools/apply-update.js",
     "answer-context": "node dist/tools/answer-context.js",
