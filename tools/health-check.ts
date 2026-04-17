@@ -189,6 +189,7 @@ async function resolveBrokenLinks(
   graph: WikiGraph,
   vaultRoot: string,
   searchTool: string,
+  excludedPaths: Set<string>,
   log: ReturnType<typeof createLogger>
 ): Promise<LinkResolution[]> {
   const resolutions: LinkResolution[] = [];
@@ -243,16 +244,16 @@ async function resolveBrokenLinks(
         continue;
       }
 
-      if (docResolvedPaths.has(top.path)) {
+      if (top.path === doc.relativePath || docResolvedPaths.has(top.path) || excludedPaths.has(top.path)) {
         log.info(
           {
             phase: "resolve-broken-links/search",
             source_path: doc.relativePath,
             target: link.normalized,
             candidate_path: top.path,
-            skipped: "already_linked"
+            skipped: top.path === doc.relativePath ? "self_link" : excludedPaths.has(top.path) ? "excluded_synonym" : "already_linked"
           },
-          "health-check: [resolve-broken-links] candidate already linked — skipping"
+          "health-check: [resolve-broken-links] candidate skipped"
         );
         continue;
       }
@@ -398,6 +399,7 @@ async function discoverNewLinks(
   graph: WikiGraph,
   vaultRoot: string,
   searchTool: string,
+  excludedPaths: Set<string>,
   log: ReturnType<typeof createLogger>
 ): Promise<NewLinkCandidate[]> {
   const typedDocs = docs.filter((doc) => SYSTEM_CONFIG.wiki.typedDocTypes.includes(doc.docType) || doc.docType === "source");
@@ -431,7 +433,7 @@ async function discoverNewLinks(
     }
 
     const newCandidates = searchResult.results
-      .filter((r) => r.path !== doc.relativePath && !resolvedPaths.has(r.path))
+      .filter((r) => r.path !== doc.relativePath && !resolvedPaths.has(r.path) && !excludedPaths.has(r.path))
       .slice(0, 3);
 
     if (newCandidates.length === 0) {
@@ -1126,7 +1128,7 @@ async function main(): Promise<void> {
     "health-check: [resolve-broken-links] starting broken link resolution"
   );
 
-  const linkResolutions = await resolveBrokenLinks(docs, graph, vaultRoot, searchTool, log);
+  const linkResolutions = await resolveBrokenLinks(docs, graph, vaultRoot, searchTool, new Set(), log);
 
   // ── apply link resolutions ─────────────────────────────────────────────────
 
@@ -1161,7 +1163,8 @@ async function main(): Promise<void> {
     "health-check: [discover-new-links] starting new link discovery"
   );
 
-  const discoveredLinks = await discoverNewLinks(docs, graph, vaultRoot, searchTool, log);
+  const deletedSynonymPaths = new Set(synonymMergeResult.merged_pairs.map((p) => p.deleted));
+  const discoveredLinks = await discoverNewLinks(docs, graph, vaultRoot, searchTool, deletedSynonymPaths, log);
 
   // ── apply discovered links ────────────────────────────────────────────────
 
