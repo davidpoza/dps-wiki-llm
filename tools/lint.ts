@@ -12,9 +12,10 @@ import {
   writeJsonFile,
   writeTextFile
 } from "./lib/fs-utils.js";
-import { analyzeWikiGraph, loadWikiDocs } from "./lib/wiki-inspect.js";
+import { analyzeWikiGraph, extractWikiLinks, loadWikiDocs } from "./lib/wiki-inspect.js";
+import { splitFrontmatter, stringifyFrontmatter } from "./lib/frontmatter.js";
 import { SYSTEM_CONFIG } from "./config.js";
-import type { MaintenanceFinding, MaintenanceResult, Severity, WikiDoc } from "./lib/contracts.js";
+import type { MaintenanceFinding, MaintenanceResult, Severity, WikiDoc, WikiGraph } from "./lib/contracts.js";
 
 /**
  * Run structural wiki linting and optionally persist the report artifacts.
@@ -96,6 +97,51 @@ function missingRequiredFrontmatter(doc: WikiDoc): string[] {
 }
 
 /**
+ * Return the raw tag values from frontmatter as a string array.
+ */
+function currentTagsRaw(doc: WikiDoc): string[] {
+  const value = doc.frontmatter.tags;
+  if (Array.isArray(value)) {
+    return value.filter((t): t is string => typeof t === "string" && Boolean(t.trim())).map((t) => t.trim());
+  }
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim()];
+  }
+  return [];
+}
+
+
+/**
+ * Walk the "Linked Notes" section of a source doc, resolve wiki links against
+ * the graph, and return the full list of slugs for docs in wiki/topics/*.
+ * Returns null when the section is absent or contains no resolvable topic links.
+ */
+function topicTagsFromLinkedNotes(
+  doc: WikiDoc,
+  graph: WikiGraph,
+  docsByPath: Map<string, WikiDoc>
+): string[] | null {
+  const section = doc.sectionMap.get("linked notes");
+  if (!section || !section.content.trim()) return null;
+
+  const links = extractWikiLinks(section.content);
+  if (links.length === 0) return null;
+
+  const slugs: string[] = [];
+
+  for (const link of links) {
+    const matches = graph.aliasMap.get(link.normalized) ?? [];
+    if (matches.length !== 1) continue; // broken or ambiguous — skip
+    const targetPath = matches[0];
+    const targetDoc = docsByPath.get(targetPath);
+    if (!targetDoc || targetDoc.docType !== "topic") continue;
+    slugs.push(path.posix.basename(targetPath, ".md"));
+  }
+
+  return slugs.length > 0 ? slugs : null;
+}
+
+/**
  * Find basename collisions that can make wiki link resolution ambiguous.
  *
  * @param {{ relativePath: string }[]} docs
@@ -154,6 +200,7 @@ async function main(): Promise<void> {
   log.info("lint started");
   const docs = await loadWikiDocs(vaultRoot);
   const graph = analyzeWikiGraph(docs);
+  const docsByPath = new Map(docs.map((doc) => [doc.relativePath, doc]));
   const findings: MaintenanceFinding[] = [];
 
   for (const doc of docs) {
@@ -204,6 +251,35 @@ async function main(): Promise<void> {
           { missing_keys: missingKeys }
         )
       );
+    }
+
+    if (doc.docType === "source") {
+      const computedTags = topicTagsFromLinkedNotes(doc, graph, docsByPath);
+      const existingTags = currentTagsRaw(doc);
+
+      if (computedTags !== null) {
+        findings.push(
+          buildFinding(
+            "warning",
+            doc.relativePath,
+            "source_tags_outdated",
+            `The source note tags will be recalculated from Linked Notes topics: ${computedTags.join(", ")}.`,
+            "Tags are always overwritten to match the Linked Notes topics.",
+            true,
+            { computed_tags: computedTags, existing_tags: existingTags }
+          )
+        );
+      } else if (existingTags.length === 0) {
+        findings.push(
+          buildFinding(
+            "warning",
+            doc.relativePath,
+            "source_missing_tags",
+            "The source note has no tags and no resolvable topic links in the Linked Notes section.",
+            "Add topic links to the Linked Notes section so tags can be derived automatically."
+          )
+        );
+      }
     }
 
     if (!isKebabCaseName(doc.relativePath)) {
@@ -323,6 +399,33 @@ async function main(): Promise<void> {
     findings
   };
 
+  // ── auto-fix: overwrite tags from Linked Notes topics ────────────────────
+
+  const fixableFindings = findings.filter(
+    (f) => f.auto_fixable && f.issue_type === "source_tags_outdated"
+  );
+  let fixedTagsCount = 0;
+
+  for (const finding of fixableFindings) {
+    const doc = docsByPath.get(finding.path);
+    if (!doc) continue;
+
+    const computedTags = finding.computed_tags as string[];
+    const { frontmatter, body } = splitFrontmatter(doc.raw);
+    frontmatter.tags = computedTags;
+    const fixed = `${stringifyFrontmatter(frontmatter)}${body}`.trimEnd() + "\n";
+
+    await writeTextFile(doc.absolutePath, fixed);
+    fixedTagsCount += 1;
+
+    log.info(
+      { path: finding.path, tags: computedTags },
+      "lint: [auto-fix] tags overwritten from Linked Notes topics"
+    );
+  }
+
+  // ── write report artifacts ────────────────────────────────────────────────
+
   if (args.write) {
     const stamp = nowStamp();
     const reportDir = resolveWithinRoot(vaultRoot, SYSTEM_CONFIG.paths.maintenanceDir);
@@ -335,8 +438,11 @@ async function main(): Promise<void> {
     result.summary_path = `${SYSTEM_CONFIG.paths.maintenanceDir}/${stamp}-lint.md`;
   }
 
-  log.info({ docs: result.stats.docs, findings: result.stats.findings, critical: result.stats.critical }, "lint completed");
-  writeJsonStdout(result, args.pretty);
+  log.info(
+    { docs: result.stats.docs, findings: result.stats.findings, critical: result.stats.critical, fixed_tags: fixedTagsCount },
+    "lint completed"
+  );
+  writeJsonStdout({ ...result, fixed_tags_count: fixedTagsCount }, args.pretty);
 }
 
 main().catch((error) => {
