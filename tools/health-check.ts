@@ -786,12 +786,74 @@ async function applySynonymMerges(
       continue;
     }
 
-    // Build sections payload from duplicate's mergeable sections
+    // Build merged sections — use LLM to deduplicate where both docs have content
     const sections: Record<string, string | string[]> = {};
+    const sectionsWithOverlap: Array<{ name: string; canonical: string; duplicate: string }> = [];
+    const sectionsOnlyInDup: Array<{ name: string; content: string }> = [];
+
     for (const sectionName of synonymMergeableSections) {
-      const sec = dupDoc.sectionMap.get(sectionName.toLowerCase());
-      if (sec?.content.trim()) {
-        sections[sectionName] = sec.content.trim();
+      const canonSec = canonDoc.sectionMap.get(sectionName.toLowerCase())?.content.trim() ?? "";
+      const dupSec = dupDoc.sectionMap.get(sectionName.toLowerCase())?.content.trim() ?? "";
+      if (canonSec && dupSec) {
+        sectionsWithOverlap.push({ name: sectionName, canonical: canonSec, duplicate: dupSec });
+      } else if (dupSec) {
+        sectionsOnlyInDup.push({ name: sectionName, content: dupSec });
+      }
+    }
+
+    // Sections only in duplicate: add directly, nothing to deduplicate
+    for (const { name, content } of sectionsOnlyInDup) {
+      sections[name] = content;
+    }
+
+    // Sections with overlap: one LLM call to deduplicate all of them at once
+    if (sectionsWithOverlap.length > 0) {
+      const sectionBlocks = sectionsWithOverlap
+        .map(
+          ({ name, canonical, duplicate }) =>
+            `### ${name}\n\nCanónico:\n${canonical}\n\nDuplicado:\n${duplicate}`
+        )
+        .join("\n\n---\n\n");
+
+      const mergeMessages = [
+        {
+          role: "system" as const,
+          content:
+            "Eres un editor científico. Tu tarea es fusionar secciones de dos notas de concepto que son sinónimos, eliminando información redundante y conservando todo lo único de cada una. Responde SOLO con JSON válido, sin texto adicional."
+        },
+        {
+          role: "user" as const,
+          content: [
+            `Fusiona las siguientes secciones del concepto canónico "${canonDoc.title}" absorbiendo el duplicado "${dupDoc.title}".`,
+            "Para cada sección, produce un único bloque de texto unificado en markdown, sin repetir hechos.",
+            "",
+            `Responde con: { "sections": { "<NombreSeccion>": "<contenido fusionado>" } }`,
+            "",
+            sectionBlocks
+          ].join("\n")
+        }
+      ];
+
+      try {
+        const mergeResponse = await chatCompletion({ messages: mergeMessages, temperature: 0 });
+        const mergeRaw = extractJson(chatText(mergeResponse, "synonym-section-merge")) as {
+          sections: Record<string, string>;
+        };
+        for (const { name } of sectionsWithOverlap) {
+          const merged = mergeRaw.sections?.[name];
+          if (merged?.trim()) {
+            sections[name] = merged.trim();
+          }
+        }
+      } catch (err) {
+        log.warn(
+          { canonical_path: canonicalPath, duplicate_path: dupPath, err: err instanceof Error ? err.message : String(err) },
+          "health-check: [synonym-merge] LLM section merge failed — falling back to concatenation"
+        );
+        // Fallback: append duplicate content below canonical
+        for (const { name, canonical, duplicate } of sectionsWithOverlap) {
+          sections[name] = `${canonical}\n\n${duplicate}`;
+        }
       }
     }
 
