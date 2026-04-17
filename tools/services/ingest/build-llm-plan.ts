@@ -113,6 +113,8 @@ export function ingestPlanRequest(
           "Before creating a new topic, check wiki_context.supporting_notes for existing topics with overlapping scope. Prefer updating an existing topic over creating a redundant one.",
           "When the source has a clear reusable domain or theme, create or update a topic under wiki/topics/ for that domain.",
           "Topic file names must be broad and reusable in kebab-case Spanish (e.g., productividad.md, inteligencia-artificial.md, gestion-del-conocimiento.md). Never include source titles, years, event names, or overly specific terms in topic filenames.",
+          // ── concepts ──────────────────────────────────────────────────────────
+          "Concept file names and titles must use the singular form of the word (e.g., sistema.md not sistemas.md, modelo-mental.md not modelos-mentales.md). Apply this rule to all wiki/concepts/ paths and their payload.title.",
           // ── linked notes ──────────────────────────────────────────────────────
           "Every created or updated concept, entity, topic, or analysis must include the baseline source note link in its Sources section when the change is grounded in this source.",
           "If any page_action has action create or update (for notes other than the baseline source note), you MUST include an update action on the baseline source note that lists ALL those created/updated notes in the Linked Notes section using their exact [[Title]] links.",
