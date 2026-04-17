@@ -198,7 +198,8 @@ async function applyPageAction({
   }
 
   if (action.action === "create" && existing) {
-    throw new Error(`Refusing to create an already existing file: ${action.path}`);
+    // File already exists — treat as an update (expand existing content)
+    action.action = "update";
   }
 
   if (action.action === "update" && !existing) {
