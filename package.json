@@ -13,6 +13,7 @@
     "init-db": "node dist/tools/init-db.js",
     "ingest-source": "node dist/tools/ingest-source.js",
     "youtube-transcript": "node dist/tools/youtube-transcript.js",
+    "pdf-extract": "node dist/tools/pdf-extract.js",
     "bot-lock": "node dist/tools/bot-lock.js",
     "render-n8n-workflows": "node dist/tools/render-n8n-workflows.js",
     "ingest-run": "node dist/tools/ingest-run.js",
@@ -42,6 +43,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@opendocsg/pdf2md": "^0.2.6",
     "@xenova/transformers": "^2.17.2",
     "pino": "^10.3.1",
     "pino-roll": "^4.0.0"

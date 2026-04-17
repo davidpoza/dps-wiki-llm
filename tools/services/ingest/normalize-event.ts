@@ -47,7 +47,12 @@ export function normalizeRawEvent(
   const telegramChatId =
     telegramChat?.id !== undefined ? String(telegramChat.id) : null;
   const telegramText =
-    typeof telegramMessage?.text === "string" ? telegramMessage.text.trim() : "";
+    (typeof telegramMessage?.text === "string" ? telegramMessage.text.trim() : "") ||
+    (typeof telegramMessage?.caption === "string" ? telegramMessage.caption.trim() : "");
+  const telegramDocument = isRecord(telegramMessage?.document) ? telegramMessage.document : null;
+  const telegramDocumentFileId = typeof telegramDocument?.file_id === "string" ? telegramDocument.file_id.trim() : null;
+  const telegramDocumentFilename = typeof telegramDocument?.file_name === "string" ? telegramDocument.file_name.trim() : null;
+  const telegramDocumentMimeType = typeof telegramDocument?.mime_type === "string" ? telegramDocument.mime_type.trim() : null;
   const allowedTelegramChatId = String(process.env.TELEGRAM_CHAT_ID || "").trim();
 
   log.info(
@@ -110,7 +115,10 @@ export function normalizeRawEvent(
     ),
     telegram_lock_id: input.telegram_lock_id ?? body.telegram_lock_id ?? null,
     youtube_ingest_url: youtubeUrl ?? null,
-    youtube_transcript_result: body.youtube_transcript_result ?? null
+    youtube_transcript_result: body.youtube_transcript_result ?? null,
+    telegram_document_file_id: telegramDocumentFileId ?? null,
+    telegram_document_filename: telegramDocumentFilename ?? null,
+    telegram_document_mime_type: telegramDocumentMimeType ?? null
   };
 
   log.info(
@@ -138,7 +146,7 @@ type EnsureRawEventSuccess = {
 type EnsureRawEventFailure = {
   ok: false;
   rawEvent: IngestRawEvent;
-  failureStatus: "ingest_input_invalid" | "youtube_ingest_failed";
+  failureStatus: "ingest_input_invalid" | "youtube_ingest_failed" | "pdf_ingest_failed";
   reason: string;
   youtubeResult?: Record<string, unknown>;
 };
@@ -163,11 +171,44 @@ export async function ensureRawEvent(
     return { ok: true, rawEvent };
   }
 
+  const documentFileId = stringValue(rawEvent.telegram_document_file_id);
+  const documentMimeType = stringValue(rawEvent.telegram_document_mime_type);
+
+  if (documentFileId && documentMimeType === "application/pdf") {
+    const pdfResult = await runToolJson<Record<string, unknown>>("pdf-extract", {
+      vault,
+      input: {
+        telegram_file_id: documentFileId,
+        filename: stringValue(rawEvent.telegram_document_filename),
+        captured_at: stringValue(rawEvent.captured_at) || new Date().toISOString()
+      }
+    });
+
+    if (pdfResult.status !== "created" || !stringValue(pdfResult.raw_path)) {
+      return {
+        ok: false,
+        rawEvent: { ...rawEvent, pdf_extract_result: pdfResult },
+        failureStatus: "pdf_ingest_failed",
+        reason: stringValue(pdfResult.reason) || "Unable to extract PDF content"
+      };
+    }
+
+    return {
+      ok: true,
+      rawEvent: {
+        ...rawEvent,
+        raw_path: pdfResult.raw_path,
+        captured_at: pdfResult.captured_at ?? rawEvent.captured_at,
+        pdf_extract_result: pdfResult
+      }
+    };
+  }
+
   const url = stringValue(rawEvent.youtube_ingest_url);
 
   if (!url) {
     if (stringValue(rawEvent.telegram_command) === "ingest") {
-      const reason = "Telegram /ingest requires a YouTube URL after the command";
+      const reason = "Telegram /ingest requires a YouTube URL or a PDF attachment";
       log.warn(
         { phase: "ensure-raw-event", telegram_command: rawEvent.telegram_command },
         `ensure-raw-event: ${reason}`

@@ -79,6 +79,9 @@ type IngestRunOutput = TelegramBaseFields & {
   telegram_lock_id: unknown;
   youtube_ingest_url: unknown;
   youtube_transcript_result: unknown;
+  telegram_document_file_id: unknown;
+  telegram_document_filename: unknown;
+  pdf_extract_result: unknown;
   telegram_ingest_message: TelegramMessage | null;
 };
 
@@ -242,6 +245,9 @@ async function main(): Promise<void> {
           ingest_error: ensureResult.reason,
           youtube_ingest_url: ctx.youtube_ingest_url ?? null,
           youtube_transcript_result: ensureResult.youtubeResult ?? null,
+          telegram_document_file_id: ctx.telegram_document_file_id ?? null,
+          telegram_document_filename: ctx.telegram_document_filename ?? null,
+          pdf_extract_result: ctx.pdf_extract_result ?? null,
           telegram_chat_id: ctx.telegram_chat_id ?? null,
           telegram_message_id: ctx.telegram_message_id ?? null,
           telegram_update_id: ctx.telegram_update_id ?? null,
@@ -752,6 +758,9 @@ async function main(): Promise<void> {
       telegram_lock_id: rawEvent.telegram_lock_id ?? null,
       youtube_ingest_url: rawEvent.youtube_ingest_url ?? null,
       youtube_transcript_result: rawEvent.youtube_transcript_result ?? null,
+      telegram_document_file_id: rawEvent.telegram_document_file_id ?? null,
+      telegram_document_filename: rawEvent.telegram_document_filename ?? null,
+      pdf_extract_result: rawEvent.pdf_extract_result ?? null,
       ...notification
     };
 
@@ -818,6 +827,9 @@ async function main(): Promise<void> {
         telegram_lock_acquired: Boolean(ctx.telegram_lock_acquired),
         telegram_lock_id: ctx.telegram_lock_id ?? null,
         youtube_ingest_url: ctx.youtube_ingest_url ?? null,
+        telegram_document_file_id: ctx.telegram_document_file_id ?? null,
+        telegram_document_filename: ctx.telegram_document_filename ?? null,
+        pdf_extract_result: ctx.pdf_extract_result ?? null,
         ...notification
       },
       args.pretty
