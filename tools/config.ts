@@ -143,7 +143,10 @@ export const SYSTEM_CONFIG = {
     requiredSourceFrontmatter: {
       sourceRef: "source_ref",
       capturedAt: "captured_at"
-    }
+    },
+    synonymSlugDistanceThreshold: 0.20,
+    synonymEmbeddingThreshold: 0.93,
+    synonymMergeableSections: ["Facts", "Evidence", "Sources", "Related"] as readonly string[]
   },
   maintenance: {
     severityOrder: {

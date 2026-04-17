@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import fs from "node:fs/promises";
+import path from "node:path";
 import { parseArgs, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
 import {
@@ -11,7 +13,8 @@ import {
   writeTextFile
 } from "./lib/fs-utils.js";
 import { analyzeWikiGraph, loadWikiDocs } from "./lib/wiki-inspect.js";
-import { manifestPath } from "./lib/semantic-index.js";
+import { loadManifest, loadAllEmbeddingUnits, cosineSimilarity, manifestPath } from "./lib/semantic-index.js";
+import { chatCompletion, chatText, extractJson } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { SYSTEM_CONFIG } from "./config.js";
 import { buildHealthCheckNotification } from "./services/notifications/telegram.js";
@@ -48,6 +51,27 @@ interface NewLinkCandidate {
   candidate_path: string;
   candidate_title: string;
   score: number;
+}
+
+interface SynonymCandidate {
+  docA: WikiDoc;
+  docB: WikiDoc;
+  detectionMethod: "string" | "embedding" | "both";
+  similarityScore: number;
+}
+
+interface SynonymVerdict {
+  canonical_path: string;
+  duplicate_path: string;
+  reason: string;
+}
+
+interface SynonymMergeResult {
+  candidates_found: number;
+  confirmed: number;
+  merges_applied: number;
+  merged_pairs: Array<{ canonical: string; deleted: string }>;
+  affected_paths: string[];
 }
 
 /**
@@ -517,6 +541,349 @@ function renderSummary(
   return `${lines.join("\n")}\n`;
 }
 
+// ── Synonym concept detection helpers ─────────────────────────────────────────
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (__, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+async function detectSynonymConcepts(
+  docs: WikiDoc[],
+  vaultRoot: string,
+  hasSemanticIndex: boolean,
+  log: ReturnType<typeof createLogger>
+): Promise<SynonymCandidate[]> {
+  const { synonymSlugDistanceThreshold, synonymEmbeddingThreshold } = SYSTEM_CONFIG.health;
+  const conceptDocs = docs.filter((d) => d.docType === "concept");
+
+  if (conceptDocs.length < 2) return [];
+
+  const map = new Map<string, SynonymCandidate>();
+
+  // String heuristics
+  for (let i = 0; i < conceptDocs.length; i++) {
+    for (let j = i + 1; j < conceptDocs.length; j++) {
+      const docA = conceptDocs[i];
+      const docB = conceptDocs[j];
+      const slugA = path.basename(docA.relativePath, ".md");
+      const slugB = path.basename(docB.relativePath, ".md");
+      const key = [slugA, slugB].sort().join(":::");
+
+      const isPrefix = slugA.startsWith(slugB + "-") || slugB.startsWith(slugA + "-");
+      const stemA = slugA.replace(/e?s$/, "");
+      const stemB = slugB.replace(/e?s$/, "");
+      const isPlural = stemA === stemB;
+      const dist = levenshtein(slugA, slugB);
+      const ratio = dist / Math.max(slugA.length, slugB.length);
+      const isLev = ratio < synonymSlugDistanceThreshold;
+
+      if (isPrefix || isPlural || isLev) {
+        map.set(key, { docA, docB, detectionMethod: "string", similarityScore: 1 - ratio });
+      }
+    }
+  }
+
+  // Embedding heuristics
+  if (hasSemanticIndex) {
+    try {
+      const manifest = await loadManifest(vaultRoot);
+      const allUnits = await loadAllEmbeddingUnits(vaultRoot, manifest);
+      const conceptPaths = new Set(conceptDocs.map((d) => d.relativePath));
+      const conceptUnits = allUnits.filter((u) => {
+        const p = u.id.split("#")[0];
+        return conceptPaths.has(p);
+      });
+
+      for (let i = 0; i < conceptUnits.length; i++) {
+        for (let j = i + 1; j < conceptUnits.length; j++) {
+          const unitA = conceptUnits[i];
+          const unitB = conceptUnits[j];
+          const sim = cosineSimilarity(unitA.embedding, unitB.embedding);
+          if (sim >= synonymEmbeddingThreshold) {
+            const pathA = unitA.id.split("#")[0];
+            const pathB = unitB.id.split("#")[0];
+            const docA = conceptDocs.find((d) => d.relativePath === pathA);
+            const docB = conceptDocs.find((d) => d.relativePath === pathB);
+            if (!docA || !docB) continue;
+            const slugA = path.basename(pathA, ".md");
+            const slugB = path.basename(pathB, ".md");
+            const key = [slugA, slugB].sort().join(":::");
+            const existing = map.get(key);
+            if (existing) {
+              map.set(key, { ...existing, detectionMethod: "both", similarityScore: Math.max(existing.similarityScore, sim) });
+            } else {
+              map.set(key, { docA, docB, detectionMethod: "embedding", similarityScore: sim });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      log.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        "health-check: [synonym-detect] failed to load embedding index — skipping embedding heuristic"
+      );
+    }
+  }
+
+  const candidates = Array.from(map.values());
+  log.info({ candidates: candidates.length }, "health-check: [synonym-detect] string/embedding candidates found");
+  return candidates;
+}
+
+async function confirmSynonymsWithLLM(
+  candidates: SynonymCandidate[],
+  log: ReturnType<typeof createLogger>
+): Promise<SynonymVerdict[]> {
+  if (candidates.length === 0) return [];
+
+  const batchSize = 20;
+  const verdicts: SynonymVerdict[] = [];
+
+  for (let offset = 0; offset < candidates.length; offset += batchSize) {
+    const batch = candidates.slice(offset, offset + batchSize);
+
+    const pairsText = batch
+      .map((c, idx) => {
+        const slugA = path.basename(c.docA.relativePath, ".md");
+        const slugB = path.basename(c.docB.relativePath, ".md");
+        const previewA = c.docA.sectionMap.get("facts")?.content.slice(0, 200) ?? c.docA.sectionMap.get("summary")?.content.slice(0, 200) ?? "";
+        const previewB = c.docB.sectionMap.get("facts")?.content.slice(0, 200) ?? c.docB.sectionMap.get("summary")?.content.slice(0, 200) ?? "";
+        return [
+          `[${idx}]`,
+          `Slug A: "${slugA}"`,
+          `Título A: "${c.docA.title}"`,
+          `Contenido A (preview): "${previewA.trim()}"`,
+          ``,
+          `Slug B: "${slugB}"`,
+          `Título B: "${c.docB.title}"`,
+          `Contenido B (preview): "${previewB.trim()}"`
+        ].join("\n");
+      })
+      .join("\n\n");
+
+    const messages = [
+      {
+        role: "system" as const,
+        content:
+          "Eres un asistente que evalúa si pares de conceptos biomédicos son sinónimos o duplicados. Responde SOLO con JSON válido, sin texto adicional."
+      },
+      {
+        role: "user" as const,
+        content: [
+          "Evalúa los siguientes pares de notas de concepto. Para cada par devuelve si son el mismo",
+          "concepto y cuál es la forma canónica (la más simple/corta/sin siglas).",
+          "",
+          'Responde con un objeto JSON: { "verdicts": [ { "pair_index": number, "is_synonym": boolean, "canonical_slug": string, "reason": string } ] }',
+          "",
+          "Pares:",
+          pairsText
+        ].join("\n")
+      }
+    ];
+
+    try {
+      const response = await chatCompletion({ messages, temperature: 0 });
+      const raw = extractJson(chatText(response, "synonym-confirm")) as {
+        verdicts: Array<{ pair_index: number; is_synonym: boolean; canonical_slug: string; reason: string }>;
+      };
+
+      for (const v of raw.verdicts ?? []) {
+        if (!v.is_synonym) continue;
+        const candidate = batch[v.pair_index];
+        if (!candidate) continue;
+
+        const slugA = path.basename(candidate.docA.relativePath, ".md");
+        const slugB = path.basename(candidate.docB.relativePath, ".md");
+
+        let canonicalDoc: WikiDoc;
+        let duplicateDoc: WikiDoc;
+
+        if (v.canonical_slug === slugA) {
+          canonicalDoc = candidate.docA;
+          duplicateDoc = candidate.docB;
+        } else if (v.canonical_slug === slugB) {
+          canonicalDoc = candidate.docB;
+          duplicateDoc = candidate.docA;
+        } else {
+          log.warn(
+            { canonical_slug: v.canonical_slug, slugA, slugB },
+            "health-check: [synonym-confirm] canonical_slug doesn't match either doc — skipping"
+          );
+          continue;
+        }
+
+        verdicts.push({
+          canonical_path: canonicalDoc.relativePath,
+          duplicate_path: duplicateDoc.relativePath,
+          reason: v.reason
+        });
+      }
+    } catch (err) {
+      log.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        "health-check: [synonym-confirm] LLM call failed — skipping batch"
+      );
+    }
+  }
+
+  return verdicts;
+}
+
+async function applySynonymMerges(
+  verdicts: SynonymVerdict[],
+  docs: WikiDoc[],
+  graph: WikiGraph,
+  vaultRoot: string,
+  log: ReturnType<typeof createLogger>
+): Promise<SynonymMergeResult> {
+  const result: SynonymMergeResult = {
+    candidates_found: 0,
+    confirmed: verdicts.length,
+    merges_applied: 0,
+    merged_pairs: [],
+    affected_paths: []
+  };
+
+  if (verdicts.length === 0) return result;
+
+  const docsByPath = new Map(docs.map((d) => [d.relativePath, d]));
+  const { synonymMergeableSections } = SYSTEM_CONFIG.health;
+
+  // Resolve merge chains: if A→B and B→C, then A→C
+  const canonicalOf = new Map<string, string>();
+  for (const v of verdicts) {
+    canonicalOf.set(v.duplicate_path, v.canonical_path);
+  }
+  function resolveCanonical(p: string): string {
+    const seen = new Set<string>();
+    let cur = p;
+    while (canonicalOf.has(cur) && !seen.has(cur)) {
+      seen.add(cur);
+      cur = canonicalOf.get(cur)!;
+    }
+    return cur;
+  }
+
+  for (const verdict of verdicts) {
+    const canonicalPath = resolveCanonical(verdict.canonical_path);
+    const dupPath = verdict.duplicate_path;
+
+    const canonDoc = docsByPath.get(canonicalPath);
+    const dupDoc = docsByPath.get(dupPath);
+
+    if (!canonDoc || !dupDoc) {
+      log.warn({ canonical_path: canonicalPath, duplicate_path: dupPath }, "health-check: [synonym-merge] doc not found — skipping");
+      continue;
+    }
+
+    // Build sections payload from duplicate's mergeable sections
+    const sections: Record<string, string | string[]> = {};
+    for (const sectionName of synonymMergeableSections) {
+      const sec = dupDoc.sectionMap.get(sectionName.toLowerCase());
+      if (sec?.content.trim()) {
+        sections[sectionName] = sec.content.trim();
+      }
+    }
+
+    // Merge source_ids and source_refs frontmatter arrays
+    const canonSourceIds = Array.isArray(canonDoc.frontmatter.source_ids) ? (canonDoc.frontmatter.source_ids as unknown[]) : [];
+    const dupSourceIds = Array.isArray(dupDoc.frontmatter.source_ids) ? (dupDoc.frontmatter.source_ids as unknown[]) : [];
+    const canonSourceRefs = Array.isArray(canonDoc.frontmatter.source_refs) ? (canonDoc.frontmatter.source_refs as unknown[]) : [];
+    const dupSourceRefs = Array.isArray(dupDoc.frontmatter.source_refs) ? (dupDoc.frontmatter.source_refs as unknown[]) : [];
+
+    const mergedSourceIds = [...new Set([...canonSourceIds, ...dupSourceIds])];
+    const mergedSourceRefs = [...new Set([...canonSourceRefs, ...dupSourceRefs])];
+
+    const frontmatter: Record<string, unknown> = {};
+    if (mergedSourceIds.length > 0) frontmatter.source_ids = mergedSourceIds;
+    if (mergedSourceRefs.length > 0) frontmatter.source_refs = mergedSourceRefs;
+
+    const plan = {
+      plan_id: `synonym-merge-${path.basename(canonicalPath, ".md")}-${Date.now()}`,
+      operation: "health-check",
+      summary: `Synonym merge: absorb ${dupPath} into ${canonicalPath}`,
+      source_refs: [],
+      page_actions: [
+        {
+          path: canonicalPath,
+          action: "update" as const,
+          change_type: "content_merge",
+          payload: {
+            ...(Object.keys(sections).length > 0 ? { sections } : {}),
+            ...(Object.keys(frontmatter).length > 0 ? { frontmatter } : {})
+          }
+        }
+      ],
+      index_updates: [],
+      post_actions: { reindex: false, commit: false }
+    };
+
+    try {
+      await runToolJson("apply-update", { vault: vaultRoot, input: plan });
+      log.info({ canonical_path: canonicalPath, duplicate_path: dupPath }, "health-check: [synonym-merge] content merged");
+    } catch (err) {
+      log.warn(
+        { canonical_path: canonicalPath, duplicate_path: dupPath, err: err instanceof Error ? err.message : String(err) },
+        "health-check: [synonym-merge] apply-update failed — skipping merge"
+      );
+      continue;
+    }
+
+    // Rewrite incoming links that point to the duplicate
+    const dupSlug = path.basename(dupPath, ".md");
+    const canonSlug = path.basename(canonicalPath, ".md");
+
+    for (const doc of docs) {
+      const hasLink = doc.wikiLinks.some((l) => l.normalized === dupSlug);
+      if (!hasLink) continue;
+
+      const fullPath = path.join(vaultRoot, doc.relativePath);
+      try {
+        let content = await fs.readFile(fullPath, "utf-8");
+        // Replace [[dupSlug|...]] and [[dupSlug]]
+        content = content.replace(new RegExp(`\\[\\[${dupSlug}\\|([^\\]]+)\\]\\]`, "g"), `[[${canonSlug}|$1]]`);
+        content = content.replace(new RegExp(`\\[\\[${dupSlug}\\]\\]`, "g"), `[[${canonSlug}]]`);
+        await fs.writeFile(fullPath, content, "utf-8");
+        result.affected_paths.push(doc.relativePath);
+        log.info({ doc: doc.relativePath, from: dupSlug, to: canonSlug }, "health-check: [synonym-merge] link rewritten");
+      } catch (err) {
+        log.warn(
+          { doc: doc.relativePath, err: err instanceof Error ? err.message : String(err) },
+          "health-check: [synonym-merge] failed to rewrite link"
+        );
+      }
+    }
+
+    // Delete the duplicate
+    try {
+      await fs.unlink(path.join(vaultRoot, dupPath));
+      log.info({ duplicate_path: dupPath }, "health-check: [synonym-merge] duplicate deleted");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        log.warn(
+          { duplicate_path: dupPath, err: err instanceof Error ? err.message : String(err) },
+          "health-check: [synonym-merge] failed to delete duplicate"
+        );
+      }
+    }
+
+    result.merges_applied++;
+    result.merged_pairs.push({ canonical: canonicalPath, deleted: dupPath });
+  }
+
+  return result;
+}
+
 async function main(): Promise<void> {
   const args = parseArgs();
   const log = createLogger("health-check");
@@ -712,6 +1079,19 @@ async function main(): Promise<void> {
     };
   }
 
+  // ── synonym concept detection & merge ────────────────────────────────────
+
+  log.info({ phase: "synonym-detect/start" }, "health-check: [synonym-detect] detecting synonym concepts");
+
+  const synonymCandidates = await detectSynonymConcepts(docs, vaultRoot, hasSemanticIndex, log);
+  const synonymVerdicts = await confirmSynonymsWithLLM(synonymCandidates, log);
+  const synonymMergeResult = await applySynonymMerges(synonymVerdicts, docs, graph, vaultRoot, log);
+
+  log.info(
+    { phase: "synonym-detect/done", ...synonymMergeResult },
+    "health-check: [synonym-detect] synonym merge complete"
+  );
+
   // ── discover new links ────────────────────────────────────────────────────
 
   log.info(
@@ -740,7 +1120,10 @@ async function main(): Promise<void> {
     ...(appliedLinkFixes?.updated ?? []),
     ...(appliedLinkFixes?.created ?? []),
     ...(appliedNewLinks?.updated ?? []),
-    ...(appliedNewLinks?.created ?? [])
+    ...(appliedNewLinks?.created ?? []),
+    ...synonymMergeResult.affected_paths,
+    ...synonymMergeResult.merged_pairs.map((p) => p.canonical),
+    ...synonymMergeResult.merged_pairs.map((p) => p.deleted)
   ];
   const uniqueAffected = [...new Set(allAffected)];
 
@@ -753,13 +1136,13 @@ async function main(): Promise<void> {
     const newCount = countApplied(appliedNewLinks);
     const commitInput: CommitInput = {
       operation: "health-check",
-      summary: `Health check: ${fixCount} broken link(s) resolved, ${newCount} new link(s) added`,
+      summary: `Health check: ${fixCount} broken link(s) resolved, ${newCount} new link(s) added, ${synonymMergeResult.merges_applied} synonym merge(s)`,
       source_refs: [],
       affected_notes: uniqueAffected,
       paths_to_stage: [...uniqueAffected, SYSTEM_CONFIG.paths.dbPath],
       feedback_record_ref: null,
       mutation_result_ref: null,
-      commit_message: `health-check: ${fixCount} broken + ${newCount} new link(s) applied`
+      commit_message: `health-check: ${fixCount} broken + ${newCount} new link(s) + ${synonymMergeResult.merges_applied} synonym merge(s) applied`
     };
 
     log.info(
