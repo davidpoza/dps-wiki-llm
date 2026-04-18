@@ -14,14 +14,14 @@ import type { WikiDoc } from "./lib/contracts.js";
 
 /**
  * Re-classify wiki notes by outgoing link count:
- *   - concept with > 3 wikiLinks → move to wiki/topics/
- *   - topic   with ≤ 3 wikiLinks → move to wiki/concepts/
+ *   - concept with > OUTBOUND_THRESHOLD wikiLinks → move to wiki/topics/
+ *   - topic   with ≤ OUTBOUND_THRESHOLD wikiLinks → move to wiki/concepts/
  *
  * Usage:
  *   node dist/tools/reclassify-by-links.js [--vault <path>] [--dry-run] [--compact]
  */
 
-const OUTBOUND_THRESHOLD = 3;
+const OUTBOUND_THRESHOLD = SYSTEM_CONFIG.reclassify.outboundThreshold;
 
 interface MovedEntry {
   from: string;

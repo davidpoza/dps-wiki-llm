@@ -148,6 +148,9 @@ export const SYSTEM_CONFIG = {
     synonymEmbeddingThreshold: 0.93,
     synonymMergeableSections: ["Facts", "Evidence", "Sources", "Related"] as readonly string[]
   },
+  reclassify: {
+    outboundThreshold: 8
+  },
   maintenance: {
     severityOrder: {
       critical: 0,
