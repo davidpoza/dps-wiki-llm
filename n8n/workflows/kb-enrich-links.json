@@ -1,0 +1,287 @@
+{
+  "name": "KB - Enrich Links",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerOn": "folder",
+        "path": "/data/vault/enrich",
+        "events": [
+          "add"
+        ],
+        "options": {
+          "ignored": "**/.gitkeep"
+        }
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Local File Trigger",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [
+        -700,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Watches /data/vault/enrich/** for new .md files. Drop a note in enrich/concepts/, enrich/topics/, enrich/entities/, or enrich/analyses/ to trigger this workflow."
+    },
+    {
+      "parameters": {
+        "jsCode": "const filePath = $input.first().json.path ?? '';\n// filePath is absolute: /data/vault/enrich/concepts/foo.md\n\nconst vaultRoot = '/data/vault';\nconst enrichPrefix = vaultRoot + '/enrich/';\n\nif (!filePath.startsWith(enrichPrefix)) {\n  throw new Error(`Unexpected path outside enrich/: ${filePath}`);\n}\n\nconst relative = filePath.slice(enrichPrefix.length); // e.g. concepts/foo.md\nconst parts = relative.split('/');\n\nif (parts.length < 2) {\n  throw new Error(`File must be inside a subdirectory of enrich/ (e.g. enrich/concepts/foo.md). Got: ${filePath}`);\n}\n\nconst subdir = parts[0]; // concepts\nconst filename = parts.slice(1).join('/'); // foo.md\n\nconst validSubdirs = ['concepts', 'topics', 'entities', 'analyses'];\nif (!validSubdirs.includes(subdir)) {\n  throw new Error(`Unrecognized enrich/ subdirectory '${subdir}'. Valid options: ${validSubdirs.join(', ')}`);\n}\n\nconst wikiDestPath = `${vaultRoot}/wiki/${subdir}/${filename}`;\nconst wikiRelativePath = `wiki/${subdir}/${filename}`;\n\nreturn [{\n  json: {\n    src_path: filePath,\n    wiki_dest_path: wikiDestPath,\n    wiki_relative_path: wikiRelativePath\n  }\n}];"
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Resolve Destination",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -440,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Maps enrich/<type>/foo.md → wiki/<type>/foo.md. Fails with a clear error if the subdirectory is not recognized."
+    },
+    {
+      "parameters": {
+        "command": "={{ \"mkdir -p \" + JSON.stringify($json.wiki_dest_path.split('/').slice(0, -1).join('/')) + \" && cp \" + JSON.stringify($json.src_path) + \" \" + JSON.stringify($json.wiki_dest_path) }}",
+        "executeOnce": true
+      },
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "name": "Copy to Wiki",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -180,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Copies the file to wiki/<type>/. Overwrites if it already exists — the user trusts the version they drop."
+    },
+    {
+      "parameters": {
+        "command": "node /app/dist/tools/reindex.js --vault /data/vault",
+        "executeOnce": true
+      },
+      "id": "d4e5f6a7-b8c9-0123-defa-234567890123",
+      "name": "Run reindex",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        80,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Rebuilds FTS index so the new note is discoverable by enrich-links."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('reindex returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "e5f6a7b8-c9d0-1234-efab-345678901234",
+      "name": "Parse Reindex Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node /app/dist/tools/enrich-links.js --vault /data/vault --compact --paths \" + JSON.stringify($node[\"Resolve Destination\"].json.wiki_relative_path) }}",
+        "executeOnce": true
+      },
+      "id": "f6a7b8c9-d0e1-2345-fabc-456789012345",
+      "name": "Run enrich-links",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        600,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Discovers related wiki notes and upserts the Related section. Never modifies existing content."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('enrich-links returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "a7b8c9d0-e1f2-3456-abcd-567890123456",
+      "name": "Parse Enrich Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const enrichResult = $input.first().json;\nconst wikiRelativePath = $node[\"Resolve Destination\"].json.wiki_relative_path;\n\nconst payload = {\n  operation: 'manual',\n  summary: `enrich-links: ${wikiRelativePath}`,\n  source_refs: [],\n  affected_notes: enrichResult.updated ?? [],\n  paths_to_stage: [\n    wikiRelativePath,\n    ...(enrichResult.updated ?? [])\n  ],\n  feedback_record_ref: null,\n  mutation_result_ref: null,\n  commit_message: `enrich-links: add ${wikiRelativePath}`\n};\n\nreturn [{\n  json: {\n    payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
+      },
+      "id": "b8c9d0e1-f2a3-4567-bcde-678901234567",
+      "name": "Build Commit Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/commit.js --vault /data/vault\" }}",
+        "executeOnce": true
+      },
+      "id": "c9d0e1f2-a3b4-5678-cdef-789012345678",
+      "name": "Run commit",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1380,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) {\n  throw new Error('commit returned empty stdout');\n}\nreturn [{ json: JSON.parse(stdout) }];"
+      },
+      "id": "d0e1f2a3-b4c5-6789-defa-890123456789",
+      "name": "Parse Commit Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ \"rm \" + JSON.stringify($node[\"Resolve Destination\"].json.src_path) }}",
+        "executeOnce": true
+      },
+      "id": "e1f2a3b4-c5d6-7890-efab-901234567890",
+      "name": "Delete Source File",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Deletes only the source file from enrich/. The directory is preserved. Only runs if all previous steps succeeded."
+    }
+  ],
+  "connections": {
+    "Local File Trigger": {
+      "main": [
+        [
+          {
+            "node": "Resolve Destination",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Destination": {
+      "main": [
+        [
+          {
+            "node": "Copy to Wiki",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Copy to Wiki": {
+      "main": [
+        [
+          {
+            "node": "Run reindex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run reindex": {
+      "main": [
+        [
+          {
+            "node": "Parse Reindex Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reindex Result": {
+      "main": [
+        [
+          {
+            "node": "Run enrich-links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run enrich-links": {
+      "main": [
+        [
+          {
+            "node": "Parse Enrich Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Enrich Result": {
+      "main": [
+        [
+          {
+            "node": "Build Commit Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Commit Payload": {
+      "main": [
+        [
+          {
+            "node": "Run commit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run commit": {
+      "main": [
+        [
+          {
+            "node": "Parse Commit Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Commit Result": {
+      "main": [
+        [
+          {
+            "node": "Delete Source File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {}
+}
