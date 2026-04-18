@@ -281,7 +281,9 @@
       ]
     }
   },
-  "settings": {},
+  "settings": {
+    "maxConcurrency": 1
+  },
   "staticData": null,
   "pinData": {}
 }
