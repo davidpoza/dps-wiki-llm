@@ -25,6 +25,7 @@ export const SYSTEM_CONFIG = {
     experimentalWarningText: "SQLite is an experimental feature",
     pragmas: [
       "PRAGMA journal_mode = WAL;",
+      "PRAGMA busy_timeout = 10000;",
       "PRAGMA synchronous = NORMAL;",
       "PRAGMA foreign_keys = ON;",
       "PRAGMA temp_store = MEMORY;"

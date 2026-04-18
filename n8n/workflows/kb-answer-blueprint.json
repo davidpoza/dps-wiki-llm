@@ -99,7 +99,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nif (response.ok === false) {\n  throw new Error('Telegram getUpdates failed: ' + (response.description ?? 'unknown error'));\n}\nconst updates = Array.isArray(response.result) ? response.result : [];\nif (!updates.length) return [];\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst update = updates[0];\nconst message = update.message ?? update.edited_message ?? null;\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : '';\nconst text = (typeof message?.text === 'string' ? message.text.trim() : '') || (typeof message?.caption === 'string' ? message.caption.trim() : '');\nfunction markProcessed() { if (Number.isSafeInteger(Number(update.update_id))) staticData.telegram_last_update_id = Number(update.update_id); }\nfunction telegramCommand(value) { const match = value.match(/^\\/(\\w+)(?:@\\w+)?(?:\\s|$)/); return match ? match[1].toLowerCase() : 'ask'; }\nif (!message || !text) { markProcessed(); return []; }\nif (allowedTelegramChatId && chatId !== allowedTelegramChatId) { markProcessed(); return []; }\nconst command = telegramCommand(text);\nif (!['ask', 'answer', 'query', 'ingest', 'search', 'reindex', 'healthcheck', 'reclassify'].includes(command)) { markProcessed(); return []; }\nreturn [{ json: { body: update, telegram_polled: true, telegram_command: command } }];"
+        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nif (response.ok === false) {\n  throw new Error('Telegram getUpdates failed: ' + (response.description ?? 'unknown error'));\n}\nconst updates = Array.isArray(response.result) ? response.result : [];\nif (!updates.length) return [];\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst update = updates[0];\nconst message = update.message ?? update.edited_message ?? null;\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : '';\nconst text = (typeof message?.text === 'string' ? message.text.trim() : '') || (typeof message?.caption === 'string' ? message.caption.trim() : '');\nfunction markProcessed() { if (Number.isSafeInteger(Number(update.update_id))) staticData.telegram_last_update_id = Number(update.update_id); }\nfunction telegramCommand(value) { const match = value.match(/^\\/(\\w+)(?:@\\w+)?(?:\\s|$)/); return match ? match[1].toLowerCase() : 'ask'; }\nif (!message || !text) { markProcessed(); return []; }\nif (allowedTelegramChatId && chatId !== allowedTelegramChatId) { markProcessed(); return []; }\nconst command = telegramCommand(text);\nif (!['ask', 'answer', 'query', 'ingest', 'search', 'reindex', 'healthcheck', 'reclassify', 'enrich'].includes(command)) { markProcessed(); return []; }\nreturn [{ json: { body: update, telegram_polled: true, telegram_command: command } }];"
       },
       "id": "telegram-prepare-updates",
       "name": "Prepare Telegram Updates",
@@ -911,6 +911,131 @@
         2920,
         900
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.telegram_command }}",
+              "value2": "enrich"
+            }
+          ]
+        }
+      },
+      "id": "telegram-is-enrich",
+      "name": "Is Telegram Enrich Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "command": "node /app/dist/tools/enrich-batch.js --vault /data/vault --compact",
+        "executeOnce": true
+      },
+      "id": "enrich-run",
+      "name": "Run enrich-batch.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        1060
+      ],
+      "notesInFlow": true,
+      "notes": "Scans enrich/{concepts,topics,entities,analyses}/ and processes each .md file sequentially. Failures per file do not abort the batch."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) throw new Error('enrich-batch returned empty stdout');\nconst result = JSON.parse(stdout);\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst chatId = String(env.TELEGRAM_CHAT_ID ?? '').trim();\nconst orig = $node['Parse Bot Lock Result'].json;\nconst msgChatId = chatId || String(orig.body?.message?.chat?.id ?? '');\nconst telegramEnabled = Boolean(token && msgChatId);\nconst processed = Array.isArray(result.processed) ? result.processed : [];\nconst failed = Array.isArray(result.failed) ? result.failed : [];\nconst lines = [`📥 Enrich completado`, `Procesados: ${processed.length} / ${result.total ?? processed.length + failed.length}`];\nfor (const f of processed) lines.push(`✅ ${f.wiki_path}`);\nfor (const f of failed) lines.push(`❌ ${f.src_path.split('/').pop()}: ${f.error.slice(0, 80)}`);\nconst text = lines.join('\\n');\nreturn [{ json: {\n  ...result,\n  telegram_polled: Boolean(orig.telegram_polled),\n  telegram_update_id: orig.body?.update_id ?? null,\n  telegram_lock_id: orig.telegram_lock_id ?? null,\n  telegram_enabled: telegramEnabled,\n  telegram_bot_token: token,\n  telegram_message: telegramEnabled ? { chat_id: msgChatId, text } : null\n} }];"
+      },
+      "id": "enrich-parse-run",
+      "name": "Parse Enrich Batch Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.telegram_enabled) }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "enrich-should-send",
+      "name": "Should Send Telegram Enrich Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.telegram_message) }}",
+        "options": {}
+      },
+      "id": "enrich-send-telegram",
+      "name": "Send Telegram Enrich Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2360,
+        960
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = ($node['Parse Enrich Batch Result'] && $node['Parse Enrich Batch Result'].json) ? $node['Parse Enrich Batch Result'].json : $json;\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nif (data.telegram_polled && Number.isSafeInteger(Number(data.telegram_update_id))) {\n  staticData.telegram_last_update_id = Number(data.telegram_update_id);\n}\nreturn [{ json: data }];"
+      },
+      "id": "enrich-finalize",
+      "name": "Finalize Enrich Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "executeOnce": true
+      },
+      "id": "enrich-release-lock",
+      "name": "Release Bot Lock After Enrich",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2920,
+        1060
+      ]
     }
   ],
   "connections": {
@@ -1086,7 +1211,87 @@
         ],
         [
           {
+            "node": "Is Telegram Enrich Command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Telegram Enrich Command?": {
+      "main": [
+        [
+          {
+            "node": "Run enrich-batch.ts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Build Answer Run Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run enrich-batch.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Enrich Batch Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Enrich Batch Result": {
+      "main": [
+        [
+          {
+            "node": "Should Send Telegram Enrich Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Send Telegram Enrich Log?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Enrich Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Enrich Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Enrich Log": {
+      "main": [
+        [
+          {
+            "node": "Finalize Enrich Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Enrich Response": {
+      "main": [
+        [
+          {
+            "node": "Release Bot Lock After Enrich",
             "type": "main",
             "index": 0
           }
