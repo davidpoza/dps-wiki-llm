@@ -153,16 +153,22 @@ export function parseSections(body: string): ParsedMarkdown {
   const lines = body.split("\n");
   let title = "";
   let index = 0;
+  let titleFound = false;
 
   while (index < lines.length) {
     const trimmed = lines[index].trim();
     if (trimmed.startsWith("# ")) {
       title = trimmed.slice(2).trim();
       index += 1;
+      titleFound = true;
       break;
     }
 
     index += 1;
+  }
+
+  if (!titleFound) {
+    index = 0;
   }
 
   const preamble: string[] = [];
