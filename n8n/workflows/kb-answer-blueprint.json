@@ -99,7 +99,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nif (response.ok === false) {\n  throw new Error('Telegram getUpdates failed: ' + (response.description ?? 'unknown error'));\n}\nconst updates = Array.isArray(response.result) ? response.result : [];\nif (!updates.length) return [];\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst update = updates[0];\nconst message = update.message ?? update.edited_message ?? null;\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : '';\nconst text = (typeof message?.text === 'string' ? message.text.trim() : '') || (typeof message?.caption === 'string' ? message.caption.trim() : '');\nfunction markProcessed() { if (Number.isSafeInteger(Number(update.update_id))) staticData.telegram_last_update_id = Number(update.update_id); }\nfunction telegramCommand(value) { const match = value.match(/^\\/(\\w+)(?:@\\w+)?(?:\\s|$)/); return match ? match[1].toLowerCase() : 'ask'; }\nif (!message || !text) { markProcessed(); return []; }\nif (allowedTelegramChatId && chatId !== allowedTelegramChatId) { markProcessed(); return []; }\nconst command = telegramCommand(text);\nif (!['ask', 'answer', 'query', 'ingest', 'search'].includes(command)) { markProcessed(); return []; }\nreturn [{ json: { body: update, telegram_polled: true, telegram_command: command } }];"
+        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nif (response.ok === false) {\n  throw new Error('Telegram getUpdates failed: ' + (response.description ?? 'unknown error'));\n}\nconst updates = Array.isArray(response.result) ? response.result : [];\nif (!updates.length) return [];\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst update = updates[0];\nconst message = update.message ?? update.edited_message ?? null;\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : '';\nconst text = (typeof message?.text === 'string' ? message.text.trim() : '') || (typeof message?.caption === 'string' ? message.caption.trim() : '');\nfunction markProcessed() { if (Number.isSafeInteger(Number(update.update_id))) staticData.telegram_last_update_id = Number(update.update_id); }\nfunction telegramCommand(value) { const match = value.match(/^\\/(\\w+)(?:@\\w+)?(?:\\s|$)/); return match ? match[1].toLowerCase() : 'ask'; }\nif (!message || !text) { markProcessed(); return []; }\nif (allowedTelegramChatId && chatId !== allowedTelegramChatId) { markProcessed(); return []; }\nconst command = telegramCommand(text);\nif (!['ask', 'answer', 'query', 'ingest', 'search', 'reindex', 'healthcheck', 'reclassify'].includes(command)) { markProcessed(); return []; }\nreturn [{ json: { body: update, telegram_polled: true, telegram_command: command } }];"
       },
       "id": "telegram-prepare-updates",
       "name": "Prepare Telegram Updates",
@@ -536,6 +536,381 @@
         2920,
         420
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.telegram_command }}",
+              "value2": "reindex"
+            }
+          ]
+        }
+      },
+      "id": "telegram-is-reindex",
+      "name": "Is Telegram Reindex Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "command": "node /app/dist/tools/reindex.js --vault /data/vault --compact",
+        "executeOnce": true
+      },
+      "id": "reindex-run",
+      "name": "Run reindex.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        580
+      ],
+      "notesInFlow": true,
+      "notes": "Rebuilds the FTS index from the current wiki markdown state."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) throw new Error('reindex returned empty stdout');\nconst result = JSON.parse(stdout);\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst chatId = String(env.TELEGRAM_CHAT_ID ?? '').trim();\nconst orig = $node['Parse Bot Lock Result'].json;\nconst msgChatId = chatId || String(orig.body?.message?.chat?.id ?? '');\nconst telegramEnabled = Boolean(token && msgChatId);\nconst text = `✅ Reindex completado\\nIndexados: ${result.indexed} docs`;\nreturn [{ json: {\n  ...result,\n  telegram_polled: Boolean(orig.telegram_polled),\n  telegram_update_id: orig.body?.update_id ?? null,\n  telegram_lock_id: orig.telegram_lock_id ?? null,\n  telegram_enabled: telegramEnabled,\n  telegram_bot_token: token,\n  telegram_message: telegramEnabled ? { chat_id: msgChatId, text } : null\n} }];"
+      },
+      "id": "reindex-parse-run",
+      "name": "Parse Reindex Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.telegram_enabled) }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "reindex-should-send",
+      "name": "Should Send Telegram Reindex Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.telegram_message) }}",
+        "options": {}
+      },
+      "id": "reindex-send-telegram",
+      "name": "Send Telegram Reindex Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2360,
+        480
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = ($node['Parse Reindex Result'] && $node['Parse Reindex Result'].json) ? $node['Parse Reindex Result'].json : $json;\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nif (data.telegram_polled && Number.isSafeInteger(Number(data.telegram_update_id))) {\n  staticData.telegram_last_update_id = Number(data.telegram_update_id);\n}\nreturn [{ json: data }];"
+      },
+      "id": "reindex-finalize",
+      "name": "Finalize Reindex Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "executeOnce": true
+      },
+      "id": "reindex-release-lock",
+      "name": "Release Bot Lock After Reindex",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2920,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.telegram_command }}",
+              "value2": "healthcheck"
+            }
+          ]
+        }
+      },
+      "id": "telegram-is-healthcheck",
+      "name": "Is Telegram Healthcheck Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        740
+      ]
+    },
+    {
+      "parameters": {
+        "command": "node /app/dist/tools/health-check.js --vault /data/vault --compact",
+        "executeOnce": true
+      },
+      "id": "healthcheck-run",
+      "name": "Run health-check.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        740
+      ],
+      "notesInFlow": true,
+      "notes": "Runs broken-link resolution, new-link discovery, and synonym merge."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) throw new Error('health-check returned empty stdout');\nconst result = JSON.parse(stdout);\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst chatId = String(env.TELEGRAM_CHAT_ID ?? '').trim();\nconst orig = $node['Parse Bot Lock Result'].json;\nconst msgChatId = chatId || String(orig.body?.message?.chat?.id ?? '');\nconst telegramEnabled = Boolean(token && msgChatId);\nconst text = `🏥 Health Check\\n${result.summary ?? JSON.stringify(result)}`;\nreturn [{ json: {\n  ...result,\n  telegram_polled: Boolean(orig.telegram_polled),\n  telegram_update_id: orig.body?.update_id ?? null,\n  telegram_lock_id: orig.telegram_lock_id ?? null,\n  telegram_enabled: telegramEnabled,\n  telegram_bot_token: token,\n  telegram_message: telegramEnabled ? { chat_id: msgChatId, text } : null\n} }];"
+      },
+      "id": "healthcheck-parse-run",
+      "name": "Parse Healthcheck Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        740
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.telegram_enabled) }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "healthcheck-should-send",
+      "name": "Should Send Telegram Healthcheck Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        740
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.telegram_message) }}",
+        "options": {}
+      },
+      "id": "healthcheck-send-telegram",
+      "name": "Send Telegram Healthcheck Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2360,
+        640
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = ($node['Parse Healthcheck Result'] && $node['Parse Healthcheck Result'].json) ? $node['Parse Healthcheck Result'].json : $json;\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nif (data.telegram_polled && Number.isSafeInteger(Number(data.telegram_update_id))) {\n  staticData.telegram_last_update_id = Number(data.telegram_update_id);\n}\nreturn [{ json: data }];"
+      },
+      "id": "healthcheck-finalize",
+      "name": "Finalize Healthcheck Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        740
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "executeOnce": true
+      },
+      "id": "healthcheck-release-lock",
+      "name": "Release Bot Lock After Healthcheck",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2920,
+        740
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.telegram_command }}",
+              "value2": "reclassify"
+            }
+          ]
+        }
+      },
+      "id": "telegram-is-reclassify",
+      "name": "Is Telegram Reclassify Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "command": "node /app/dist/tools/reclassify-by-links.js --vault /data/vault --compact",
+        "executeOnce": true
+      },
+      "id": "reclassify-run",
+      "name": "Run reclassify-by-links.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        900
+      ],
+      "notesInFlow": true,
+      "notes": "Re-classifies concepts with >3 outbound links as topics, and topics with ≤3 links as concepts."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) throw new Error('reclassify-by-links returned empty stdout');\nconst result = JSON.parse(stdout);\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst chatId = String(env.TELEGRAM_CHAT_ID ?? '').trim();\nconst orig = $node['Parse Bot Lock Result'].json;\nconst msgChatId = chatId || String(orig.body?.message?.chat?.id ?? '');\nconst telegramEnabled = Boolean(token && msgChatId);\nconst moved = Array.isArray(result.moved) ? result.moved.length : 0;\nconst lines = moved > 0\n  ? [`🔀 Reclasificación completada`, `Movidas: ${moved} notas`, ...result.moved.slice(0, 5).map(m => `• ${m.from} → ${m.to} (${m.links} links)`)]\n  : ['🔀 Reclasificación completada', 'Sin cambios necesarios'];\nconst text = lines.join('\\n');\nreturn [{ json: {\n  ...result,\n  telegram_polled: Boolean(orig.telegram_polled),\n  telegram_update_id: orig.body?.update_id ?? null,\n  telegram_lock_id: orig.telegram_lock_id ?? null,\n  telegram_enabled: telegramEnabled,\n  telegram_bot_token: token,\n  telegram_message: telegramEnabled ? { chat_id: msgChatId, text } : null\n} }];"
+      },
+      "id": "reclassify-parse-run",
+      "name": "Parse Reclassify Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.telegram_enabled) }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "reclassify-should-send",
+      "name": "Should Send Telegram Reclassify Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.telegram_message) }}",
+        "options": {}
+      },
+      "id": "reclassify-send-telegram",
+      "name": "Send Telegram Reclassify Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2360,
+        800
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = ($node['Parse Reclassify Result'] && $node['Parse Reclassify Result'].json) ? $node['Parse Reclassify Result'].json : $json;\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nif (data.telegram_polled && Number.isSafeInteger(Number(data.telegram_update_id))) {\n  staticData.telegram_last_update_id = Number(data.telegram_update_id);\n}\nreturn [{ json: data }];"
+      },
+      "id": "reclassify-finalize",
+      "name": "Finalize Reclassify Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "executeOnce": true
+      },
+      "id": "reclassify-release-lock",
+      "name": "Release Bot Lock After Reclassify",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2920,
+        900
+      ]
     }
   ],
   "connections": {
@@ -651,6 +1026,60 @@
         [
           {
             "node": "Build Search Run Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Telegram Reindex Command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Telegram Reindex Command?": {
+      "main": [
+        [
+          {
+            "node": "Run reindex.ts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Telegram Healthcheck Command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Telegram Healthcheck Command?": {
+      "main": [
+        [
+          {
+            "node": "Run health-check.ts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Telegram Reclassify Command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Telegram Reclassify Command?": {
+      "main": [
+        [
+          {
+            "node": "Run reclassify-by-links.ts",
             "type": "main",
             "index": 0
           }
@@ -877,6 +1306,192 @@
         [
           {
             "node": "Release Bot Lock After Ingest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run reindex.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Reindex Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reindex Result": {
+      "main": [
+        [
+          {
+            "node": "Should Send Telegram Reindex Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Send Telegram Reindex Log?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Reindex Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Reindex Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Reindex Log": {
+      "main": [
+        [
+          {
+            "node": "Finalize Reindex Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Reindex Response": {
+      "main": [
+        [
+          {
+            "node": "Release Bot Lock After Reindex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run health-check.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Healthcheck Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Healthcheck Result": {
+      "main": [
+        [
+          {
+            "node": "Should Send Telegram Healthcheck Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Send Telegram Healthcheck Log?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Healthcheck Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Healthcheck Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Healthcheck Log": {
+      "main": [
+        [
+          {
+            "node": "Finalize Healthcheck Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Healthcheck Response": {
+      "main": [
+        [
+          {
+            "node": "Release Bot Lock After Healthcheck",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run reclassify-by-links.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Reclassify Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reclassify Result": {
+      "main": [
+        [
+          {
+            "node": "Should Send Telegram Reclassify Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Send Telegram Reclassify Log?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Reclassify Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Reclassify Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Reclassify Log": {
+      "main": [
+        [
+          {
+            "node": "Finalize Reclassify Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Reclassify Response": {
+      "main": [
+        [
+          {
+            "node": "Release Bot Lock After Reclassify",
             "type": "main",
             "index": 0
           }
