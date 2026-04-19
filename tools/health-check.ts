@@ -435,8 +435,11 @@ async function sanitizeRelatedSections(
     const cleanLinks: string[] = [];
 
     for (const link of allLinks) {
-      // Self-link: skip
+      // Broken link (target does not exist): skip
       const candidates = graph.aliasMap.get(link.normalized) ?? [];
+      if (candidates.length === 0) continue;
+
+      // Self-link: skip
       const isSelf =
         link.normalized === docSlug ||
         candidates.includes(doc.relativePath);
