@@ -21,6 +21,7 @@ import { semanticSearch } from "./lib/semantic-search-fn.js";
 import { ftsSearch } from "./lib/fts-search-fn.js";
 import { SYSTEM_CONFIG } from "./config.js";
 import { buildHealthCheckNotification } from "./services/notifications/telegram.js";
+import { generateRenamePlan } from "./rename-plan.js";
 import type {
   CommitInput,
   MaintenanceFinding,
@@ -1468,6 +1469,36 @@ async function main(): Promise<void> {
     { phase: "duplicate-slug/done", conflicts: [...slugToDocPaths.values()].filter((p) => p.length > 1).length },
     "health-check: [duplicate-slug] done"
   );
+
+  // ── standardize slugs (detect non-English kebab-case filenames) ───────────
+
+  log.info({ phase: "standardize-slugs/start" }, "health-check: [standardize-slugs] detecting non-compliant slugs");
+
+  try {
+    const slugStats = await generateRenamePlan(vaultRoot, log);
+    if (slugStats.new_entries > 0) {
+      log.warn(
+        { phase: "standardize-slugs", new_entries: slugStats.new_entries, total_pending: slugStats.total_pending },
+        "health-check: [standardize-slugs] non-compliant slugs added to rename plan"
+      );
+      findings.push(
+        buildFinding(
+          "warning",
+          "state/maintenance/rename-plan.json",
+          "non_english_slug",
+          `${slugStats.new_entries} non-English or non-kebab-case slug(s) detected (${slugStats.total_pending} total pending renames).`,
+          "Run /renameplan to review and /applyrename to apply the rename plan."
+        )
+      );
+    } else {
+      log.info({ phase: "standardize-slugs/done", total_pending: slugStats.total_pending }, "health-check: [standardize-slugs] no new non-compliant slugs");
+    }
+  } catch (err) {
+    log.warn(
+      { phase: "standardize-slugs", err: err instanceof Error ? err.message : String(err) },
+      "health-check: [standardize-slugs] failed — skipping"
+    );
+  }
 
   // ── synonym concept detection & merge ────────────────────────────────────
 

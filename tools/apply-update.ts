@@ -202,6 +202,16 @@ async function applyPageAction({
     return;
   }
 
+  // Validate slug format: note filenames must be lowercase English kebab-case.
+  if (action.action === "create") {
+    const slug = action.path.split("/").pop()?.replace(/\.md$/, "") ?? "";
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+      throw new Error(
+        `Invalid slug "${slug}" in "${action.path}": note filenames must be lowercase English kebab-case ([a-z0-9] and hyphens only).`
+      );
+    }
+  }
+
   // Redirect slug conflicts: if a create targets a new path but the same slug
   // already exists in another wiki subdirectory, update the existing doc instead.
   if (action.action === "create") {

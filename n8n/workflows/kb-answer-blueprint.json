@@ -1161,6 +1161,252 @@
         2920,
         1220
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.telegram_command }}",
+              "value2": "renameplan"
+            }
+          ]
+        }
+      },
+      "id": "telegram-is-renameplan",
+      "name": "Is Telegram Renameplan Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        1380
+      ]
+    },
+    {
+      "parameters": {
+        "command": "node /app/dist/tools/rename-plan.js --vault /data/vault",
+        "executeOnce": true
+      },
+      "id": "renameplan-run",
+      "name": "Run rename-plan.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        1380
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) throw new Error('rename-plan returned empty stdout');\nconst result = JSON.parse(stdout);\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst chatId = String(env.TELEGRAM_CHAT_ID ?? '').trim();\nconst orig = $node['Parse Bot Lock Result'].json;\nconst msgChatId = chatId || String(orig.body?.message?.chat?.id ?? '');\nconst telegramEnabled = Boolean(token && msgChatId);\nconst newEntries = result.new_entries ?? 0;\nconst totalPending = result.total_pending ?? 0;\nconst lines = ['Rename plan generado', `Nuevas entradas: ${newEntries} | Pendientes totales: ${totalPending}`];\nconst text = lines.join('\\n');\nreturn [{ json: {\n  ...result,\n  telegram_polled: Boolean(orig.telegram_polled),\n  telegram_update_id: orig.body?.update_id ?? null,\n  telegram_lock_id: orig.telegram_lock_id ?? null,\n  telegram_enabled: telegramEnabled,\n  telegram_bot_token: token,\n  telegram_message: telegramEnabled ? { chat_id: msgChatId, text } : null\n} }];"
+      },
+      "id": "renameplan-parse-run",
+      "name": "Parse Renameplan Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        1380
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.telegram_enabled) }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "renameplan-should-send",
+      "name": "Should Send Telegram Renameplan Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        1380
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.telegram_message) }}",
+        "options": {}
+      },
+      "id": "renameplan-send-telegram",
+      "name": "Send Telegram Renameplan Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2360,
+        1280
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = ($node['Parse Renameplan Result'] && $node['Parse Renameplan Result'].json) ? $node['Parse Renameplan Result'].json : $json;\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nif (data.telegram_polled && Number.isSafeInteger(Number(data.telegram_update_id))) {\n  staticData.telegram_last_update_id = Number(data.telegram_update_id);\n}\nreturn [{ json: data }];"
+      },
+      "id": "renameplan-finalize",
+      "name": "Finalize Renameplan Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        1380
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "executeOnce": true
+      },
+      "id": "renameplan-release-lock",
+      "name": "Release Bot Lock After Renameplan",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2920,
+        1380
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.telegram_command }}",
+              "value2": "applyrename"
+            }
+          ]
+        }
+      },
+      "id": "telegram-is-applyrename",
+      "name": "Is Telegram Applyrename Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        1540
+      ]
+    },
+    {
+      "parameters": {
+        "command": "node /app/dist/tools/apply-rename.js --vault /data/vault",
+        "executeOnce": true
+      },
+      "id": "applyrename-run",
+      "name": "Run apply-rename.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        1540
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) throw new Error('apply-rename returned empty stdout');\nconst result = JSON.parse(stdout);\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst chatId = String(env.TELEGRAM_CHAT_ID ?? '').trim();\nconst orig = $node['Parse Bot Lock Result'].json;\nconst msgChatId = chatId || String(orig.body?.message?.chat?.id ?? '');\nconst telegramEnabled = Boolean(token && msgChatId);\nconst renamed = result.renamed ?? 0;\nconst skipped = result.skipped ?? 0;\nconst lines = ['Apply rename completado', `Renombrados: ${renamed} | Omitidos: ${skipped}`];\nconst text = lines.join('\\n');\nreturn [{ json: {\n  ...result,\n  telegram_polled: Boolean(orig.telegram_polled),\n  telegram_update_id: orig.body?.update_id ?? null,\n  telegram_lock_id: orig.telegram_lock_id ?? null,\n  telegram_enabled: telegramEnabled,\n  telegram_bot_token: token,\n  telegram_message: telegramEnabled ? { chat_id: msgChatId, text } : null\n} }];"
+      },
+      "id": "applyrename-parse-run",
+      "name": "Parse Applyrename Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        1540
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.telegram_enabled) }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "applyrename-should-send",
+      "name": "Should Send Telegram Applyrename Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        1540
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.telegram_message) }}",
+        "options": {}
+      },
+      "id": "applyrename-send-telegram",
+      "name": "Send Telegram Applyrename Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2360,
+        1440
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = ($node['Parse Applyrename Result'] && $node['Parse Applyrename Result'].json) ? $node['Parse Applyrename Result'].json : $json;\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nif (data.telegram_polled && Number.isSafeInteger(Number(data.telegram_update_id))) {\n  staticData.telegram_last_update_id = Number(data.telegram_update_id);\n}\nreturn [{ json: data }];"
+      },
+      "id": "applyrename-finalize",
+      "name": "Finalize Applyrename Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        1540
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "executeOnce": true
+      },
+      "id": "applyrename-release-lock",
+      "name": "Release Bot Lock After Applyrename",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2920,
+        1540
+      ]
     }
   ],
   "connections": {
@@ -1839,7 +2085,7 @@
         ],
         [
           {
-            "node": "Build Answer Run Payload",
+            "node": "Is Telegram Renameplan Command?",
             "type": "main",
             "index": 0
           }
@@ -1902,6 +2148,166 @@
         [
           {
             "node": "Release Bot Lock After Embedindex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Telegram Renameplan Command?": {
+      "main": [
+        [
+          {
+            "node": "Run rename-plan.ts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Telegram Applyrename Command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run rename-plan.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Renameplan Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Renameplan Result": {
+      "main": [
+        [
+          {
+            "node": "Should Send Telegram Renameplan Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Send Telegram Renameplan Log?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Renameplan Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Renameplan Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Renameplan Log": {
+      "main": [
+        [
+          {
+            "node": "Finalize Renameplan Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Renameplan Response": {
+      "main": [
+        [
+          {
+            "node": "Release Bot Lock After Renameplan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Telegram Applyrename Command?": {
+      "main": [
+        [
+          {
+            "node": "Run apply-rename.ts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Answer Run Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run apply-rename.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Applyrename Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Applyrename Result": {
+      "main": [
+        [
+          {
+            "node": "Should Send Telegram Applyrename Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Send Telegram Applyrename Log?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Applyrename Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Applyrename Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Applyrename Log": {
+      "main": [
+        [
+          {
+            "node": "Finalize Applyrename Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Applyrename Response": {
+      "main": [
+        [
+          {
+            "node": "Release Bot Lock After Applyrename",
             "type": "main",
             "index": 0
           }
