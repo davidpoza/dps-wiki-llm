@@ -297,15 +297,18 @@ export async function loadAllEmbeddingUnits(
  * Normalisation pipeline (applied in order):
  *   1. Strip YAML frontmatter (`--- ... ---`) — metadata fields like `tags:`
  *      and `date:` add noise without semantic signal.
- *   2. Expand wikilinks — `[[Page|Alias]]` → `"Alias"`, `[[Page]]` → `"Page"`.
+ *   2. Strip navigational sections (`Related`, `Sources`) — link titles in
+ *      these sections bias the embedding toward linked notes, causing wrong
+ *      links to propagate their topics into this note's vector.
+ *   3. Expand wikilinks — `[[Page|Alias]]` → `"Alias"`, `[[Page]]` → `"Page"`.
  *      Keeps the human-readable anchor text so the meaning is preserved.
- *   3. Remove markdown image/link syntax — `[text](url)` → `"text"`,
+ *   4. Remove markdown image/link syntax — `[text](url)` → `"text"`,
  *      `![alt](url)` → `"alt"`.  URLs carry no semantic content.
- *   4. Remove bare URLs (`https?://...`) that may appear outside of markdown
+ *   5. Remove bare URLs (`https?://...`) that may appear outside of markdown
  *      link syntax.
- *   5. Strip heading markers (`##`, `###`, etc.) — the words remain; only the
+ *   6. Strip heading markers (`##`, `###`, etc.) — the words remain; only the
  *      structural punctuation is removed.
- *   6. Collapse all runs of whitespace (spaces, tabs, newlines) to a single
+ *   7. Collapse all runs of whitespace (spaces, tabs, newlines) to a single
  *      space and trim.  This produces a single-line string, which is what most
  *      transformer tokenisers expect when `normalize: true` is set.
  *
@@ -322,6 +325,12 @@ export function normalizeTextForEmbedding(raw: string): string {
 
   // Remove YAML frontmatter (--- ... ---)
   text = text.replace(/^---[\s\S]*?---\n?/, "");
+
+  // Remove navigational/reference sections that carry no knowledge content.
+  // These sections introduce link titles that bias the embedding toward linked
+  // notes — a wrong Related link would propagate its topics into this note's
+  // vector, causing further false positives in semantic search.
+  text = text.replace(/^##+ *(Related|Sources?|Fuentes?)\s*\n([\s\S]*?)(?=^##+ |\s*$)/gim, "");
 
   // Convert [[wikilink|alias]] and [[wikilink]] to plain text
   text = text.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => alias ?? target);

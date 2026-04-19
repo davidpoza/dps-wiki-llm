@@ -99,7 +99,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nif (response.ok === false) {\n  throw new Error('Telegram getUpdates failed: ' + (response.description ?? 'unknown error'));\n}\nconst updates = Array.isArray(response.result) ? response.result : [];\nif (!updates.length) return [];\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst update = updates[0];\nconst message = update.message ?? update.edited_message ?? null;\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : '';\nconst text = (typeof message?.text === 'string' ? message.text.trim() : '') || (typeof message?.caption === 'string' ? message.caption.trim() : '');\nfunction markProcessed() { if (Number.isSafeInteger(Number(update.update_id))) staticData.telegram_last_update_id = Number(update.update_id); }\nfunction telegramCommand(value) { const match = value.match(/^\\/(\\w+)(?:@\\w+)?(?:\\s|$)/); return match ? match[1].toLowerCase() : 'ask'; }\nif (!message || !text) { markProcessed(); return []; }\nif (allowedTelegramChatId && chatId !== allowedTelegramChatId) { markProcessed(); return []; }\nconst command = telegramCommand(text);\nif (!['ask', 'answer', 'query', 'ingest', 'search', 'reindex', 'healthcheck', 'reclassify', 'enrich'].includes(command)) { markProcessed(); return []; }\nreturn [{ json: { body: update, telegram_polled: true, telegram_command: command } }];"
+        "jsCode": "const raw = $input.first().json;\nconst response = raw.body ?? raw;\nif (response.ok === false) {\n  throw new Error('Telegram getUpdates failed: ' + (response.description ?? 'unknown error'));\n}\nconst updates = Array.isArray(response.result) ? response.result : [];\nif (!updates.length) return [];\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst allowedTelegramChatId = String(env.TELEGRAM_CHAT_ID || '').trim();\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nconst update = updates[0];\nconst message = update.message ?? update.edited_message ?? null;\nconst chatId = message?.chat?.id !== undefined ? String(message.chat.id) : '';\nconst text = (typeof message?.text === 'string' ? message.text.trim() : '') || (typeof message?.caption === 'string' ? message.caption.trim() : '');\nfunction markProcessed() { if (Number.isSafeInteger(Number(update.update_id))) staticData.telegram_last_update_id = Number(update.update_id); }\nfunction telegramCommand(value) { const match = value.match(/^\\/(\\w+)(?:@\\w+)?(?:\\s|$)/); return match ? match[1].toLowerCase() : 'ask'; }\nif (!message || !text) { markProcessed(); return []; }\nif (allowedTelegramChatId && chatId !== allowedTelegramChatId) { markProcessed(); return []; }\nconst command = telegramCommand(text);\nif (!['ask', 'answer', 'query', 'ingest', 'search', 'reindex', 'healthcheck', 'reclassify', 'enrich', 'embedindex'].includes(command)) { markProcessed(); return []; }\nreturn [{ json: { body: update, telegram_polled: true, telegram_command: command } }];"
       },
       "id": "telegram-prepare-updates",
       "name": "Prepare Telegram Updates",
@@ -1036,6 +1036,131 @@
         2920,
         1060
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.telegram_command }}",
+              "value2": "embedindex"
+            }
+          ]
+        }
+      },
+      "id": "telegram-is-embedindex",
+      "name": "Is Telegram Embedindex Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        1220
+      ]
+    },
+    {
+      "parameters": {
+        "command": "node /app/dist/tools/embed-index.js --vault /data/vault",
+        "executeOnce": true
+      },
+      "id": "embedindex-run",
+      "name": "Run embed-index.ts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        1220
+      ],
+      "notesInFlow": true,
+      "notes": "Incremental embed-index: only re-embeds docs whose content changed since last run."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) throw new Error('embed-index returned empty stdout');\nconst result = JSON.parse(stdout);\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst chatId = String(env.TELEGRAM_CHAT_ID ?? '').trim();\nconst orig = $node['Parse Bot Lock Result'].json;\nconst msgChatId = chatId || String(orig.body?.message?.chat?.id ?? '');\nconst telegramEnabled = Boolean(token && msgChatId);\nconst embedded = result.embedded ?? 0;\nconst skipped = result.skipped ?? 0;\nconst pruned = result.pruned ?? 0;\nconst lines = ['\\ud83e\\udde0 Embed index actualizado', `Embebidos: ${embedded} | Omitidos: ${skipped} | Purgados: ${pruned}`];\nconst text = lines.join('\\n');\nreturn [{ json: {\n  ...result,\n  telegram_polled: Boolean(orig.telegram_polled),\n  telegram_update_id: orig.body?.update_id ?? null,\n  telegram_lock_id: orig.telegram_lock_id ?? null,\n  telegram_enabled: telegramEnabled,\n  telegram_bot_token: token,\n  telegram_message: telegramEnabled ? { chat_id: msgChatId, text } : null\n} }];"
+      },
+      "id": "embedindex-parse-run",
+      "name": "Parse Embedindex Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        1220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ String($json.telegram_enabled) }}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "embedindex-should-send",
+      "name": "Should Send Telegram Embedindex Log?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        1220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $json.telegram_bot_token + '/sendMessage' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.telegram_message) }}",
+        "options": {}
+      },
+      "id": "embedindex-send-telegram",
+      "name": "Send Telegram Embedindex Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2360,
+        1120
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = ($node['Parse Embedindex Result'] && $node['Parse Embedindex Result'].json) ? $node['Parse Embedindex Result'].json : $json;\nconst staticData = typeof $getWorkflowStaticData === 'function' ? $getWorkflowStaticData('global') : {};\nif (data.telegram_polled && Number.isSafeInteger(Number(data.telegram_update_id))) {\n  staticData.telegram_last_update_id = Number(data.telegram_update_id);\n}\nreturn [{ json: data }];"
+      },
+      "id": "embedindex-finalize",
+      "name": "Finalize Embedindex Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        1220
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "executeOnce": true
+      },
+      "id": "embedindex-release-lock",
+      "name": "Release Bot Lock After Embedindex",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2920,
+        1220
+      ]
     }
   ],
   "connections": {
@@ -1229,7 +1354,7 @@
         ],
         [
           {
-            "node": "Build Answer Run Payload",
+            "node": "Is Telegram Embedindex Command?",
             "type": "main",
             "index": 0
           }
@@ -1697,6 +1822,86 @@
         [
           {
             "node": "Release Bot Lock After Reclassify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Telegram Embedindex Command?": {
+      "main": [
+        [
+          {
+            "node": "Run embed-index.ts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Answer Run Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run embed-index.ts": {
+      "main": [
+        [
+          {
+            "node": "Parse Embedindex Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Embedindex Result": {
+      "main": [
+        [
+          {
+            "node": "Should Send Telegram Embedindex Log?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Send Telegram Embedindex Log?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Embedindex Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Embedindex Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Embedindex Log": {
+      "main": [
+        [
+          {
+            "node": "Finalize Embedindex Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Embedindex Response": {
+      "main": [
+        [
+          {
+            "node": "Release Bot Lock After Embedindex",
             "type": "main",
             "index": 0
           }
