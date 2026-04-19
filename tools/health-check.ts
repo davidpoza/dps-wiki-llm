@@ -520,6 +520,14 @@ async function discoverNewLinks(
   for (const doc of typedDocs) {
     const resolvedPaths = new Set(graph.resolvedLinks.get(doc.relativePath) ?? []);
 
+    // Also track normalized slugs of ALL links in Related (resolved or broken).
+    // upsertSection deduplicates by text, so a broken link already in the section
+    // would produce no content change — the mutation would be skipped.
+    const relatedSection = doc.sectionMap.get("Related") ?? doc.sectionMap.get("related");
+    const existingRelatedSlugs = new Set<string>(
+      relatedSection ? extractWikiLinks(relatedSection.content).map((l) => l.normalized) : []
+    );
+
     let searchResult: SearchResult;
     try {
       searchResult = await searchFn(doc.title, 5);
@@ -559,6 +567,9 @@ async function discoverNewLinks(
         if (resolvedPaths.has(r.path)) return false;
         if (excludedPaths.has(r.path)) return false;
         if (applyScoreFilter && r.score < minCosine) return false;
+        // Exclude if a link to this target already exists in Related (even as broken)
+        const candidateSlug = r.path.split("/").pop()?.replace(/\.md$/, "") ?? "";
+        if (existingRelatedSlugs.has(candidateSlug)) return false;
         return true;
       })
       .slice(0, 3);
@@ -1452,6 +1463,7 @@ async function main(): Promise<void> {
     .map((f) => ({ path: f.path, issue_type: f.issue_type }));
 
   const appliedFixCount = countApplied(appliedLinkFixes);
+  const appliedPruningCount = countApplied(appliedPruning);
   const appliedNewCount = countApplied(appliedNewLinks);
 
   const telegramFields = buildHealthCheckNotification({
@@ -1460,6 +1472,7 @@ async function main(): Promise<void> {
     missing_pages: missingPages.length,
     link_resolutions: linkResolutions.length,
     applied_fixes: appliedFixCount,
+    pruned_links: appliedPruningCount,
     discovered_links: discoveredLinks.length,
     applied_new_links: appliedNewCount,
     top_critical_findings: topCritical,

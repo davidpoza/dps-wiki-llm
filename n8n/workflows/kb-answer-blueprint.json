@@ -700,7 +700,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) throw new Error('health-check returned empty stdout');\nconst result = JSON.parse(stdout);\nconst env = typeof $env !== 'undefined' ? $env : (globalThis.process?.env ?? {});\nconst token = String(env.TELEGRAM_BOT_TOKEN ?? '').trim();\nconst chatId = String(env.TELEGRAM_CHAT_ID ?? '').trim();\nconst orig = $node['Parse Bot Lock Result'].json;\nconst msgChatId = chatId || String(orig.body?.message?.chat?.id ?? '');\nconst telegramEnabled = Boolean(token && msgChatId);\nconst text = `🏥 Health Check\\n${result.summary ?? JSON.stringify(result)}`;\nreturn [{ json: {\n  ...result,\n  telegram_polled: Boolean(orig.telegram_polled),\n  telegram_update_id: orig.body?.update_id ?? null,\n  telegram_lock_id: orig.telegram_lock_id ?? null,\n  telegram_enabled: telegramEnabled,\n  telegram_bot_token: token,\n  telegram_message: telegramEnabled ? { chat_id: msgChatId, text } : null\n} }];"
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) throw new Error('health-check returned empty stdout');\nconst result = JSON.parse(stdout);\nconst orig = $node['Parse Bot Lock Result'].json;\nreturn [{ json: {\n  ...result,\n  telegram_polled: Boolean(orig.telegram_polled),\n  telegram_update_id: orig.body?.update_id ?? null,\n  telegram_lock_id: orig.telegram_lock_id ?? null\n} }];"
       },
       "id": "healthcheck-parse-run",
       "name": "Parse Healthcheck Result",
