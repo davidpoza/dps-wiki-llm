@@ -1319,6 +1319,12 @@ async function main(): Promise<void> {
     "health-check: [synonym-detect] synonym merge complete"
   );
 
+  // Reload after synonym merges — deleted files must not appear as link sources
+  if (synonymMergeResult.merged_pairs.length > 0) {
+    docs = await loadWikiDocs(vaultRoot);
+    graph = analyzeWikiGraph(docs);
+  }
+
   // ── discover new links ────────────────────────────────────────────────────
 
   log.info(
