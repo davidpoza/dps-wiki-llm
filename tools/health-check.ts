@@ -404,6 +404,99 @@ async function applyLinkPruning(
 }
 
 /**
+ * Sanitize Related sections across all typed docs: expand multi-link inline
+ * bullets, remove self-links, and deduplicate by slug. Does not require the
+ * semantic index. Returns docs that were actually modified.
+ */
+async function sanitizeRelatedSections(
+  docs: WikiDoc[],
+  graph: WikiGraph,
+  vaultRoot: string,
+  log: ReturnType<typeof createLogger>
+): Promise<string[]> {
+  const typedDocTypes = new Set([...SYSTEM_CONFIG.wiki.typedDocTypes, "source"]);
+  const pageActions: MutationPlan["page_actions"] = [];
+
+  for (const doc of docs) {
+    if (!typedDocTypes.has(doc.docType)) continue;
+
+    const relatedSection =
+      doc.sectionMap.get("Related") ?? doc.sectionMap.get("related") ?? null;
+    if (!relatedSection) continue;
+
+    // Extract all individual wikilinks (handles multi-link inline bullets)
+    const allLinks = extractWikiLinks(relatedSection.content);
+    if (allLinks.length === 0) continue;
+
+    // Resolve doc's own slug for self-link detection
+    const docSlug = doc.relativePath.split("/").pop()?.replace(/\.md$/, "") ?? "";
+
+    const seen = new Set<string>();
+    const cleanLinks: string[] = [];
+
+    for (const link of allLinks) {
+      // Self-link: skip
+      const candidates = graph.aliasMap.get(link.normalized) ?? [];
+      const isSelf =
+        link.normalized === docSlug ||
+        candidates.includes(doc.relativePath);
+      if (isSelf) continue;
+
+      // Deduplicate by normalized slug
+      if (seen.has(link.normalized)) continue;
+      seen.add(link.normalized);
+
+      cleanLinks.push(`[[${link.raw}]]`);
+    }
+
+    // Check if anything actually changed
+    const currentRaw = allLinks.map((l) => `[[${l.raw}]]`);
+    const changed =
+      currentRaw.length !== cleanLinks.length ||
+      currentRaw.some((l, i) => l !== cleanLinks[i]);
+
+    if (!changed) continue;
+
+    log.info(
+      {
+        phase: "sanitize-related",
+        path: doc.relativePath,
+        before: currentRaw.length,
+        after: cleanLinks.length
+      },
+      "health-check: [sanitize-related] rebuilding Related section"
+    );
+
+    // sections_remove clears all existing links; sections re-adds the clean list.
+    // (sections_remove runs before sections in applyMarkdownPayload)
+    pageActions.push({
+      path: doc.relativePath,
+      action: "update",
+      change_type: "link_pruning",
+      payload: {
+        sections_remove: { Related: currentRaw },
+        sections: cleanLinks.length > 0 ? { Related: cleanLinks } : {}
+      }
+    });
+  }
+
+  if (pageActions.length === 0) return [];
+
+  const plan: MutationPlan = {
+    plan_id: `health-check-sanitize-${new Date().toISOString().slice(0, 10)}`,
+    operation: "manual",
+    summary: `health-check: sanitizing Related sections in ${pageActions.length} doc(s)`,
+    source_refs: [],
+    page_actions: pageActions,
+    index_updates: [],
+    post_actions: { reindex: false, commit: false }
+  };
+
+  const result = await runToolJson<MutationResult>("apply-update", { vault: vaultRoot, input: plan });
+  return result.updated;
+}
+
+/**
  * Apply a set of link additions (grouped by source_path) to the Related section of each doc.
  */
 async function applyLinks(
@@ -1263,6 +1356,18 @@ async function main(): Promise<void> {
     },
     "health-check: [check-docs] per-doc checks completed"
   );
+
+  // ── sanitize Related sections (structural cleanup, no embeddings needed) ───
+
+  log.info({ phase: "sanitize-related/start" }, "health-check: [sanitize-related] starting structural cleanup");
+
+  const sanitized = await sanitizeRelatedSections(docs, graph, vaultRoot, log);
+
+  if (sanitized.length > 0) {
+    log.info({ phase: "sanitize-related/done", docs_affected: sanitized.length }, "health-check: [sanitize-related] done, reloading");
+    docs = await loadWikiDocs(vaultRoot);
+    graph = analyzeWikiGraph(docs);
+  }
 
   // ── prune weak Related links ───────────────────────────────────────────────
 

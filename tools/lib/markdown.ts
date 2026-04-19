@@ -319,12 +319,23 @@ function removeSectionItems(sectionEntries: MarkdownSection[], sectionName: stri
   const existing = sectionEntries.find((e) => e.name.toLowerCase() === sectionName.toLowerCase());
   if (!existing) return;
 
+  // Build a set of individual slugs to remove (slug-level, not full-string).
+  const slugsToRemove = new Set(itemsToRemove.flatMap((item) => extractWikilinkSlugs(item)));
+  // Also keep the full normalizeItem keys for non-wikilink items.
   const normalizedToRemove = new Set(itemsToRemove.map(normalizeItem));
+
   const lines = existing.content.split("\n");
   existing.content = lines
     .filter((line) => {
       if (!line.trimStart().startsWith("- ")) return true;
-      return !normalizedToRemove.has(normalizeItem(line.trim()));
+      const trimmed = line.trim();
+      // Full-line match (handles non-wikilink bullets and single-link bullets).
+      if (normalizedToRemove.has(normalizeItem(trimmed))) return false;
+      // Per-slug match: remove any bullet whose slugs are ALL in the remove set
+      // (handles multi-link inline bullets like "- [[a]], [[b]]").
+      const slugs = extractWikilinkSlugs(trimmed);
+      if (slugs.length > 0 && slugs.every((s) => slugsToRemove.has(s))) return false;
+      return true;
     })
     .join("\n");
 }
@@ -362,12 +373,12 @@ export function renderMarkdown(
     mergedFrontmatter.change_reason = payload.change_reason;
   }
 
-  for (const [sectionName, items] of Object.entries(payload.sections || {})) {
-    upsertSection(sections, sectionName, items);
-  }
-
   for (const [sectionName, items] of Object.entries(payload.sections_remove || {})) {
     removeSectionItems(sections, sectionName, items);
+  }
+
+  for (const [sectionName, items] of Object.entries(payload.sections || {})) {
+    upsertSection(sections, sectionName, items);
   }
 
   if (Array.isArray(payload.related_links) && payload.related_links.length > 0) {
