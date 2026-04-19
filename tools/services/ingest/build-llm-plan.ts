@@ -103,8 +103,9 @@ export function ingestPlanRequest(
           "wiki_context may include the newly created baseline source note and other existing wiki sources, concepts, topics, and entities.",
           // ── path rules ────────────────────────────────────────────────────────
           "Every page_actions[].path must start exactly with one of: wiki/concepts/, wiki/entities/, wiki/topics/, or wiki/analyses/, except for one narrow update to the exact baseline source note path provided by source_note_update_allowed_path.",
-          "Never write directly under wiki/, for example use wiki/concepts/servidor-lean.md instead of wiki/servidor-lean.md.",
+          "Never write directly under wiki/, for example use wiki/concepts/lean-server.md instead of wiki/servidor-lean.md.",
           "Only propose small grounded changes under those allowed page path prefixes.",
+          "Note filenames (slugs) must always be in English, in kebab-case (e.g., lipopolysaccharide.md, immune-system.md, gut-microbiota.md). Never use Spanish or other languages for filenames, even when the note content is in Spanish.",
           "Before proposing a create action, check wiki_context.supporting_notes for any note whose path ends with the same filename (slug) you intend to use, regardless of subdirectory. If one exists (e.g. wiki/concepts/foo.md already exists and you want wiki/topics/foo.md), propose an update to the existing note instead of creating a duplicate slug.",
           // ── link format and integrity ─────────────────────────────────────────
           "All internal wiki links must use the format [[kebab-case-filename|Nombre legible]], where kebab-case-filename is the last path segment of the target file without the .md extension (e.g. [[servidor-lean|Lean Server]], [[gestion-del-conocimiento|Gestión del Conocimiento]]).",
@@ -113,9 +114,9 @@ export function ingestPlanRequest(
           // ── topics ────────────────────────────────────────────────────────────
           "Before creating a new topic, check wiki_context.supporting_notes for existing topics with overlapping scope. Prefer updating an existing topic over creating a redundant one.",
           "When the source has a clear reusable domain or theme, create or update a topic under wiki/topics/ for that domain.",
-          "Topic file names must be broad and reusable in kebab-case Spanish (e.g., productividad.md, inteligencia-artificial.md, gestion-del-conocimiento.md). Never include source titles, years, event names, or overly specific terms in topic filenames.",
+          "Topic file names must be broad and reusable in English kebab-case (e.g., productivity.md, artificial-intelligence.md, knowledge-management.md). Never include source titles, years, event names, or overly specific terms in topic filenames.",
           // ── concepts ──────────────────────────────────────────────────────────
-          "Concept file names and titles must use the singular form of the word (e.g., sistema.md not sistemas.md, modelo-mental.md not modelos-mentales.md). Apply this rule to all wiki/concepts/ paths and their payload.title.",
+          "Concept file names must use the singular English form in kebab-case (e.g., system.md not systems.md, mental-model.md not mental-models.md). Apply this rule to all wiki/concepts/ paths. The payload.title may be in Spanish.",
           // ── linked notes ──────────────────────────────────────────────────────
           "Every created or updated concept, entity, topic, or analysis must include the baseline source note link in its Sources section when the change is grounded in this source.",
           "If any page_action has action create or update (for notes other than the baseline source note), you MUST include an update action on the baseline source note that lists ALL those created/updated notes in the Linked Notes section using their exact [[Title]] links.",
