@@ -40,6 +40,8 @@ export interface MarkdownPayload {
   title?: string;
   frontmatter?: Record<string, unknown>;
   sections?: Record<string, string[] | string | unknown>;
+  /** Remove specific bullet items from sections (matched after normalization). */
+  sections_remove?: Record<string, string[]>;
   related_links?: string[];
   change_reason?: string;
 }

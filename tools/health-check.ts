@@ -12,7 +12,7 @@ import {
   writeJsonFile,
   writeTextFile
 } from "./lib/fs-utils.js";
-import { analyzeWikiGraph, loadWikiDocs } from "./lib/wiki-inspect.js";
+import { analyzeWikiGraph, loadWikiDocs, extractWikiLinks } from "./lib/wiki-inspect.js";
 import { loadManifest, loadAllEmbeddingUnits, cosineSimilarity, manifestPath } from "./lib/semantic-index.js";
 import { chatCompletion, chatText, extractJson } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
@@ -291,6 +291,109 @@ async function resolveBrokenLinks(
   );
 
   return resolutions;
+}
+
+/**
+ * For each typed doc, find Related links whose cosine similarity to the source
+ * doc is below `minCosineSimilarity` and return them grouped for removal.
+ * Requires the semantic index to be present — skips silently if not.
+ */
+async function pruneWeakRelatedLinks(
+  docs: WikiDoc[],
+  graph: WikiGraph,
+  vaultRoot: string,
+  log: ReturnType<typeof createLogger>
+): Promise<Array<{ path: string; links_to_remove: string[] }>> {
+  const manifest = await loadManifest(vaultRoot).catch(() => null);
+  if (!manifest) return [];
+
+  const units = await loadAllEmbeddingUnits(vaultRoot, manifest);
+  const embeddingMap = new Map<string, number[]>(units.map((u) => [u.path, u.embedding]));
+
+  const minCosine = SYSTEM_CONFIG.enrich.minCosineSimilarity;
+  const typedDocTypes = new Set([...SYSTEM_CONFIG.wiki.typedDocTypes, "source"]);
+  const results: Array<{ path: string; links_to_remove: string[] }> = [];
+
+  for (const doc of docs) {
+    if (!typedDocTypes.has(doc.docType)) continue;
+
+    const sourceEmbedding = embeddingMap.get(doc.relativePath);
+    if (!sourceEmbedding) continue;
+
+    const relatedSection =
+      doc.sectionMap.get("Related") ?? doc.sectionMap.get("related") ?? null;
+    if (!relatedSection) continue;
+
+    const relatedLinks = extractWikiLinks(relatedSection.content);
+    const linksToRemove: string[] = [];
+
+    for (const link of relatedLinks) {
+      const candidates = graph.aliasMap.get(link.normalized) ?? [];
+      if (candidates.length !== 1) continue;
+      const targetPath = candidates[0];
+
+      const targetEmbedding = embeddingMap.get(targetPath);
+      if (!targetEmbedding) continue;
+
+      const similarity = cosineSimilarity(sourceEmbedding, targetEmbedding);
+
+      log.info(
+        {
+          phase: "prune-related/score",
+          source: doc.relativePath,
+          target: targetPath,
+          score: similarity,
+          threshold: minCosine,
+          will_prune: similarity < minCosine
+        },
+        "health-check: [prune-related] link score"
+      );
+
+      if (similarity < minCosine) {
+        linksToRemove.push(`[[${link.raw}]]`);
+      }
+    }
+
+    if (linksToRemove.length > 0) {
+      log.info(
+        { phase: "prune-related/result", path: doc.relativePath, removing: linksToRemove.length },
+        "health-check: [prune-related] weak links to remove"
+      );
+      results.push({ path: doc.relativePath, links_to_remove: linksToRemove });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Apply link pruning: remove weak Related links from each affected doc.
+ */
+async function applyLinkPruning(
+  pruneList: Array<{ path: string; links_to_remove: string[] }>,
+  vaultRoot: string,
+  log: ReturnType<typeof createLogger>
+): Promise<MutationResult> {
+  const pageActions: MutationPlan["page_actions"] = pruneList.map(({ path: docPath, links_to_remove }) => ({
+    path: docPath,
+    action: "update",
+    change_type: "link_pruning",
+    payload: { sections_remove: { Related: links_to_remove } }
+  }));
+
+  const plan: MutationPlan = {
+    plan_id: `health-check-prune-${new Date().toISOString().slice(0, 10)}`,
+    operation: "manual",
+    summary: `health-check: pruning weak Related links in ${pageActions.length} doc(s)`,
+    source_refs: [],
+    page_actions: pageActions,
+    index_updates: [],
+    post_actions: { reindex: false, commit: false }
+  };
+
+  log.info({ phase: "prune-related/apply", page_actions: pageActions.length }, "health-check: [prune-related] applying pruning mutations");
+
+  return runToolJson<MutationResult>("apply-update", { vault: vaultRoot, input: plan });
 }
 
 /**
@@ -980,8 +1083,8 @@ async function main(): Promise<void> {
 
   log.info({ phase: "startup", vault_root: vaultRoot }, "health-check: started");
 
-  const docs = await loadWikiDocs(vaultRoot);
-  const graph = analyzeWikiGraph(docs);
+  let docs = await loadWikiDocs(vaultRoot);
+  let graph = analyzeWikiGraph(docs);
   const docsByPath = new Map(docs.map((doc) => [doc.relativePath, doc]));
 
   const totalBrokenLinks = Array.from(graph.brokenLinks.values()).reduce((sum, arr) => sum + arr.length, 0);
@@ -1143,6 +1246,32 @@ async function main(): Promise<void> {
     "health-check: [check-docs] per-doc checks completed"
   );
 
+  // ── prune weak Related links ───────────────────────────────────────────────
+
+  log.info({ phase: "prune-related/start" }, "health-check: [prune-related] starting weak link pruning");
+
+  const weakLinks = await pruneWeakRelatedLinks(docs, graph, vaultRoot, log);
+
+  let appliedPruning: Pick<MutationResult, "created" | "updated" | "skipped"> | null = null;
+
+  if (weakLinks.length > 0) {
+    const pruneResult = await applyLinkPruning(weakLinks, vaultRoot, log);
+    appliedPruning = {
+      created: pruneResult.created,
+      updated: pruneResult.updated,
+      skipped: pruneResult.skipped
+    };
+    // Reload docs and graph so subsequent phases see the pruned state
+    const updatedDocs = await loadWikiDocs(vaultRoot);
+    docs = updatedDocs;
+    graph = analyzeWikiGraph(docs);
+  }
+
+  log.info(
+    { phase: "prune-related/done", docs_affected: weakLinks.length },
+    "health-check: [prune-related] weak link pruning complete"
+  );
+
   // ── broken link resolution ─────────────────────────────────────────────────
 
   const hasSemanticIndex = await pathExists(manifestPath(vaultRoot));
@@ -1290,6 +1419,7 @@ async function main(): Promise<void> {
     missing_pages: missingPages,
     link_resolutions: linkResolutions,
     applied_link_fixes: appliedLinkFixes,
+    applied_pruning: appliedPruning,
     discovered_links: discoveredLinks,
     applied_new_links: appliedNewLinks,
     report_path: undefined as string | undefined,

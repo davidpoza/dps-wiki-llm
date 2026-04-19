@@ -281,6 +281,25 @@ function upsertSection(sectionEntries: MarkdownSection[], sectionName: string, i
 }
 
 /**
+ * Remove specific bullet items from a section (matched after normalization).
+ * Non-bullet lines (paragraphs, blank lines) are always preserved.
+ */
+function removeSectionItems(sectionEntries: MarkdownSection[], sectionName: string, itemsToRemove: string[]): void {
+  if (itemsToRemove.length === 0) return;
+  const existing = sectionEntries.find((e) => e.name.toLowerCase() === sectionName.toLowerCase());
+  if (!existing) return;
+
+  const normalizedToRemove = new Set(itemsToRemove.map(normalizeItem));
+  const lines = existing.content.split("\n");
+  existing.content = lines
+    .filter((line) => {
+      if (!line.trimStart().startsWith("- ")) return true;
+      return !normalizedToRemove.has(normalizeItem(line.trim()));
+    })
+    .join("\n");
+}
+
+/**
  * Render the next markdown state for a note while preserving existing content.
  *
  * @param {string} relativePath
@@ -315,6 +334,10 @@ export function renderMarkdown(
 
   for (const [sectionName, items] of Object.entries(payload.sections || {})) {
     upsertSection(sections, sectionName, items);
+  }
+
+  for (const [sectionName, items] of Object.entries(payload.sections_remove || {})) {
+    removeSectionItems(sections, sectionName, items);
   }
 
   if (Array.isArray(payload.related_links) && payload.related_links.length > 0) {
