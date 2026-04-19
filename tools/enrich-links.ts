@@ -4,14 +4,12 @@ import path from "node:path";
 
 import { writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
-import { pathExists, resolveVaultRoot, relativeVaultPath } from "./lib/fs-utils.js";
+import { resolveVaultRoot, relativeVaultPath } from "./lib/fs-utils.js";
 import { loadWikiDocs, analyzeWikiGraph } from "./lib/wiki-inspect.js";
-import { manifestPath } from "./lib/semantic-index.js";
 import { semanticSearch } from "./lib/semantic-search-fn.js";
-import { ftsSearch } from "./lib/fts-search-fn.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { SYSTEM_CONFIG } from "./config.js";
-import type { MutationPlan, MutationResult, SearchResult, WikiDoc } from "./lib/contracts.js";
+import type { MutationPlan, MutationResult, WikiDoc } from "./lib/contracts.js";
 
 /**
  * Enrich one or more wiki documents by discovering related notes and adding
@@ -23,8 +21,6 @@ import type { MutationPlan, MutationResult, SearchResult, WikiDoc } from "./lib/
  *
  * When --paths is omitted all typed documents in the wiki are processed.
  */
-
-type SearchFn = (query: string, limit: number) => Promise<SearchResult>;
 
 interface EnrichLinksOutput {
   status: "enrich_completed";
@@ -111,28 +107,17 @@ async function main(): Promise<void> {
     "enrich-links: target docs selected"
   );
 
-  // ── search function ────────────────────────────────────────────────────────
-
-  const hasSemanticIndex = await pathExists(manifestPath(vaultRoot));
-  const searchFn: SearchFn = hasSemanticIndex
-    ? (query, limit) => semanticSearch(query, { vault: vaultRoot, limit })
-    : (query, limit) => ftsSearch(query, { vault: vaultRoot, limit });
-
-  log.info(
-    { phase: "search-setup", has_semantic_index: hasSemanticIndex, mode: hasSemanticIndex ? "semantic" : "fts" },
-    "enrich-links: search function ready"
-  );
-
   // ── discover candidates ────────────────────────────────────────────────────
 
+  const candidateLimit = SYSTEM_CONFIG.enrich.candidateLimit;
   const pageActions: MutationPlan["page_actions"] = [];
 
   for (const doc of validTargets) {
     const resolvedPaths = new Set(graph.resolvedLinks.get(doc.relativePath) ?? []);
 
-    let searchResult: SearchResult;
+    let searchResult: Awaited<ReturnType<typeof semanticSearch>>;
     try {
-      searchResult = await searchFn(doc.title, 5);
+      searchResult = await semanticSearch(doc.title, { vault: vaultRoot, limit: candidateLimit });
     } catch (err) {
       log.warn(
         {
@@ -146,7 +131,6 @@ async function main(): Promise<void> {
     }
 
     const minCosine = SYSTEM_CONFIG.enrich.minCosineSimilarity;
-    const applyScoreFilter = hasSemanticIndex;
 
     for (const r of searchResult.results) {
       if (r.path === doc.relativePath) continue;
@@ -156,8 +140,8 @@ async function main(): Promise<void> {
           path: doc.relativePath,
           candidate: r.path,
           score: r.score,
-          threshold: applyScoreFilter ? minCosine : null,
-          above_threshold: applyScoreFilter ? r.score >= minCosine : null,
+          threshold: minCosine,
+          above_threshold: r.score >= minCosine,
           already_linked: resolvedPaths.has(r.path)
         },
         "enrich-links: candidate score"
@@ -168,10 +152,10 @@ async function main(): Promise<void> {
       .filter((r) => {
         if (r.path === doc.relativePath) return false;
         if (resolvedPaths.has(r.path)) return false;
-        if (applyScoreFilter && r.score < minCosine) return false;
+        if (r.score < minCosine) return false;
         return true;
       })
-      .slice(0, 5);
+      .slice(0, candidateLimit);
 
     if (candidates.length === 0) {
       log.info(

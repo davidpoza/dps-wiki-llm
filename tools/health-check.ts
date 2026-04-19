@@ -332,6 +332,13 @@ async function pruneWeakRelatedLinks(
       if (candidates.length !== 1) continue;
       const targetPath = candidates[0];
 
+      // Self-links always have cosine similarity 1.0 and would never be pruned
+      // by the score threshold — remove them explicitly.
+      if (targetPath === doc.relativePath) {
+        linksToRemove.push(`[[${link.raw}]]`);
+        continue;
+      }
+
       const targetEmbedding = embeddingMap.get(targetPath);
       if (!targetEmbedding) continue;
 

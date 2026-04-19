@@ -21,13 +21,31 @@ function normalizeLine(value: string): string {
 }
 
 /**
+ * Extract all wikilink slugs from a string (the part before `|` or the full
+ * target if no alias). Used to compare links by target regardless of alias.
+ *
+ * @param {string} value
+ * @returns {string[]}
+ */
+function extractWikilinkSlugs(value: string): string[] {
+  const matches = [...value.matchAll(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g)];
+  return matches.map((m) => m[1].trim().toLowerCase());
+}
+
+/**
  * Normalize a bullet item for duplicate detection.
+ * For wikilinks, compares by slug only (ignoring aliases) so that
+ * `[[foo|Bar]]` and `[[foo|Baz]]` are treated as the same item.
  *
  * @param {string} value
  * @returns {string}
  */
 function normalizeItem(value: string): string {
-  return normalizeLine(value.replace(/^- /, ""));
+  const stripped = value.replace(/^- /, "").trim();
+  // If the value contains wikilinks, key on their slugs only
+  const slugs = extractWikilinkSlugs(stripped);
+  if (slugs.length > 0) return slugs.join(" ");
+  return normalizeLine(stripped);
 }
 
 /**
@@ -102,7 +120,19 @@ function mergeBulletContent(existingContent: string, items: string[]): string {
     .filter(Boolean);
 
   const allBullets = existingLines.length === 0 || existingLines.every((line) => line.startsWith("- "));
-  const seen = new Set(existingLines.map(normalizeItem));
+
+  // Build seen set from individual wikilink slugs found in existing lines so
+  // that multi-link inline bullets (e.g. "- [[a]], [[b]]") don't bypass dedup.
+  const seen = new Set<string>();
+  for (const line of existingLines) {
+    const slugs = extractWikilinkSlugs(line);
+    if (slugs.length > 0) {
+      for (const slug of slugs) seen.add(slug);
+    } else {
+      seen.add(normalizeItem(line));
+    }
+  }
+
   const merged = allBullets ? [...existingLines] : [...existingLines, ""];
 
   for (const item of items) {
