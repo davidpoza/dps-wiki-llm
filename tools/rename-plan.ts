@@ -36,33 +36,44 @@ export async function loadRenamePlan(vaultRoot: string): Promise<RenamePlan> {
   return loadJsonFile<RenamePlan>(renamePlanPath(vaultRoot), { generated_at: "", entries: [] });
 }
 
-async function suggestEnglishSlug(slug: string): Promise<string | null> {
+function normalizeSlug(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "");
+}
+
+async function suggestEnglishSlugs(slugs: string[]): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (slugs.length === 0) return result;
   try {
+    const list = slugs.map((s, i) => `${i + 1}. ${s}`).join("\n");
     const response = await chatCompletion({
       temperature: 0,
       messages: [
         {
           role: "system",
           content:
-            "Translate a kebab-case slug (possibly in another language) into its English equivalent in kebab-case. " +
-            "Reply with ONLY the English kebab-case slug — no explanation, no punctuation. " +
+            "You will receive a numbered list of kebab-case slugs that may be in a language other than English. " +
+            "Translate each one into its English kebab-case equivalent. " +
+            "Reply with ONLY a numbered list in the same order, one slug per line, no explanation. " +
             "Use standard English medical/scientific terminology when applicable. " +
-            "If the slug is already correct English, reply with the exact same slug unchanged."
+            "If a slug is already correct English, repeat it unchanged."
         },
-        { role: "user", content: slug }
+        { role: "user", content: list }
       ]
     });
-    const text = chatText(response, "suggestEnglishSlug");
-    const normalized = text
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-      .replace(/^-+|-+$/g, "");
-    return normalized || null;
+    const text = chatText(response, "suggestEnglishSlugs");
+    const lines = text.trim().split("\n");
+    for (const line of lines) {
+      const match = line.match(/^(\d+)\.\s*(.+)$/);
+      if (!match) continue;
+      const idx = parseInt(match[1], 10) - 1;
+      if (idx < 0 || idx >= slugs.length) continue;
+      const normalized = normalizeSlug(match[2]);
+      if (normalized) result.set(slugs[idx], normalized);
+    }
   } catch {
-    return null;
+    // return empty map on error
   }
+  return result;
 }
 
 export async function generateRenamePlan(
@@ -75,7 +86,8 @@ export async function generateRenamePlan(
   const existingPlan = await loadRenamePlan(vaultRoot);
   const alreadyPlanned = new Set(existingPlan.entries.map((e) => e.from));
 
-  const newEntries: RenameEntry[] = [];
+  // Collect all non-compliant docs first
+  const candidates: Array<{ doc: typeof docs[number]; slug: string; reason: RenameEntry["reason"] }> = [];
 
   for (const doc of docs) {
     if (!typedDocTypes.has(doc.docType)) continue;
@@ -85,18 +97,27 @@ export async function generateRenamePlan(
     if (!slug) continue;
 
     let reason: RenameEntry["reason"] | null = null;
-
     if (NON_ASCII.test(slug)) {
       reason = "non_ascii";
     } else if (KEBAB_PATTERN.test(slug) && SPANISH_SUFFIXES.test(slug)) {
       reason = "spanish_pattern";
     }
-
     if (!reason) continue;
 
     log.info({ phase: "detect", slug, reason }, "rename-plan: non-compliant slug detected");
+    candidates.push({ doc, slug, reason });
+  }
 
-    const suggestedSlug = await suggestEnglishSlug(slug);
+  // Single LLM call for all slugs
+  const slugList = candidates.map((c) => c.slug);
+  const suggestions = slugList.length > 0 ? await suggestEnglishSlugs(slugList) : new Map<string, string>();
+
+  log.info({ phase: "llm", candidates: slugList.length, suggestions: suggestions.size }, "rename-plan: LLM suggestions received");
+
+  const newEntries: RenameEntry[] = [];
+
+  for (const { doc, slug, reason } of candidates) {
+    const suggestedSlug = suggestions.get(slug);
 
     if (!suggestedSlug || suggestedSlug === slug) {
       log.warn({ slug, suggested: suggestedSlug }, "rename-plan: no valid suggestion — skipping");
