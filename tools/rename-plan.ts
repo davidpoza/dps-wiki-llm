@@ -94,7 +94,9 @@ export async function generateRenamePlan(
     if (!typedDocTypes.has(doc.docType)) continue;
     if (alreadyPlanned.has(doc.relativePath)) continue;
 
-    const slug = doc.relativePath.split("/").pop()?.replace(/\.md$/, "") ?? "";
+    const filename = doc.relativePath.split("/").pop() ?? "";
+    if (filename.endsWith(".excalidraw.md")) continue;
+    const slug = filename.replace(/\.md$/, "");
     if (!slug) continue;
 
     let reason: RenameEntry["reason"] | null = null;
