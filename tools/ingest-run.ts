@@ -433,7 +433,7 @@ async function main(): Promise<void> {
 
     const wikiContextQuery = buildWikiContextQuery(sourcePayload, sourceNote);
     const hasSemanticIndex = await pathExists(manifestPath(vaultRoot));
-    const wikiContextSearchTool = hasSemanticIndex ? "hybrid-search" : "search";
+    const wikiContextSearchTool = hasSemanticIndex ? "semantic-search" : "search";
 
     log.info(
       {

@@ -149,6 +149,17 @@ export const SYSTEM_CONFIG = {
     synonymEmbeddingThreshold: 0.93,
     synonymMergeableSections: ["Facts", "Evidence", "Sources", "Related"] as readonly string[]
   },
+  enrich: {
+    /**
+     * Minimum raw cosine similarity [0–1] for a semantic-search candidate to
+     * be accepted as a Related link. Applied only when the semantic index is
+     * available (cosine scores have stable absolute meaning). Not applied in
+     * fts-only fallback mode (BM25 scores are not comparable).
+     *
+     * Rough guide: ≥ 0.75 very related, 0.60–0.75 related, < 0.60 weak.
+     */
+    minCosineSimilarity: 0.65
+  },
   reclassify: {
     outboundThreshold: 8
   },

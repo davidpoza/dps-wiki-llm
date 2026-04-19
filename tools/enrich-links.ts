@@ -7,7 +7,7 @@ import { createLogger } from "./lib/logger.js";
 import { pathExists, resolveVaultRoot, relativeVaultPath } from "./lib/fs-utils.js";
 import { loadWikiDocs, analyzeWikiGraph } from "./lib/wiki-inspect.js";
 import { manifestPath } from "./lib/semantic-index.js";
-import { hybridSearch } from "./lib/hybrid-search-fn.js";
+import { semanticSearch } from "./lib/semantic-search-fn.js";
 import { ftsSearch } from "./lib/fts-search-fn.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { SYSTEM_CONFIG } from "./config.js";
@@ -115,11 +115,11 @@ async function main(): Promise<void> {
 
   const hasSemanticIndex = await pathExists(manifestPath(vaultRoot));
   const searchFn: SearchFn = hasSemanticIndex
-    ? (query, limit) => hybridSearch(query, { vault: vaultRoot, limit })
+    ? (query, limit) => semanticSearch(query, { vault: vaultRoot, limit })
     : (query, limit) => ftsSearch(query, { vault: vaultRoot, limit });
 
   log.info(
-    { phase: "search-setup", has_semantic_index: hasSemanticIndex },
+    { phase: "search-setup", has_semantic_index: hasSemanticIndex, mode: hasSemanticIndex ? "semantic" : "fts" },
     "enrich-links: search function ready"
   );
 
@@ -145,20 +145,44 @@ async function main(): Promise<void> {
       continue;
     }
 
+    const minCosine = SYSTEM_CONFIG.enrich.minCosineSimilarity;
+    const applyScoreFilter = hasSemanticIndex;
+
+    for (const r of searchResult.results) {
+      if (r.path === doc.relativePath) continue;
+      log.info(
+        {
+          phase: "discover/score",
+          path: doc.relativePath,
+          candidate: r.path,
+          score: r.score,
+          threshold: applyScoreFilter ? minCosine : null,
+          above_threshold: applyScoreFilter ? r.score >= minCosine : null,
+          already_linked: resolvedPaths.has(r.path)
+        },
+        "enrich-links: candidate score"
+      );
+    }
+
     const candidates = searchResult.results
-      .filter((r) => r.path !== doc.relativePath && !resolvedPaths.has(r.path))
+      .filter((r) => {
+        if (r.path === doc.relativePath) return false;
+        if (resolvedPaths.has(r.path)) return false;
+        if (applyScoreFilter && r.score < minCosine) return false;
+        return true;
+      })
       .slice(0, 5);
 
     if (candidates.length === 0) {
       log.info(
-        { phase: "discover/search", path: doc.relativePath, candidates: 0 },
+        { phase: "discover/search", path: doc.relativePath, candidates: 0, min_cosine: minCosine },
         "enrich-links: no new candidates"
       );
       continue;
     }
 
     log.info(
-      { phase: "discover/search", path: doc.relativePath, candidates: candidates.length },
+      { phase: "discover/search", path: doc.relativePath, candidates: candidates.length, min_cosine: minCosine },
       "enrich-links: candidates found"
     );
 

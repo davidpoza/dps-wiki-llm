@@ -17,6 +17,7 @@ import { loadManifest, loadAllEmbeddingUnits, cosineSimilarity, manifestPath } f
 import { chatCompletion, chatText, extractJson } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { hybridSearch } from "./lib/hybrid-search-fn.js";
+import { semanticSearch } from "./lib/semantic-search-fn.js";
 import { ftsSearch } from "./lib/fts-search-fn.js";
 import { SYSTEM_CONFIG } from "./config.js";
 import { buildHealthCheckNotification } from "./services/notifications/telegram.js";
@@ -401,7 +402,8 @@ async function discoverNewLinks(
   vaultRoot: string,
   searchFn: SearchFn,
   excludedPaths: Set<string>,
-  log: ReturnType<typeof createLogger>
+  log: ReturnType<typeof createLogger>,
+  applyScoreFilter = false
 ): Promise<NewLinkCandidate[]> {
   const typedDocs = docs.filter((doc) => SYSTEM_CONFIG.wiki.typedDocTypes.includes(doc.docType) || doc.docType === "source");
 
@@ -430,8 +432,32 @@ async function discoverNewLinks(
       continue;
     }
 
+    const minCosine = SYSTEM_CONFIG.enrich.minCosineSimilarity;
+
+    for (const r of searchResult.results) {
+      if (r.path === doc.relativePath) continue;
+      log.info(
+        {
+          phase: "discover-new-links/score",
+          source_path: doc.relativePath,
+          candidate: r.path,
+          score: r.score,
+          threshold: applyScoreFilter ? minCosine : null,
+          above_threshold: applyScoreFilter ? r.score >= minCosine : null,
+          already_linked: resolvedPaths.has(r.path)
+        },
+        "health-check: [discover-new-links] candidate score"
+      );
+    }
+
     const newCandidates = searchResult.results
-      .filter((r) => r.path !== doc.relativePath && !resolvedPaths.has(r.path) && !excludedPaths.has(r.path))
+      .filter((r) => {
+        if (r.path === doc.relativePath) return false;
+        if (resolvedPaths.has(r.path)) return false;
+        if (excludedPaths.has(r.path)) return false;
+        if (applyScoreFilter && r.score < minCosine) return false;
+        return true;
+      })
       .slice(0, 3);
 
     if (newCandidates.length === 0) {
@@ -450,7 +476,8 @@ async function discoverNewLinks(
           source_title: doc.title,
           candidate_path: candidate.path,
           candidate_title: candidate.title,
-          score: candidate.score
+          score: candidate.score,
+          threshold: applyScoreFilter ? minCosine : null
         },
         "health-check: [discover-new-links] new candidate found"
       );
@@ -1119,8 +1146,15 @@ async function main(): Promise<void> {
   // ── broken link resolution ─────────────────────────────────────────────────
 
   const hasSemanticIndex = await pathExists(manifestPath(vaultRoot));
+
+  // Broken-link resolution: hybrid (title/name matching benefits from lexical signal)
   const searchFn: SearchFn = hasSemanticIndex
     ? (query, limit) => hybridSearch(query, { vault: vaultRoot, limit })
+    : (query, limit) => ftsSearch(query, { vault: vaultRoot, limit });
+
+  // Related-link discovery: semantic only (cosine similarity has stable absolute meaning)
+  const discoverSearchFn: SearchFn = hasSemanticIndex
+    ? (query, limit) => semanticSearch(query, { vault: vaultRoot, limit })
     : (query, limit) => ftsSearch(query, { vault: vaultRoot, limit });
 
   log.info(
@@ -1164,7 +1198,7 @@ async function main(): Promise<void> {
   );
 
   const deletedSynonymPaths = new Set(synonymMergeResult.merged_pairs.map((p) => p.deleted));
-  const discoveredLinks = await discoverNewLinks(docs, graph, vaultRoot, searchFn, deletedSynonymPaths, log);
+  const discoveredLinks = await discoverNewLinks(docs, graph, vaultRoot, discoverSearchFn, deletedSynonymPaths, log, hasSemanticIndex);
 
   // ── apply discovered links ────────────────────────────────────────────────
 
