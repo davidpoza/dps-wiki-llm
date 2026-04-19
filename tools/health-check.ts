@@ -1432,6 +1432,43 @@ async function main(): Promise<void> {
     };
   }
 
+  // ── duplicate slug detection ───────────────────────────────────────────────
+
+  log.info({ phase: "duplicate-slug/start" }, "health-check: [duplicate-slug] checking for slug conflicts across docTypes");
+
+  const slugToDocPaths = new Map<string, string[]>();
+  for (const doc of docs) {
+    const slug = doc.relativePath.split("/").pop()?.replace(/\.md$/, "") ?? "";
+    if (!slug) continue;
+    const existing = slugToDocPaths.get(slug) ?? [];
+    existing.push(doc.relativePath);
+    slugToDocPaths.set(slug, existing);
+  }
+
+  for (const [slug, paths] of slugToDocPaths) {
+    if (paths.length < 2) continue;
+    log.warn(
+      { phase: "duplicate-slug", slug, paths },
+      "health-check: [duplicate-slug] slug shared by multiple docs"
+    );
+    for (const p of paths) {
+      findings.push(
+        buildFinding(
+          "critical",
+          p,
+          "duplicate_slug",
+          `Slug "${slug}" is shared by ${paths.length} docs: ${paths.join(", ")}`,
+          "Rename or merge the duplicate docs so each slug is unique across the wiki."
+        )
+      );
+    }
+  }
+
+  log.info(
+    { phase: "duplicate-slug/done", conflicts: [...slugToDocPaths.values()].filter((p) => p.length > 1).length },
+    "health-check: [duplicate-slug] done"
+  );
+
   // ── synonym concept detection & merge ────────────────────────────────────
 
   log.info({ phase: "synonym-detect/start" }, "health-check: [synonym-detect] detecting synonym concepts");

@@ -61,7 +61,8 @@ async function main(): Promise<void> {
       plan,
       action,
       ledger,
-      result
+      result,
+      log
     });
   }
 
@@ -140,6 +141,27 @@ function currentDate(): string {
 }
 
 /**
+ * Check whether a proposed create path has a slug conflict with an existing
+ * doc in another wiki subdirectory. Returns the existing doc path to redirect
+ * to, or null if no conflict exists.
+ */
+async function findSlugConflict(vaultRoot: string, proposedPath: string): Promise<string | null> {
+  const slug = proposedPath.split("/").pop();
+  if (!slug) return null;
+
+  const subdirs = Object.keys(SYSTEM_CONFIG.wiki.docTypeFolders).map((f) => `wiki/${f}/`);
+
+  for (const subdir of subdirs) {
+    if (proposedPath.startsWith(subdir)) continue;
+    const candidatePath = subdir + slug;
+    const candidateText = await readTextIfExists(resolveWithinRoot(vaultRoot, candidatePath));
+    if (candidateText !== null) return candidatePath;
+  }
+
+  return null;
+}
+
+/**
  * Apply one page action from the mutation plan with idempotency protection.
  *
  * @param {{
@@ -155,13 +177,15 @@ async function applyPageAction({
   plan,
   action,
   ledger,
-  result
+  result,
+  log
 }: {
   vaultRoot: string;
   plan: MutationPlan;
   action: MutationPageAction;
   ledger: IdempotencyLedger;
   result: MutationResult;
+  log: ReturnType<typeof createLogger>;
 }): Promise<void> {
   if (!action || typeof action !== "object") {
     throw new Error("page_actions[] entries must be objects");
@@ -176,6 +200,20 @@ async function applyPageAction({
   if (action.action === "noop") {
     result.skipped.push(action.path);
     return;
+  }
+
+  // Redirect slug conflicts: if a create targets a new path but the same slug
+  // already exists in another wiki subdirectory, update the existing doc instead.
+  if (action.action === "create") {
+    const conflictPath = await findSlugConflict(vaultRoot, action.path);
+    if (conflictPath) {
+      log.warn(
+        { proposed: action.path, redirected: conflictPath },
+        "apply-update: slug conflict — redirecting create to existing doc"
+      );
+      action.path = conflictPath;
+      action.action = "update";
+    }
   }
 
   const absolutePath = resolveWithinRoot(vaultRoot, action.path);

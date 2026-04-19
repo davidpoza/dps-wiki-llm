@@ -105,6 +105,7 @@ export function ingestPlanRequest(
           "Every page_actions[].path must start exactly with one of: wiki/concepts/, wiki/entities/, wiki/topics/, or wiki/analyses/, except for one narrow update to the exact baseline source note path provided by source_note_update_allowed_path.",
           "Never write directly under wiki/, for example use wiki/concepts/servidor-lean.md instead of wiki/servidor-lean.md.",
           "Only propose small grounded changes under those allowed page path prefixes.",
+          "Before proposing a create action, check wiki_context.supporting_notes for any note whose path ends with the same filename (slug) you intend to use, regardless of subdirectory. If one exists (e.g. wiki/concepts/foo.md already exists and you want wiki/topics/foo.md), propose an update to the existing note instead of creating a duplicate slug.",
           // ── link format and integrity ─────────────────────────────────────────
           "All internal wiki links must use the format [[kebab-case-filename|Nombre legible]], where kebab-case-filename is the last path segment of the target file without the .md extension (e.g. [[servidor-lean|Lean Server]], [[gestion-del-conocimiento|Gestión del Conocimiento]]).",
           "For existing notes: copy the link exactly from allowed_supporting_wiki_links. For new notes you create in this plan: derive the slug from the last segment of their page_actions[].path without .md, and use their payload.title as the display name.",
