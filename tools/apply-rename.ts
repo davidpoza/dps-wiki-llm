@@ -93,8 +93,8 @@ async function main(): Promise<void> {
     renamed++;
   }
 
-  // Persist updated plan
-  await writeJsonFile(renamePlanPath(vaultRoot), plan);
+  // Delete plan file — all entries processed
+  await fs.unlink(renamePlanPath(vaultRoot)).catch(() => {});
 
   // Reindex FTS
   log.info({ phase: "reindex/fts" }, "apply-rename: reindexing FTS");
