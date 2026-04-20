@@ -97,6 +97,18 @@ function missingRequiredFrontmatter(doc: WikiDoc): string[] {
 }
 
 /**
+ * Return the doc type implied by the file's folder, ignoring frontmatter.
+ * Returns null when the path is not under a known wiki type folder.
+ */
+function docTypeFromPath(relativePath: string): string | null {
+  const parts = relativePath.split("/");
+  for (const [folder, docType] of Object.entries(SYSTEM_CONFIG.wiki.docTypeFolders)) {
+    if (parts.includes(folder)) return docType;
+  }
+  return null;
+}
+
+/**
  * Return the raw tag values from frontmatter as a string array.
  */
 function currentTagsRaw(doc: WikiDoc): string[] {
@@ -255,6 +267,22 @@ async function main(): Promise<void> {
       );
     }
 
+    const expectedType = docTypeFromPath(doc.relativePath);
+    const actualType = typeof doc.frontmatter.type === "string" ? doc.frontmatter.type.trim() : "";
+    if (expectedType !== null && actualType !== expectedType) {
+      findings.push(
+        buildFinding(
+          "warning",
+          doc.relativePath,
+          "wrong_frontmatter_type",
+          `Frontmatter type is "${actualType || "(missing)"}" but path implies "${expectedType}".`,
+          `Set type: ${expectedType} in frontmatter to match the folder.`,
+          true,
+          { expected_type: expectedType, actual_type: actualType }
+        )
+      );
+    }
+
     if (doc.docType === "source") {
       const computedTags = topicTagsFromLinkedNotes(doc, graph, docsByPath);
       const existingTags = currentTagsRaw(doc);
@@ -403,12 +431,10 @@ async function main(): Promise<void> {
 
   // ── auto-fix: overwrite tags from Linked Notes topics ────────────────────
 
-  const fixableFindings = findings.filter(
-    (f) => f.auto_fixable && f.issue_type === "source_tags_outdated"
-  );
   let fixedTagsCount = 0;
+  let fixedTypeCount = 0;
 
-  for (const finding of fixableFindings) {
+  for (const finding of findings.filter((f) => f.auto_fixable && f.issue_type === "source_tags_outdated")) {
     const doc = docsByPath.get(finding.path);
     if (!doc) continue;
 
@@ -423,6 +449,24 @@ async function main(): Promise<void> {
     log.info(
       { path: finding.path, tags: computedTags },
       "lint: [auto-fix] tags overwritten from Linked Notes topics"
+    );
+  }
+
+  for (const finding of findings.filter((f) => f.auto_fixable && f.issue_type === "wrong_frontmatter_type")) {
+    const doc = docsByPath.get(finding.path);
+    if (!doc) continue;
+
+    const expectedType = finding.expected_type as string;
+    const { frontmatter, body } = splitFrontmatter(doc.raw);
+    frontmatter.type = expectedType;
+    const fixed = `${stringifyFrontmatter(frontmatter)}${body}`.trimEnd() + "\n";
+
+    await writeTextFile(doc.absolutePath, fixed);
+    fixedTypeCount += 1;
+
+    log.info(
+      { path: finding.path, type: expectedType },
+      "lint: [auto-fix] frontmatter type corrected from path"
     );
   }
 
@@ -441,10 +485,10 @@ async function main(): Promise<void> {
   }
 
   log.info(
-    { docs: result.stats.docs, findings: result.stats.findings, critical: result.stats.critical, fixed_tags: fixedTagsCount },
+    { docs: result.stats.docs, findings: result.stats.findings, critical: result.stats.critical, fixed_tags: fixedTagsCount, fixed_types: fixedTypeCount },
     "lint completed"
   );
-  writeJsonStdout({ ...result, fixed_tags_count: fixedTagsCount }, args.pretty);
+  writeJsonStdout({ ...result, fixed_tags_count: fixedTagsCount, fixed_type_count: fixedTypeCount }, args.pretty);
 }
 
 main().catch((error) => {
