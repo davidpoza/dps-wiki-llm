@@ -297,9 +297,9 @@ export async function loadAllEmbeddingUnits(
  * Normalisation pipeline (applied in order):
  *   1. Strip YAML frontmatter (`--- ... ---`) — metadata fields like `tags:`
  *      and `date:` add noise without semantic signal.
- *   2. Strip navigational sections (`Related`, `Sources`) — link titles in
- *      these sections bias the embedding toward linked notes, causing wrong
- *      links to propagate their topics into this note's vector.
+ *   2. Strip navigational/reference sections (`Related`, `Sources`, `References`) —
+ *      link titles and external citations bias the embedding toward linked notes
+ *      or cited topics rather than the note's own content.
  *   3. Expand wikilinks — `[[Page|Alias]]` → `"Alias"`, `[[Page]]` → `"Page"`.
  *      Keeps the human-readable anchor text so the meaning is preserved.
  *   4. Remove markdown image/link syntax — `[text](url)` → `"text"`,
@@ -330,7 +330,7 @@ export function normalizeTextForEmbedding(raw: string): string {
   // These sections introduce link titles that bias the embedding toward linked
   // notes — a wrong Related link would propagate its topics into this note's
   // vector, causing further false positives in semantic search.
-  text = text.replace(/^##+ *(Related|Sources?|Fuentes?)\s*\n([\s\S]*?)(?=^##+ |\s*$)/gim, "");
+  text = text.replace(/^##+ *(Related|Sources?|Fuentes?|References?)\s*\n([\s\S]*?)(?=^##+ |\s*$)/gim, "");
 
   // Convert [[wikilink|alias]] and [[wikilink]] to plain text
   text = text.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => alias ?? target);
