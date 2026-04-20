@@ -19,7 +19,7 @@ import { runToolJson } from "./lib/run-tool.js";
 import { hybridSearch } from "./lib/hybrid-search-fn.js";
 import { semanticSearch } from "./lib/semantic-search-fn.js";
 import { ftsSearch } from "./lib/fts-search-fn.js";
-import { SYSTEM_CONFIG } from "./config.js";
+import { SYSTEM_CONFIG, resolvedConceptTopicCandidateThreshold } from "./config.js";
 import { buildHealthCheckNotification } from "./services/notifications/telegram.js";
 import { generateRenamePlan } from "./rename-plan.js";
 import type {
@@ -1198,7 +1198,10 @@ async function main(): Promise<void> {
 
   log.info({ phase: "startup", vault_root: vaultRoot }, "health-check: started");
 
-  let docs = await loadWikiDocs(vaultRoot);
+  const excludeProjects = (d: WikiDoc[]): WikiDoc[] =>
+    d.filter((doc) => !doc.relativePath.startsWith("wiki/projects/"));
+
+  let docs = excludeProjects(await loadWikiDocs(vaultRoot));
   let graph = analyzeWikiGraph(docs);
   const docsByPath = new Map(docs.map((doc) => [doc.relativePath, doc]));
 
@@ -1334,6 +1337,29 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── concept-topic-candidate check ─────────────────────────────────────────
+
+  const conceptTopicThreshold = resolvedConceptTopicCandidateThreshold();
+  for (const doc of docs) {
+    if (doc.docType !== "concept") continue;
+    const outbound = doc.wikiLinks.length;
+    const inbound = graph.inboundCounts.get(doc.relativePath) ?? 0;
+    const totalLinks = outbound + inbound;
+    if (totalLinks > conceptTopicThreshold) {
+      findings.push(
+        buildFinding(
+          "suggestion",
+          doc.relativePath,
+          "concept-topic-candidate",
+          `The concept has ${totalLinks} wikilinks (${outbound} outbound, ${inbound} inbound), above the threshold of ${conceptTopicThreshold}. It may be broad enough to become a topic.`,
+          "Consider manually converting this concept to a topic under wiki/topics/ if it acts as a hub for other notes.",
+          false,
+          { total_links: totalLinks, outbound_links: outbound, inbound_links: inbound, threshold: conceptTopicThreshold }
+        )
+      );
+    }
+  }
+
   const missingPages = collectMissingPages(graph);
   for (const item of missingPages) {
     findings.push(
@@ -1369,7 +1395,7 @@ async function main(): Promise<void> {
 
   if (sanitized.length > 0) {
     log.info({ phase: "sanitize-related/done", docs_affected: sanitized.length }, "health-check: [sanitize-related] done, reloading");
-    docs = await loadWikiDocs(vaultRoot);
+    docs = excludeProjects(await loadWikiDocs(vaultRoot));
     graph = analyzeWikiGraph(docs);
   }
 
@@ -1389,8 +1415,7 @@ async function main(): Promise<void> {
       skipped: pruneResult.skipped
     };
     // Reload docs and graph so subsequent phases see the pruned state
-    const updatedDocs = await loadWikiDocs(vaultRoot);
-    docs = updatedDocs;
+    docs = excludeProjects(await loadWikiDocs(vaultRoot));
     graph = analyzeWikiGraph(docs);
   }
 
@@ -1515,7 +1540,7 @@ async function main(): Promise<void> {
 
   // Reload after synonym merges — deleted files must not appear as link sources
   if (synonymMergeResult.merged_pairs.length > 0) {
-    docs = await loadWikiDocs(vaultRoot);
+    docs = excludeProjects(await loadWikiDocs(vaultRoot));
     graph = analyzeWikiGraph(docs);
   }
 

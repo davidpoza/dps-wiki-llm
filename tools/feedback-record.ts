@@ -265,14 +265,19 @@ function buildMutationPlan(record: FeedbackRecord): MutationPlan {
     grouped.set(key, entry);
   }
 
-  const pageActions = Array.from(grouped.values()).map((entry) => ({
-    path: entry.path,
-    action: entry.action,
-    doc_type: entry.doc_type,
-    change_type: entry.change_types.size === 1 ? Array.from(entry.change_types)[0] : "mixed",
-    idempotency_key: `feedback:${record.output_id}:${stableHash(entry.item_ids.sort().join(","))}`,
-    payload: entry.payload
-  }));
+  const pageActions = Array.from(grouped.values()).map((entry) => {
+    // Topics are created exclusively by the user — block any auto-create via feedback.
+    const action =
+      entry.doc_type === "topic" && entry.action === "create" ? "noop" : entry.action;
+    return {
+      path: entry.path,
+      action,
+      doc_type: entry.doc_type,
+      change_type: entry.change_types.size === 1 ? Array.from(entry.change_types)[0] : "mixed",
+      idempotency_key: `feedback:${record.output_id}:${stableHash(entry.item_ids.sort().join(","))}`,
+      payload: entry.payload
+    };
+  });
 
   return {
     plan_id: `plan-${slugify(record.output_id)}-feedback`,

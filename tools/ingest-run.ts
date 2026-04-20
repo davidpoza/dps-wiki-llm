@@ -32,6 +32,7 @@ import {
 } from "./services/ingest/build-llm-plan.js";
 import { parseAndGuardrailPlan } from "./services/ingest/guardrail-plan.js";
 import type { GuardrailRejection } from "./services/ingest/guardrail-plan.js";
+import { resolveTerms } from "./services/ingest/resolve-terms.js";
 import {
   buildIngestNotification,
   buildIngestFailureNotification
@@ -592,11 +593,32 @@ async function main(): Promise<void> {
       log
     );
 
+    // ── 11b. resolve terms (topic matching + concept dedup) ───────────────────
+
+    log.info(
+      { phase: "resolve-terms" },
+      "ingest-run: [resolve-terms] resolving term candidates against existing topics and concepts"
+    );
+
+    const resolveResult = await resolveTerms(guardrailedPlan, vaultRoot, log);
+
+    log.info(
+      {
+        phase: "resolve-terms",
+        topic_matches: resolveResult.topicMatches,
+        concept_dedups: resolveResult.conceptDedups,
+        nooped: resolveResult.nooped
+      },
+      "ingest-run: [resolve-terms] term resolution complete"
+    );
+
     const sourceNotePath = baselinePlanOutput.mutation_plan.page_actions[0]?.path ?? "";
-    const topicSlugs = topicSlugsFromPlan(guardrailedPlan);
-    const planWithTags = injectTopicTags(guardrailedPlan, sourceNotePath, topicSlugs);
+    const topicSlugs = topicSlugsFromPlan(resolveResult.plan);
+    const planWithTags = injectTopicTags(resolveResult.plan, sourceNotePath, topicSlugs);
     const llmMutationPlan = injectDefaultConfidence(planWithTags, SYSTEM_CONFIG.health.defaultConfidence);
-    const hasChanges = guardrailHasChanges || topicSlugs.length > 0;
+    const hasChanges = guardrailHasChanges || resolveResult.topicMatches > 0 || resolveResult.conceptDedups > 0
+      || resolveResult.plan.page_actions.some((a) => a.action !== "noop")
+      || topicSlugs.length > 0;
 
     log.info(
       { phase: "inject-topic-tags", source_note_path: sourceNotePath, topic_slugs: topicSlugs },

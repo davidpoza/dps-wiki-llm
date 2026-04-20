@@ -177,7 +177,10 @@ async function main(): Promise<void> {
     "embed-index: existing manifest loaded"
   );
 
-  const wikiPaths = await collectWikiPaths(wikiDir);
+  const wikiPaths = (await collectWikiPaths(wikiDir)).filter((p) => {
+    const rel = path.relative(vaultRoot, p).replace(/\\/g, "/");
+    return !rel.startsWith("wiki/projects/");
+  });
 
   log.info(
     { phase: "scan", total: wikiPaths.length, wiki_dir: wikiDir },

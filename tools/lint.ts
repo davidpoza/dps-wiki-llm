@@ -198,7 +198,9 @@ async function main(): Promise<void> {
   const log = createLogger("lint");
   const vaultRoot = resolveVaultRoot(args.vault);
   log.info("lint started");
-  const docs = await loadWikiDocs(vaultRoot);
+  const docs = (await loadWikiDocs(vaultRoot)).filter(
+    (d) => !d.relativePath.startsWith("wiki/projects/")
+  );
   const graph = analyzeWikiGraph(docs);
   const docsByPath = new Map(docs.map((doc) => [doc.relativePath, doc]));
   const findings: MaintenanceFinding[] = [];

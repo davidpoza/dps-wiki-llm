@@ -160,9 +160,6 @@ export const SYSTEM_CONFIG = {
     /** Number of candidates to retrieve and add to the Related section. */
     candidateLimit: 8
   },
-  reclassify: {
-    outboundThreshold: 8
-  },
   maintenance: {
     severityOrder: {
       critical: 0,
@@ -192,4 +189,14 @@ export function configuredSet<T extends string>(values: readonly T[]): ReadonlyS
 
 export function resolvedEmbedModel(): string {
   return process.env.EMBED_MODEL?.trim() || SYSTEM_CONFIG.semantic.model;
+}
+
+export function resolvedTopicMatchThreshold(): number {
+  const v = parseFloat(process.env.TOPIC_MATCH_THRESHOLD ?? "");
+  return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.72;
+}
+
+export function resolvedConceptTopicCandidateThreshold(): number {
+  const v = parseInt(process.env.CONCEPT_TOPIC_CANDIDATE_THRESHOLD ?? "", 10);
+  return Number.isFinite(v) && v > 0 ? v : 8;
 }

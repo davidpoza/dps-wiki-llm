@@ -35,7 +35,9 @@ async function main(): Promise<void> {
 
   log.info("reindex started");
 
-  const docs = await loadWikiDocs(vaultRoot);
+  const docs = (await loadWikiDocs(vaultRoot)).filter(
+    (d) => !d.relativePath.startsWith("wiki/projects/")
+  );
 
   const db = await openDatabase(dbPath);
 

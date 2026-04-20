@@ -55,6 +55,7 @@ vault/
 │   ├── topics/
 │   ├── sources/
 │   ├── analyses/
+│   ├── projects/    ← user-managed only, excluded from all automation
 │   └── indexes/
 ├── outputs/
 ├── state/
@@ -160,14 +161,21 @@ Pipeline:
 raw event
 -> ingest-source.ts
 -> idempotency / duplicate check
--> LLM ingestion prompt
+-> LLM ingestion prompt   (may produce concept/entity/analysis updates; NEVER creates topics)
 -> structured JSON plan
+-> guardrail-plan.ts      (validate path constraints, idempotency keys)
+-> resolve-terms.ts       (term resolution: match concepts against existing topics via embedding;
+                           convert matched terms to topic updates; dedup concept creates vs disk)
 [transaction checkpoint: git HEAD + idempotency-keys snapshot]
 -> apply-update.ts
 -> reindex.ts
 -> commit.ts
 [on any failure: git reset --hard <pre-run-sha> → restore idempotency-keys → reindex]
 ```
+
+**Topic creation rule:** Topics are created exclusively by the user under `wiki/topics/`.
+No pipeline step may produce a `create` action for a topic path.
+A concept term is redirected to a topic `update` when cosine similarity ≥ `TOPIC_MATCH_THRESHOLD` (default 0.72).
 
 Expected plan shape:
 
@@ -262,6 +270,7 @@ Maintenance checks:
 - orphan pages
 - concept gaps
 - contradiction review
+- concept-topic candidates (concepts with many links → suggestion to convert to topic manually)
 
 ---
 
@@ -284,6 +293,8 @@ Maintenance checks:
 - aggregation page
 - organizes related notes
 - should not become the primary location of raw facts
+- **created exclusively by the user** — no automation may create new topic files
+- automation may update existing topics (add references, context) when embedding similarity indicates relevance
 
 #### `source`
 
@@ -680,8 +691,10 @@ query
 
 - performs a deeper semantic and traceability review of the knowledge base
 - detects contradictions, unsupported claims, concept gaps, stale low-confidence notes, and other long-term quality issues
+- emits `concept-topic-candidate` suggestion findings for concepts whose total link count exceeds `CONCEPT_TOPIC_CANDIDATE_THRESHOLD` (default 8) — no automatic action is taken
 - should output structured findings with severity and recommended actions
 - should be suitable for scheduled monthly review runs
+- excludes `wiki/projects/` from all checks
 
 ### `feedback-record.ts`
 
@@ -1302,6 +1315,14 @@ If no handlers were registered (failure before any mutation), `rollback()` is a 
 ### `EMBED_MODEL` Environment Override
 
 `resolvedEmbedModel()` in `config.ts` reads the `EMBED_MODEL` environment variable and falls back to `SYSTEM_CONFIG.semantic.model`. All tools that load the vector index (`embed-index.ts`, `semantic-search.ts`, `hybrid-search.ts`, `lib/semantic-index.ts`, `lib/local-transformers-provider.ts`) call this function instead of accessing the config value directly, so the model can be changed per-deployment without a code rebuild.
+
+### `TOPIC_MATCH_THRESHOLD` Environment Override
+
+`resolvedTopicMatchThreshold()` in `config.ts` reads this variable (float in [0,1]) and defaults to `0.72`. Used by `resolve-terms.ts` to decide whether a concept term is close enough to an existing topic to warrant updating the topic instead of creating a concept.
+
+### `CONCEPT_TOPIC_CANDIDATE_THRESHOLD` Environment Override
+
+`resolvedConceptTopicCandidateThreshold()` in `config.ts` reads this variable (integer) and defaults to `8`. Used by `health-check.ts` to flag concepts with a high total wikilink count as candidates for manual promotion to topic.
 
 ---
 
