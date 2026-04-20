@@ -132,8 +132,9 @@ function buildNotification(
     text = "cosim: índice semántico no disponible. Ejecuta /embedindex primero.";
   } else if (result.status === "cosim_not_found") {
     text = [
-      "cosim: notas no encontradas en el índice:",
-      ...result.not_found.map((n) => `  • ${n}`)
+      "cosim: notas no encontradas en el índice semántico:",
+      ...result.not_found.map((n) => `  • ${n}`),
+      "Ejecuta /embedindex si la nota es reciente o fue renombrada."
     ].join("\n");
   } else {
     const sim = result.similarity !== null ? result.similarity.toFixed(6) : "?";

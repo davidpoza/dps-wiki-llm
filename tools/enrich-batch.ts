@@ -5,7 +5,8 @@ import fs from "node:fs/promises";
 
 import { parseArgs, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
-import { resolveVaultRoot, resolveWithinRoot } from "./lib/fs-utils.js";
+import { resolveVaultRoot, resolveWithinRoot, pathExists } from "./lib/fs-utils.js";
+import { manifestPath } from "./lib/semantic-index.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { slugify } from "./lib/text.js";
 import { SYSTEM_CONFIG } from "./config.js";
@@ -43,6 +44,7 @@ interface EnrichBatchOutput {
   processed: ProcessedFile[];
   failed: FailedFile[];
   total: number;
+  embed_index_result: Record<string, unknown> | null;
 }
 
 const ENRICH_SUBDIRS = ["concepts", "topics", "entities", "analyses"] as const;
@@ -160,7 +162,8 @@ async function main(): Promise<void> {
       status: "enrich_batch_completed",
       processed: [],
       failed: [],
-      total: 0
+      total: 0,
+      embed_index_result: null
     };
     writeJsonStdout(output, args.pretty);
     return;
@@ -182,6 +185,19 @@ async function main(): Promise<void> {
     }
   }
 
+  // embed-index incremental (only if semantic index already exists)
+  let embedIndexResult: Record<string, unknown> | null = null;
+  if (processed.length > 0 && await pathExists(manifestPath(vaultRoot))) {
+    log.info({ phase: "embed-index" }, "enrich-batch: updating semantic index");
+    embedIndexResult = await runToolJson<Record<string, unknown>>("embed-index", {
+      vault: vaultRoot
+    });
+    log.info(
+      { embedded: embedIndexResult.embedded ?? null, skipped: embedIndexResult.skipped ?? null },
+      "enrich-batch: semantic index updated"
+    );
+  }
+
   log.info(
     { processed: processed.length, failed: failed.length },
     "enrich-batch: completed"
@@ -191,7 +207,8 @@ async function main(): Promise<void> {
     status: "enrich_batch_completed",
     processed,
     failed,
-    total: files.length
+    total: files.length,
+    embed_index_result: embedIndexResult
   };
 
   writeJsonStdout(output, args.pretty);
