@@ -7,6 +7,7 @@ import { parseArgs, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
 import { resolveVaultRoot, resolveWithinRoot } from "./lib/fs-utils.js";
 import { runToolJson } from "./lib/run-tool.js";
+import { slugify } from "./lib/text.js";
 import { SYSTEM_CONFIG } from "./config.js";
 import type { CommitInput, CommitResult } from "./lib/contracts.js";
 
@@ -82,9 +83,17 @@ async function processFile(
   }
 
   const subdir = parts[0]; // concepts
-  const filename = parts.slice(1).join("/"); // foo.md
+  const rawFilename = parts.slice(1).join("/"); // e.g. "My Cool Note.md"
+  const ext = path.extname(rawFilename);
+  const stem = path.basename(rawFilename, ext);
+  const kebabStem = slugify(stem, 80);
+  const filename = `${kebabStem}${ext}`;
   const wikiRelativePath = `wiki/${subdir}/${filename}`;
   const wikiAbsPath = resolveWithinRoot(vaultRoot, wikiRelativePath);
+
+  if (stem !== kebabStem) {
+    log.info({ original: stem, kebab: kebabStem }, "enrich-batch: filename normalized to kebab-case");
+  }
 
   // 1. copy to wiki
   await fs.mkdir(path.dirname(wikiAbsPath), { recursive: true });
