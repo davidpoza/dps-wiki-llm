@@ -61,7 +61,6 @@ export const SYSTEM_CONFIG = {
     sourceSlugMaxLength: 72,
     summaryMaxLength: 240,
     rawContextMaxLength: 1200,
-    defaultLanguage: "unknown",
     defaultSourceKind: "note",
     sourceKindFolders: {
       bookmarks: "bookmark",
