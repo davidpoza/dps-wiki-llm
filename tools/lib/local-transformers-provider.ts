@@ -157,18 +157,21 @@ function extractVector(output: unknown): number[] {
   }
 
   if (data?.data && data?.dims) {
-    const flat = Array.from(data.data) as number[];
+    // Work directly on the Float32Array — avoid Array.from() which would copy
+    // the entire [batch, seqLen, dim] buffer into a JS number[] (up to 64 MB
+    // for bge-m3 with long documents) before we ever start mean-pooling.
+    const raw = data.data;
     const dims = data.dims;
 
     if (dims.length === 3) {
-      // Layout: flat[batch * seqLen * dim + t * dim + d]
+      // Layout: raw[batch * seqLen * dim + t * dim + d]
       // batch=0 is always the single input we pass, so index as [0][t][d].
       const [, seqLen, dim] = dims;
       const result = new Array<number>(dim).fill(0);
 
       for (let t = 0; t < seqLen; t++) {
         for (let d = 0; d < dim; d++) {
-          result[d] += flat[t * dim + d];
+          result[d] += raw[t * dim + d];
         }
       }
 
@@ -179,7 +182,7 @@ function extractVector(output: unknown): number[] {
 
     if (dims.length === 2) {
       // Already pooled by the model (e.g. CLS-pooling models); return directly.
-      return flat;
+      return Array.from(raw);
     }
   }
 
