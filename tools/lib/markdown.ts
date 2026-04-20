@@ -385,6 +385,17 @@ export function renderMarkdown(
     upsertSection(sections, "Related", payload.related_links);
   }
 
+  const topicRelatedMax = SYSTEM_CONFIG.wiki.topicRelatedLinksMax;
+  if (relativePath.startsWith("wiki/topics/") && topicRelatedMax > 0) {
+    const relatedSection = sections.find((s) => s.name.toLowerCase() === "related");
+    if (relatedSection) {
+      const bullets = relatedSection.content.split("\n").filter((l) => l.trimStart().startsWith("- "));
+      if (bullets.length > topicRelatedMax) {
+        relatedSection.content = bullets.slice(0, topicRelatedMax).join("\n");
+      }
+    }
+  }
+
   const markdownBody = stringifySections({
     title,
     preamble: parsedBody.preamble,

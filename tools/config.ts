@@ -124,7 +124,8 @@ export const SYSTEM_CONFIG = {
       indexes: "index"
     } as Record<string, string>,
     typedDocTypes: ["concept", "entity", "topic", "analysis"] as readonly string[],
-    requiredFrontmatterKeys: ["type", "title", "updated"] as readonly string[]
+    requiredFrontmatterKeys: ["type", "title", "updated"] as readonly string[],
+    topicRelatedLinksMax: 40
   },
   lint: {
     lineWarningThreshold: 300,
