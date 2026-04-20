@@ -934,7 +934,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/embed-index.js --vault /data/vault --rebuild",
+        "command": "={{ 'NODE_OPTIONS=--max-old-space-size=' + ($env.EMBED_MAX_OLD_SPACE_MB ?? '3072') + ' node /app/dist/tools/embed-index.js --vault /data/vault --rebuild' }}",
         "executeOnce": true
       },
       "id": "embedindex-run",
@@ -946,7 +946,7 @@
         1220
       ],
       "notesInFlow": true,
-      "notes": "Full rebuild: re-embeds every document. Use after changing embedding model or normalisation logic."
+      "notes": "Full rebuild: re-embeds every document. Use after changing embedding model or normalisation logic. Heap controlled by EMBED_MAX_OLD_SPACE_MB (default 3072 MB)."
     },
     {
       "parameters": {
