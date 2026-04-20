@@ -179,7 +179,8 @@ export const SYSTEM_CONFIG = {
     minChars: 250,
     topK: 8,
     model: "Xenova/multilingual-e5-small",
-    batchSize: 16
+    batchSize: 16,
+    maxInputChars: 4000
   }
 } as const;
 

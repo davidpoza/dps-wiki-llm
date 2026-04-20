@@ -252,8 +252,12 @@ async function main(): Promise<void> {
     const embedStart = Date.now();
 
     // Step 5: embed and persist the unit.
+    // Truncate to maxInputChars to bound WASM heap growth in ONNX Runtime —
+    // the WASM linear memory ratchets upward with sequence length and is never
+    // reclaimed, so unbounded inputs cause OOM on large corpora.
     // The detailed per-inference log is emitted inside local-transformers-provider.
-    const [embedding] = await provider.embed([normalized]);
+    const truncated = normalized.slice(0, SYSTEM_CONFIG.semantic.maxInputChars);
+    const [embedding] = await provider.embed([truncated]);
 
     const embedDuration = Date.now() - embedStart;
     const title = parseFrontmatterTitle(raw) || path.basename(absPath, ".md");
