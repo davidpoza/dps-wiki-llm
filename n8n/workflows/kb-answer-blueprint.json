@@ -1437,7 +1437,13 @@
             "index": 0
           }
         ],
-        []
+        [
+          {
+            "node": "Is Telegram Enrich Command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Is Telegram Enrich Command?": {
