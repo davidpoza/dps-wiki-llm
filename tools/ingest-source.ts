@@ -175,7 +175,7 @@ async function main(): Promise<void> {
     raw_path: rawPath,
     title,
     content: body.trim(),
-    language: stringValue(input.language) || stringValue(frontmatter.language) || SYSTEM_CONFIG.ingest.defaultLanguage,
+    language: stringValue(input.language) || stringValue(frontmatter.language) || "unknown",
     checksum,
     metadata
   };
