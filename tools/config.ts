@@ -156,7 +156,7 @@ export const SYSTEM_CONFIG = {
      *
      * Rough guide: ≥ 0.75 very related, 0.60–0.75 related, < 0.60 weak.
      */
-    minCosineSimilarity: 0.65,
+    minCosineSimilarity: 0.75,
     /** Number of candidates to retrieve and add to the Related section. */
     candidateLimit: 8
   },
