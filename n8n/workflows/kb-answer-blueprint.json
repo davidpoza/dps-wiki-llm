@@ -1432,7 +1432,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst payload = {\n  ...body,\n  telegram_polled: Boolean(input.telegram_polled),\n  telegram_command: input.telegram_command ?? body.telegram_command ?? null,\n  telegram_lock_acquired: Boolean(input.telegram_lock_acquired),\n  telegram_lock_id: input.telegram_lock_id ?? body.telegram_lock_id ?? null\n};\nreturn [{\n  json: {\n    ...payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst message = body.message ?? body.edited_message ?? null;\nconst text = (typeof message?.text === 'string' ? message.text.trim() : '') || (typeof message?.caption === 'string' ? message.caption.trim() : '');\nconst stripped = text.replace(/^\\/cosim(?:@\\w+)?\\s*/i, '').trim();\nconst parts = stripped.split(/\\s+/).filter(Boolean);\nconst payload = {\n  ...body,\n  telegram_polled: Boolean(input.telegram_polled),\n  telegram_command: input.telegram_command ?? body.telegram_command ?? null,\n  telegram_lock_acquired: Boolean(input.telegram_lock_acquired),\n  telegram_lock_id: input.telegram_lock_id ?? body.telegram_lock_id ?? null\n};\nif (parts.length >= 2) {\n  payload.note_a = parts[0];\n  payload.note_b = parts[1];\n}\nreturn [{\n  json: {\n    ...payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
       },
       "id": "cosim-build-payload",
       "name": "Build Cosim Run Payload",

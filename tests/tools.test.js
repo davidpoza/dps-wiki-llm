@@ -1626,6 +1626,112 @@ test("feedback-record rejects applied items without source support", async () =>
   );
 });
 
+test("cosim reports Telegram usage errors as JSON so polling can advance", async () => {
+  const vault = await createVault();
+  const inputPath = path.join(vault, "cosim-usage.json");
+  await writeJson(inputPath, {
+    update_id: 387,
+    message: {
+      message_id: 10,
+      chat: { id: 123 },
+      text: "/cosim"
+    },
+    telegram_polled: true,
+    telegram_command: "cosim",
+    telegram_lock_acquired: true,
+    telegram_lock_id: "telegram-bot-lock-usage"
+  });
+
+  const result = await runTool("cosim", ["--vault", vault, "--input", inputPath, "--compact"], {
+    env: {
+      TELEGRAM_BOT_TOKEN: "telegram-token",
+      TELEGRAM_CHAT_ID: "123"
+    }
+  });
+
+  assert.equal(result.json.status, "cosim_usage_error");
+  assert.equal(result.json.telegram_update_id, 387);
+  assert.equal(result.json.telegram_lock_id, "telegram-bot-lock-usage");
+  assert.equal(result.json.telegram_enabled, true);
+  assert.match(result.json.telegram_message.text, /^Uso: \/cosim <nota-a> <nota-b>/);
+});
+
+test("cosim accepts explicit note arguments from n8n payloads", async () => {
+  const vault = await createVault();
+  const inputPath = path.join(vault, "cosim-explicit.json");
+  await writeJson(inputPath, {
+    update_id: 388,
+    message: {
+      message_id: 11,
+      chat: { id: 123 },
+      text: "/cosim"
+    },
+    note_a: "wiki/topics/software-development",
+    note_b: "wiki/concepts/patrones-de-diseno-de-software",
+    telegram_polled: true,
+    telegram_command: "cosim",
+    telegram_lock_acquired: true,
+    telegram_lock_id: "telegram-bot-lock-explicit"
+  });
+
+  const result = await runTool("cosim", ["--vault", vault, "--input", inputPath, "--compact"], {
+    env: {
+      TELEGRAM_BOT_TOKEN: "telegram-token",
+      TELEGRAM_CHAT_ID: "123"
+    }
+  });
+
+  assert.equal(result.json.status, "cosim_no_index");
+  assert.equal(result.json.note_a, "wiki/topics/software-development");
+  assert.equal(result.json.note_b, "wiki/concepts/patrones-de-diseno-de-software");
+  assert.equal(result.json.telegram_update_id, 388);
+});
+
+test("cosim accepts direct CLI note arguments", async () => {
+  const vault = await createVault();
+
+  const result = await runTool("cosim", [
+    "--vault",
+    vault,
+    "--compact",
+    "wiki/topics/software-development",
+    "wiki/concepts/patrones-de-diseno-de-software"
+  ]);
+
+  assert.equal(result.json.status, "cosim_no_index");
+  assert.equal(result.json.note_a, "wiki/topics/software-development");
+  assert.equal(result.json.note_b, "wiki/concepts/patrones-de-diseno-de-software");
+});
+
+test("telegram cosim payload builder extracts note arguments", async () => {
+  const workflow = JSON.parse(await fs.readFile(repoPath("n8n/workflows/kb-answer-blueprint.json"), "utf8"));
+  const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
+  const payload = new Function("$input", nodes.get("Build Cosim Run Payload").parameters.jsCode)({
+    first: () => ({
+      json: {
+        body: {
+          update_id: 389,
+          message: {
+            message_id: 12,
+            chat: { id: 123 },
+            text: "/cosim wiki/topics/software-development wiki/concepts/patrones-de-diseno-de-software"
+          }
+        },
+        telegram_polled: true,
+        telegram_command: "cosim",
+        telegram_lock_acquired: true,
+        telegram_lock_id: "telegram-bot-lock-cosim"
+      }
+    })
+  })[0].json;
+
+  assert.equal(payload.note_a, "wiki/topics/software-development");
+  assert.equal(payload.note_b, "wiki/concepts/patrones-de-diseno-de-software");
+  const decoded = JSON.parse(Buffer.from(payload.payload_b64, "base64").toString("utf8"));
+  assert.equal(decoded.note_a, "wiki/topics/software-development");
+  assert.equal(decoded.note_b, "wiki/concepts/patrones-de-diseno-de-software");
+});
+
 test("lint and health-check emit structured maintenance results", async () => {
   const vault = await createVault();
 

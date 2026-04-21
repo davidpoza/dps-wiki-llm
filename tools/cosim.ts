@@ -22,7 +22,7 @@ type CosimInput = Record<string, unknown>;
 type UnitSummary = { path: string; title: string; doc_type: string; text_preview: string };
 
 type CosimOutput = TelegramBaseFields & {
-  status: "cosim_completed" | "cosim_no_index" | "cosim_not_found";
+  status: "cosim_completed" | "cosim_no_index" | "cosim_not_found" | "cosim_usage_error";
   note_a: string;
   note_b: string;
   similarity: number | null;
@@ -41,6 +41,23 @@ type CosimOutput = TelegramBaseFields & {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+class CosimUsageError extends Error {
+  context: Omit<ReturnType<typeof telegramContextFromInput>, "note_a" | "note_b" | "telegram_text">;
+
+  constructor(context: ReturnType<typeof telegramContextFromInput>) {
+    super("Uso: /cosim <nota-a> <nota-b>  (slug o path relativo)");
+    this.context = {
+      telegram_chat_id: context.telegram_chat_id,
+      telegram_message_id: context.telegram_message_id,
+      telegram_update_id: context.telegram_update_id,
+      telegram_polled: context.telegram_polled,
+      telegram_command: context.telegram_command,
+      telegram_lock_acquired: context.telegram_lock_acquired,
+      telegram_lock_id: context.telegram_lock_id
+    };
+  }
 }
 
 function stripCommand(text: string): string {
@@ -69,9 +86,10 @@ function resolveUnit(
   return bySlug.get(slug) ?? null;
 }
 
-function normalizeInput(input: CosimInput): {
-  note_a: string;
-  note_b: string;
+function telegramContextFromInput(input: CosimInput): {
+  note_a: string | null;
+  note_b: string | null;
+  telegram_text: string;
   telegram_chat_id: unknown;
   telegram_message_id: unknown;
   telegram_update_id: unknown;
@@ -90,7 +108,20 @@ function normalizeInput(input: CosimInput): {
   const telegramChatId =
     telegramChat?.id !== undefined ? String(telegramChat.id) : null;
   const telegramText =
-    typeof telegramMessage?.text === "string" ? telegramMessage.text.trim() : "";
+    (typeof telegramMessage?.text === "string" ? telegramMessage.text.trim() : "") ||
+    (typeof telegramMessage?.caption === "string" ? telegramMessage.caption.trim() : "");
+  const noteA =
+    typeof input.note_a === "string"
+      ? input.note_a.trim()
+      : typeof body.note_a === "string"
+        ? body.note_a.trim()
+        : null;
+  const noteB =
+    typeof input.note_b === "string"
+      ? input.note_b.trim()
+      : typeof body.note_b === "string"
+        ? body.note_b.trim()
+        : null;
   const allowedTelegramChatId = String(process.env.TELEGRAM_CHAT_ID || "").trim();
 
   if (
@@ -101,16 +132,10 @@ function normalizeInput(input: CosimInput): {
     throw new Error(`Unauthorized Telegram chat id: ${telegramChatId}`);
   }
 
-  const stripped = telegramText ? stripCommand(telegramText) : "";
-  const tokens = stripped.split(/\s+/).filter(Boolean);
-
-  if (tokens.length < 2) {
-    throw new Error("Uso: /cosim <nota-a> <nota-b>  (slug o path relativo)");
-  }
-
   return {
-    note_a: tokens[0],
-    note_b: tokens[1],
+    note_a: noteA,
+    note_b: noteB,
+    telegram_text: telegramText,
     telegram_chat_id: telegramChatId,
     telegram_message_id: telegramMessage?.message_id ?? null,
     telegram_update_id: body.update_id ?? null,
@@ -121,6 +146,40 @@ function normalizeInput(input: CosimInput): {
   };
 }
 
+function normalizeInput(input: CosimInput): {
+  note_a: string;
+  note_b: string;
+  telegram_chat_id: unknown;
+  telegram_message_id: unknown;
+  telegram_update_id: unknown;
+  telegram_polled: boolean;
+  telegram_command: unknown;
+  telegram_lock_acquired: boolean;
+  telegram_lock_id: unknown;
+} {
+  const context = telegramContextFromInput(input);
+  const tokens =
+    context.note_a && context.note_b
+      ? [context.note_a, context.note_b]
+      : (context.telegram_text ? stripCommand(context.telegram_text) : "").split(/\s+/).filter(Boolean);
+
+  if (tokens.length < 2) {
+    throw new CosimUsageError(context);
+  }
+
+  return {
+    note_a: tokens[0],
+    note_b: tokens[1],
+    telegram_chat_id: context.telegram_chat_id,
+    telegram_message_id: context.telegram_message_id,
+    telegram_update_id: context.telegram_update_id,
+    telegram_polled: context.telegram_polled,
+    telegram_command: context.telegram_command,
+    telegram_lock_acquired: context.telegram_lock_acquired,
+    telegram_lock_id: context.telegram_lock_id
+  };
+}
+
 function buildNotification(
   telegramChatId: unknown,
   result: Pick<CosimOutput, "status" | "note_a" | "note_b" | "similarity" | "unit_a" | "unit_b" | "not_found">
@@ -128,7 +187,9 @@ function buildNotification(
   const { token, chatId, missingConfig } = resolveTelegramConfig(telegramChatId);
 
   let text: string;
-  if (result.status === "cosim_no_index") {
+  if (result.status === "cosim_usage_error") {
+    text = "Uso: /cosim <nota-a> <nota-b>  (slug o path relativo)";
+  } else if (result.status === "cosim_no_index") {
     text = "cosim: índice semántico no disponible. Ejecuta /embedindex primero.";
   } else if (result.status === "cosim_not_found") {
     text = [
@@ -172,10 +233,49 @@ async function main(): Promise<void> {
   log.info({ phase: "startup" }, "cosim: started");
 
   try {
-    const input = await readJsonInput<CosimInput>(args.input);
+    const input =
+      args._.length >= 2
+        ? ({ note_a: args._[0], note_b: args._[1] } satisfies CosimInput)
+        : await readJsonInput<CosimInput>(args.input);
     lockContext = input;
 
-    const normalized = normalizeInput(input);
+    let normalized: ReturnType<typeof normalizeInput>;
+    try {
+      normalized = normalizeInput(input);
+    } catch (error) {
+      if (!(error instanceof CosimUsageError)) throw error;
+
+      lockContext = error.context;
+      log.warn({ phase: "usage-error" }, "cosim: invalid usage");
+      const notification = buildNotification(error.context.telegram_chat_id, {
+        status: "cosim_usage_error",
+        note_a: "",
+        note_b: "",
+        similarity: null,
+        unit_a: null,
+        unit_b: null,
+        not_found: []
+      });
+      const output: CosimOutput = {
+        status: "cosim_usage_error",
+        note_a: "",
+        note_b: "",
+        similarity: null,
+        unit_a: null,
+        unit_b: null,
+        not_found: [],
+        telegram_chat_id: error.context.telegram_chat_id,
+        telegram_message_id: error.context.telegram_message_id,
+        telegram_update_id: error.context.telegram_update_id,
+        telegram_polled: error.context.telegram_polled,
+        telegram_command: error.context.telegram_command,
+        telegram_lock_acquired: error.context.telegram_lock_acquired,
+        telegram_lock_id: error.context.telegram_lock_id,
+        ...notification
+      };
+      writeJsonStdout(output, args.pretty);
+      return;
+    }
     lockContext = normalized;
 
     log.info(
