@@ -13,6 +13,7 @@ import {
   writeTextFile
 } from "./lib/fs-utils.js";
 import { analyzeWikiGraph, loadWikiDocs, extractWikiLinks } from "./lib/wiki-inspect.js";
+import { parseSections } from "./lib/markdown.js";
 import { loadManifest, loadAllEmbeddingUnits, cosineSimilarity, manifestPath, normalizeTextForEmbedding } from "./lib/semantic-index.js";
 import { chatCompletion, chatText, extractJson } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
@@ -1468,10 +1469,18 @@ async function main(): Promise<void> {
     }
 
     // ── Summary position check ────────────────────────────────────────────────
-    // Summary must be the first ## section. Collect misplaced ones for auto-fix.
+    // Summary must appear immediately after the # Title, before any preamble
+    // content or other ## sections.  Two failure cases:
+    //   A) summaryIdx > 0 — other ## sections appear before Summary
+    //   B) summaryIdx === 0 but preamble is non-empty — body content sits between
+    //      the H1 and the Summary heading (e.g. tables, H3 subsections)
     if (hasSummary) {
       const summaryIdx = doc.sections.findIndex((s) => s.name.toLowerCase() === "summary");
-      if (summaryIdx > 0) {
+      const { body } = { body: doc.body ?? doc.raw.replace(/^---[\s\S]*?---\n?/, "") };
+      const parsed = parseSections(body);
+      const hasPreamble = parsed.preamble.trim().length > 0;
+
+      if (summaryIdx > 0 || hasPreamble) {
         summaryMisplaced.push(doc);
       }
     }

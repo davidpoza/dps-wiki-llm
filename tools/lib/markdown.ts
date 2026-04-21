@@ -248,17 +248,29 @@ export function parseSections(body: string): ParsedMarkdown {
 /**
  * Serialize a parsed note body back into markdown.
  *
+ * Summary section placement rule: ## Summary must appear immediately after
+ * the # Title, before any preamble content or other ## sections.  When a
+ * Summary section is present it is rendered first, then the preamble, then
+ * the remaining sections in their original order.
+ *
  * @param {{ title: string, preamble: string, sections: Array<{ name: string, content: string }> }} param0
  * @returns {string}
  */
 function stringifySections({ title, preamble, sections }: ParsedMarkdown): string {
   const chunks = [`# ${title}`];
 
+  const summarySection = sections.find((s) => s.name.toLowerCase() === "summary");
+  const otherSections = sections.filter((s) => s.name.toLowerCase() !== "summary");
+
+  if (summarySection) {
+    chunks.push("", `## ${summarySection.name}`, summarySection.content.trim());
+  }
+
   if (preamble) {
     chunks.push("", preamble.trim());
   }
 
-  for (const section of sections) {
+  for (const section of otherSections) {
     chunks.push("", `## ${section.name}`, section.content.trim());
   }
 
@@ -394,15 +406,6 @@ export function renderMarkdown(
         relatedSection.content = bullets.slice(0, topicRelatedMax).join("\n");
       }
     }
-  }
-
-  // Enforce Summary as the first ## section when present.
-  // This applies regardless of where the section was inserted or pre-existed,
-  // so any apply-update call automatically corrects a misplaced Summary.
-  const summaryIdx = sections.findIndex((s) => s.name.toLowerCase() === "summary");
-  if (summaryIdx > 0) {
-    const [summarySection] = sections.splice(summaryIdx, 1);
-    sections.unshift(summarySection);
   }
 
   const markdownBody = stringifySections({
