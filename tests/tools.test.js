@@ -1837,6 +1837,10 @@ test("health-check reports semantic findings and writes report artifacts", async
   assert.ok(issueTypes.includes("stale_low_confidence_note"));
   assert.ok(issueTypes.includes("topic_missing_structure"));
   assert.ok(issueTypes.includes("missing_page"));
+  const missingPageFinding = health.json.findings.find((finding) => finding.issue_type === "missing_page");
+  assert.match(missingPageFinding.description, /\[\[Missing Health Target\]\]/);
+  assert.match(missingPageFinding.recommended_action, /\[\[Missing Health Target\]\]/);
+  assert.match(missingPageFinding.recommended_action, /wiki\/concepts\/missing-link\.md/);
   assert.deepEqual(health.json.missing_pages, [
     {
       target: "Missing Health Target",

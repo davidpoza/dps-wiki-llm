@@ -1115,8 +1115,8 @@ async function main(): Promise<void> {
         "warning",
         item.referenced_from[0],
         "missing_page",
-        `The knowledge base references a missing page target: ${item.target}.`,
-        "Create the missing page if the concept is real, or remove the unresolved link.",
+        `The knowledge base references missing page target [[${item.target}]] from ${item.referenced_from.join(", ")}.`,
+        `Resolve [[${item.target}]] in ${item.referenced_from.join(", ")}: create that page if the concept is real, or remove/correct the unresolved link.`,
         false,
         { target: item.target, referenced_from: item.referenced_from }
       )
