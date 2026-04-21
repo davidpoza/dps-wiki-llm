@@ -221,38 +221,7 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // Step 3: compute content fingerprint.
-    const hash = hashText(normalized);
-    const existing = manifest.items[noteId];
-
-    // Step 4: hash-diff — skip unchanged documents unless a full rebuild is requested.
-    if (!forceRebuild && existing?.hash === hash) {
-      log.debug(
-        { phase: "skip-unchanged", id: noteId, hash },
-        "embed-index: content unchanged — skipping"
-      );
-      skipped++;
-      continue;
-    }
-
-    const reason = existing ? "content-changed" : "new-document";
-
-    log.info(
-      {
-        phase: "embed-start",
-        id: noteId,
-        reason,
-        prev_hash: existing?.hash ?? null,
-        new_hash: hash,
-        normalized_chars: normalized.length,
-        text_preview: normalized.slice(0, 120)
-      },
-      "embed-index: embedding document"
-    );
-
-    const embedStart = Date.now();
-
-    // Step 5: embed and persist the unit.
+    // Step 3: determine the embed input.
     // When the document exceeds maxInputChars, prefer the Summary section (if
     // present) over a raw truncation — a curated summary produces a better
     // semantic representation than an arbitrary prefix of the full text.
@@ -276,10 +245,41 @@ async function main(): Promise<void> {
       }
     }
 
+    // Step 4: compute content fingerprint on the embed input — not on the full
+    // normalised text.  This ensures that structural changes which don't affect
+    // the embedded content (Summary repositioning, Related link additions,
+    // frontmatter date updates) never trigger unnecessary re-embedding.
+    const hash = hashText(embedInput);
+    const existing = manifest.items[noteId];
+
+    // Step 5: hash-diff — skip unchanged documents unless a full rebuild is requested.
+    if (!forceRebuild && existing?.hash === hash) {
+      log.debug(
+        { phase: "skip-unchanged", id: noteId, hash, embed_source: embedSource },
+        "embed-index: content unchanged — skipping"
+      );
+      skipped++;
+      continue;
+    }
+
+    const reason = existing ? "content-changed" : "new-document";
+
     log.info(
-      { phase: "embed-input", id: noteId, embed_source: embedSource, input_chars: embedInput.length },
-      "embed-index: embedding input selected"
+      {
+        phase: "embed-start",
+        id: noteId,
+        reason,
+        embed_source: embedSource,
+        prev_hash: existing?.hash ?? null,
+        new_hash: hash,
+        normalized_chars: normalized.length,
+        input_chars: embedInput.length,
+        text_preview: embedInput.slice(0, 120)
+      },
+      "embed-index: embedding document"
     );
+
+    const embedStart = Date.now();
 
     const [embedding] = await provider.embed([embedInput]);
 
