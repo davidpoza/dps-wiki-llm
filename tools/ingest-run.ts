@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
+import fs from "node:fs/promises";
+import path from "node:path";
+
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
 import { resolveVaultRoot, resolveWithinRoot, pathExists, loadJsonFile, writeJsonFile } from "./lib/fs-utils.js";
-import { manifestPath } from "./lib/semantic-index.js";
+import { manifestPath, normalizeTextForEmbedding, extractSummarySection } from "./lib/semantic-index.js";
 import { getGitHead, gitResetHard } from "./lib/git.js";
 import { PipelineTx } from "./lib/pipeline-tx.js";
 import { SYSTEM_CONFIG } from "./config.js";
@@ -70,6 +73,8 @@ type IngestRunOutput = TelegramBaseFields & {
   llm_reindex_result: ReindexResult | null;
   llm_commit_result: CommitResult | null;
   embed_index_result: Record<string, unknown>;
+  summary_applied: string[];
+  enrich_result: { updated: string[]; skipped: string[] } | null;
   llm_ingest_meta: LlmMeta;
   telegram_chat_id: unknown;
   telegram_message_id: unknown;
@@ -199,6 +204,49 @@ function usageSummary(meta: LlmMeta): Record<string, unknown> {
         total_tokens: usage.total_tokens ?? null
       }
     : {};
+}
+
+/**
+ * Call the LLM to produce a concise Summary for a wiki note.
+ * Returns null if the LLM fails or returns empty text.
+ */
+async function generateSummaryForNote(
+  rawContent: string,
+  title: string,
+  log: ReturnType<typeof createLogger>
+): Promise<string | null> {
+  const body = rawContent.replace(/^---[\s\S]*?---\n?/, "").trim();
+  const maxBody = 6000;
+  const truncatedBody = body.length > maxBody ? `${body.slice(0, maxBody)}\n...[truncated]` : body;
+
+  const messages = [
+    {
+      role: "system" as const,
+      content: `You are a knowledge base curator. Write a concise, information-dense summary of the provided note.
+Rules:
+- Plain prose only — no headings, no bullet points, no markdown.
+- Maximum ${SYSTEM_CONFIG.semantic.summaryMaxLength} characters.
+- Capture the key concepts, facts, and relationships so the summary can stand in for the full note in semantic search.
+- Do not start with filler phrases like "This note discusses..." — begin directly with the content.
+- Respond with only the summary text, nothing else.`
+    },
+    {
+      role: "user" as const,
+      content: `Note title: ${title}\n\n${truncatedBody}`
+    }
+  ];
+
+  try {
+    const response = await chatCompletion({ messages, temperature: 0.2 });
+    const text = chatText(response, "generate-summary").trim();
+    return text.length > 0 ? text.slice(0, SYSTEM_CONFIG.semantic.summaryMaxLength) : null;
+  } catch (err) {
+    log.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      "ingest-run: [summary-gen] LLM call failed"
+    );
+    return null;
+  }
 }
 
 async function main(): Promise<void> {
@@ -699,6 +747,101 @@ async function main(): Promise<void> {
       );
     }
 
+    // ── 12.5. generate Summary for long notes ────────────────────────────────
+    // Runs before embed-index so that the Summary content is included in the
+    // semantic vectors rather than a truncated prefix of the full text.
+    // Only applied to wiki/concepts/ and wiki/sources/ that exceed maxInputChars
+    // and don't already have a ## Summary section.
+
+    const summaryTargetPaths = unique([
+      ...baselineMutationResult.created,
+      ...(llmMutationResult?.created ?? []),
+      ...(llmMutationResult?.updated ?? [])
+    ]).filter((p) => p.startsWith("wiki/concepts/") || p.startsWith("wiki/sources/"));
+
+    const summaryApplied: string[] = [];
+
+    if (summaryTargetPaths.length > 0) {
+      log.info(
+        { phase: "summary-gen/start", candidates: summaryTargetPaths.length },
+        "ingest-run: [summary-gen] checking notes for Summary generation"
+      );
+
+      for (const relPath of summaryTargetPaths) {
+        const absPath = resolveWithinRoot(vaultRoot, relPath);
+        let rawContent: string;
+
+        try {
+          rawContent = await fs.readFile(absPath, "utf8");
+        } catch {
+          continue;
+        }
+
+        const normalized = normalizeTextForEmbedding(rawContent);
+        if (normalized.length <= SYSTEM_CONFIG.semantic.maxInputChars) continue;
+        if (extractSummarySection(rawContent)) continue;
+
+        const titleMatch = rawContent.match(/^# (.+)/m);
+        const noteTitle = titleMatch ? titleMatch[1].trim() : path.basename(relPath, ".md");
+
+        log.info(
+          { phase: "summary-gen/generate", path: relPath, normalized_chars: normalized.length },
+          "ingest-run: [summary-gen] generating Summary via LLM"
+        );
+
+        const summaryText = await generateSummaryForNote(rawContent, noteTitle, log);
+        if (!summaryText) continue;
+
+        const summaryPlan: MutationPlan = {
+          plan_id: `ingest-summary-${path.basename(relPath, ".md")}-${Date.now()}`,
+          operation: "ingest",
+          summary: `ingest: add ## Summary to ${relPath}`,
+          source_refs: [],
+          page_actions: [{
+            path: relPath,
+            action: "update" as const,
+            change_type: "summary_added",
+            payload: { sections: { Summary: summaryText } }
+          }],
+          index_updates: [],
+          post_actions: { reindex: false, commit: false }
+        };
+
+        try {
+          await runToolJson("apply-update", { vault: args.vault, input: summaryPlan });
+          summaryApplied.push(relPath);
+          log.info(
+            { phase: "summary-gen/applied", path: relPath, summary_chars: summaryText.length },
+            "ingest-run: [summary-gen] Summary applied"
+          );
+        } catch (err) {
+          log.warn(
+            { phase: "summary-gen/error", path: relPath, err: err instanceof Error ? err.message : String(err) },
+            "ingest-run: [summary-gen] apply-update failed — skipping"
+          );
+        }
+      }
+
+      if (summaryApplied.length > 0) {
+        await runToolJson("reindex", { vault: args.vault });
+        const summaryCommitInput: CommitInput = {
+          operation: "ingest",
+          summary: `ingest: add Summary section to ${summaryApplied.length} note(s)`,
+          source_refs: [],
+          affected_notes: summaryApplied,
+          paths_to_stage: [...summaryApplied, SYSTEM_CONFIG.paths.dbPath],
+          feedback_record_ref: null,
+          mutation_result_ref: null,
+          commit_message: `ingest: add Summary to ${summaryApplied.length} note(s) for ${truncate(sourcePayload.title || "source", 40)}`
+        };
+        await runToolJson("commit", { vault: args.vault, input: summaryCommitInput });
+        log.info(
+          { phase: "summary-gen/done", applied: summaryApplied.length },
+          "ingest-run: [summary-gen] Summary sections committed"
+        );
+      }
+    }
+
     // ── 13. embed-index (incremental) ────────────────────────────────────────
 
     log.info({ phase: "embed-index" }, "ingest-run: [embed-index] updating semantic index");
@@ -717,6 +860,62 @@ async function main(): Promise<void> {
       },
       "ingest-run: [embed-index] semantic index updated"
     );
+
+    // ── 13.5. enrich Related links ───────────────────────────────────────────
+    // Runs after embed-index so the fresh semantic vectors are available.
+    // Targets all notes created/updated in this ingest run.
+
+    const enrichTargetPaths = unique([
+      ...baselineMutationResult.created,
+      ...(llmMutationResult?.created ?? []),
+      ...(llmMutationResult?.updated ?? []),
+      ...summaryApplied
+    ]);
+
+    let enrichResult: { updated: string[]; skipped: string[] } | null = null;
+
+    if (enrichTargetPaths.length > 0) {
+      log.info(
+        { phase: "enrich-links/start", paths: enrichTargetPaths.length },
+        "ingest-run: [enrich-links] discovering Related links for ingested notes"
+      );
+
+      try {
+        enrichResult = await runToolJson<{ status: string; updated: string[]; skipped: string[] }>(
+          "enrich-links",
+          { vault: args.vault, args: ["--paths", ...enrichTargetPaths] }
+        );
+
+        log.info(
+          { phase: "enrich-links/done", updated: enrichResult.updated.length, skipped: enrichResult.skipped.length },
+          "ingest-run: [enrich-links] Related link discovery complete"
+        );
+
+        if (enrichResult.updated.length > 0) {
+          await runToolJson("reindex", { vault: args.vault });
+          const enrichCommitInput: CommitInput = {
+            operation: "ingest",
+            summary: `ingest: enrich Related links in ${enrichResult.updated.length} note(s)`,
+            source_refs: [],
+            affected_notes: enrichResult.updated,
+            paths_to_stage: [...enrichResult.updated, SYSTEM_CONFIG.paths.dbPath],
+            feedback_record_ref: null,
+            mutation_result_ref: null,
+            commit_message: `ingest: enrich Related links for ${truncate(sourcePayload.title || "source", 50)}`
+          };
+          await runToolJson("commit", { vault: args.vault, input: enrichCommitInput });
+          log.info(
+            { phase: "enrich-links/committed", updated: enrichResult.updated.length },
+            "ingest-run: [enrich-links] Related links committed"
+          );
+        }
+      } catch (err) {
+        log.warn(
+          { phase: "enrich-links/error", err: err instanceof Error ? err.message : String(err) },
+          "ingest-run: [enrich-links] failed — skipping (non-fatal)"
+        );
+      }
+    }
 
     // ── 14. gen-home ─────────────────────────────────────────────────────────
 
@@ -770,6 +969,8 @@ async function main(): Promise<void> {
       llm_reindex_result: llmReindexResult,
       llm_commit_result: llmCommitResult,
       embed_index_result: embedIndexResult,
+      summary_applied: summaryApplied,
+      enrich_result: enrichResult,
       llm_ingest_meta: ingestPlanMeta,
       telegram_chat_id: rawEvent.telegram_chat_id ?? null,
       telegram_message_id: rawEvent.telegram_message_id ?? null,
@@ -798,7 +999,9 @@ async function main(): Promise<void> {
         guardrail_rejections: rejections.length,
         baseline_commit_sha: baselineCommitResult.commit_sha ?? null,
         llm_commit_sha: llmCommitResult?.commit_sha ?? null,
-        embed_indexed: embedIndexResult.embedded ?? null
+        embed_indexed: embedIndexResult.embedded ?? null,
+        summary_applied: summaryApplied.length,
+        enrich_updated: enrichResult?.updated.length ?? 0
       },
       "ingest-run: completed"
     );
