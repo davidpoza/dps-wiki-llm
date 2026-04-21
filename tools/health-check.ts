@@ -19,6 +19,7 @@ import { runToolJson } from "./lib/run-tool.js";
 import { hybridSearch } from "./lib/hybrid-search-fn.js";
 import { semanticSearch } from "./lib/semantic-search-fn.js";
 import { ftsSearch } from "./lib/fts-search-fn.js";
+import { getGitHead } from "./lib/git.js";
 import { SYSTEM_CONFIG, resolvedConceptTopicCandidateThreshold } from "./config.js";
 import { buildHealthCheckNotification } from "./services/notifications/telegram.js";
 import { generateRenamePlan } from "./rename-plan.js";
@@ -895,6 +896,16 @@ async function main(): Promise<void> {
   const vaultRoot = resolveVaultRoot(args.vault);
 
   log.info({ phase: "startup", vault_root: vaultRoot }, "health-check: started");
+  log.info({ phase: "startup-reindex" }, "health-check: [startup-reindex] rebuilding search index before analysis");
+  await runToolJson("reindex", { vault: vaultRoot });
+  log.info({ phase: "startup-reindex" }, "health-check: [startup-reindex] index rebuilt");
+  const canApplyMutations = args.write && (await getGitHead(vaultRoot)) !== null;
+  if (!canApplyMutations) {
+    log.info(
+      { phase: "mutation-mode", write: args.write },
+      "health-check: [mutation-mode] running without automatic wiki mutations"
+    );
+  }
 
   const excludeProjects = (d: WikiDoc[]): WikiDoc[] =>
     d.filter((doc) => !doc.relativePath.startsWith("wiki/projects/"));
@@ -1142,7 +1153,7 @@ async function main(): Promise<void> {
     "health-check: [generate-summary] starting Summary generation for long notes"
   );
 
-  const summaryApplied = summaryNeeded.length > 0
+  const summaryApplied = canApplyMutations && summaryNeeded.length > 0
     ? await applySummaryFixes(summaryNeeded, vaultRoot, log)
     : [];
 
@@ -1184,6 +1195,21 @@ async function main(): Promise<void> {
   const repositionApplied: string[] = [];
 
   for (const doc of summaryMisplaced) {
+    if (!canApplyMutations) {
+      findings.push(
+        buildFinding(
+          "warning",
+          doc.relativePath,
+          "summary_wrong_position",
+          "The ## Summary section is not the first section of the note.",
+          "Move ## Summary to be the first ## section after the H1 heading.",
+          false,
+          { auto_fixed: false }
+        )
+      );
+      continue;
+    }
+
     const plan: MutationPlan = {
       plan_id: `health-check-reposition-summary-${path.basename(doc.relativePath, ".md")}-${Date.now()}`,
       operation: "health-check",
@@ -1247,7 +1273,7 @@ async function main(): Promise<void> {
 
   log.info({ phase: "sanitize-related/start" }, "health-check: [sanitize-related] starting structural cleanup");
 
-  const sanitized = await sanitizeRelatedSections(docs, graph, vaultRoot, log);
+  const sanitized = canApplyMutations ? await sanitizeRelatedSections(docs, graph, vaultRoot, log) : [];
 
   if (sanitized.length > 0) {
     log.info({ phase: "sanitize-related/done", docs_affected: sanitized.length }, "health-check: [sanitize-related] done, reloading");
@@ -1263,7 +1289,7 @@ async function main(): Promise<void> {
 
   let appliedPruning: Pick<MutationResult, "created" | "updated" | "skipped"> | null = null;
 
-  if (weakLinks.length > 0) {
+  if (canApplyMutations && weakLinks.length > 0) {
     const pruneResult = await applyLinkPruning(weakLinks, vaultRoot, log);
     appliedPruning = {
       created: pruneResult.created,
@@ -1389,7 +1415,7 @@ async function main(): Promise<void> {
 
   let appliedNewLinks: Pick<MutationResult, "created" | "updated" | "skipped"> | null = null;
 
-  if (discoveredLinks.length > 0) {
+  if (canApplyMutations && discoveredLinks.length > 0) {
     const mutationResult = await applyDiscoveredLinks(discoveredLinks, vaultRoot, log);
     appliedNewLinks = {
       created: mutationResult.created,
