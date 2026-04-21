@@ -325,6 +325,10 @@ export function parseAndGuardrailPlan(
       reject(rejections, action, "page path outside allowed wiki areas", log);
       continue;
     }
+    if (action.action === "create" && actionPath.startsWith("wiki/topics/")) {
+      reject(rejections, action, "auto-create of wiki/topics/ notes is forbidden — topics are created exclusively by the user", log);
+      continue;
+    }
     if (
       action.action !== "noop" &&
       !hasWikiContextSupport(action, allowedSupportingLinks)

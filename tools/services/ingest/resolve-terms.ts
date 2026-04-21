@@ -97,9 +97,10 @@ export async function resolveTerms(
   for (const action of plan.page_actions) {
 
     // ── 1. Block auto-create of topics ──────────────────────────────────────
-    if (action.doc_type === "topic" && action.action === "create") {
+    // Guard on BOTH doc_type and path prefix to catch mismatched doc_type values.
+    if (action.action === "create" && (action.doc_type === "topic" || action.path.startsWith("wiki/topics/"))) {
       log.warn(
-        { path: action.path },
+        { path: action.path, doc_type: action.doc_type },
         "resolve-terms: blocking auto-create of topic — converting to noop"
       );
       resolvedActions.push({ ...action, action: "noop" });

@@ -202,6 +202,13 @@ async function applyPageAction({
     return;
   }
 
+  // Hard guard: topics may never be auto-created — only the user creates them manually.
+  if (action.action === "create" && action.path.startsWith("wiki/topics/")) {
+    throw new Error(
+      `Refusing to auto-create topic "${action.path}": wiki/topics/ notes are created exclusively by the user.`
+    );
+  }
+
   // Validate slug format: note filenames must be lowercase English kebab-case.
   if (action.action === "create") {
     const slug = action.path.split("/").pop()?.replace(/\.md$/, "") ?? "";
