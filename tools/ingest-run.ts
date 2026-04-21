@@ -917,17 +917,7 @@ async function main(): Promise<void> {
       }
     }
 
-    // ── 14. gen-home ─────────────────────────────────────────────────────────
-
-    log.info({ phase: "gen-home" }, "ingest-run: [gen-home] regenerating HOME.md");
-
-    await runToolJson<Record<string, unknown>>("gen-home", {
-      vault: args.vault
-    });
-
-    log.info({ phase: "gen-home" }, "ingest-run: [gen-home] HOME.md updated");
-
-    // ── 15. build output ──────────────────────────────────────────────────────
+    // ── 14. build output ──────────────────────────────────────────────────────
 
     const source = baselinePlanOutput.source_payload;
     const status = llmMutationResult
