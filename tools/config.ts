@@ -180,7 +180,9 @@ export const SYSTEM_CONFIG = {
     topK: 8,
     model: "Xenova/multilingual-e5-small",
     batchSize: 16,
-    maxInputChars: 4000
+    maxInputChars: 4000,
+    /** Max chars of the Summary section content used for embedding (when note exceeds maxInputChars). */
+    summaryMaxLength: 1000
   }
 } as const;
 

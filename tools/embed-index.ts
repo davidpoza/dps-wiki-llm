@@ -50,6 +50,7 @@ import {
   saveManifest,
   saveEmbeddingUnit,
   normalizeTextForEmbedding,
+  extractSummarySection,
   hashText,
   type SemanticManifest,
   type EmbeddingUnit
@@ -252,12 +253,35 @@ async function main(): Promise<void> {
     const embedStart = Date.now();
 
     // Step 5: embed and persist the unit.
-    // Truncate to maxInputChars to bound WASM heap growth in ONNX Runtime —
-    // the WASM linear memory ratchets upward with sequence length and is never
-    // reclaimed, so unbounded inputs cause OOM on large corpora.
-    // The detailed per-inference log is emitted inside local-transformers-provider.
-    const truncated = normalized.slice(0, SYSTEM_CONFIG.semantic.maxInputChars);
-    const [embedding] = await provider.embed([truncated]);
+    // When the document exceeds maxInputChars, prefer the Summary section (if
+    // present) over a raw truncation — a curated summary produces a better
+    // semantic representation than an arbitrary prefix of the full text.
+    // Truncation is kept as the fallback to bound WASM heap growth in ONNX
+    // Runtime (linear memory ratchets upward with sequence length and is never
+    // reclaimed, so unbounded inputs cause OOM on large corpora).
+    let embedInput: string;
+    let embedSource: "full" | "summary" | "truncated";
+
+    if (normalized.length <= SYSTEM_CONFIG.semantic.maxInputChars) {
+      embedInput = normalized;
+      embedSource = "full";
+    } else {
+      const summary = extractSummarySection(raw);
+      if (summary) {
+        embedInput = summary.slice(0, SYSTEM_CONFIG.semantic.summaryMaxLength);
+        embedSource = "summary";
+      } else {
+        embedInput = normalized.slice(0, SYSTEM_CONFIG.semantic.maxInputChars);
+        embedSource = "truncated";
+      }
+    }
+
+    log.info(
+      { phase: "embed-input", id: noteId, embed_source: embedSource, input_chars: embedInput.length },
+      "embed-index: embedding input selected"
+    );
+
+    const [embedding] = await provider.embed([embedInput]);
 
     const embedDuration = Date.now() - embedStart;
     const title = parseFrontmatterTitle(raw) || path.basename(absPath, ".md");

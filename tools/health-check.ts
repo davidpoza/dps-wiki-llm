@@ -13,7 +13,7 @@ import {
   writeTextFile
 } from "./lib/fs-utils.js";
 import { analyzeWikiGraph, loadWikiDocs, extractWikiLinks } from "./lib/wiki-inspect.js";
-import { loadManifest, loadAllEmbeddingUnits, cosineSimilarity, manifestPath } from "./lib/semantic-index.js";
+import { loadManifest, loadAllEmbeddingUnits, cosineSimilarity, manifestPath, normalizeTextForEmbedding } from "./lib/semantic-index.js";
 import { chatCompletion, chatText, extractJson } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { hybridSearch } from "./lib/hybrid-search-fn.js";
@@ -1332,6 +1332,28 @@ async function main(): Promise<void> {
           "topic_missing_structure",
           "The topic note does not list key concepts or key entities.",
           "Add key links so the topic works as a hub rather than a loose summary."
+        )
+      );
+    }
+
+    // ── missing Summary check ─────────────────────────────────────────────────
+    // Notes whose normalised text exceeds maxInputChars cannot be fully
+    // represented by the embedding model.  A ## Summary section acts as a
+    // curated, length-bounded representation used during semantic indexing.
+    const normalizedForCheck = normalizeTextForEmbedding(doc.raw);
+    if (
+      normalizedForCheck.length > SYSTEM_CONFIG.semantic.maxInputChars &&
+      !sectionHasContent(doc, "Summary")
+    ) {
+      findings.push(
+        buildFinding(
+          "warning",
+          doc.relativePath,
+          "missing_summary",
+          `The note's normalised text (${normalizedForCheck.length} chars) exceeds the embedding limit (${SYSTEM_CONFIG.semantic.maxInputChars} chars) but has no ## Summary section. The embedding will be truncated, reducing semantic search quality.`,
+          `Add a ## Summary section (up to ${SYSTEM_CONFIG.semantic.summaryMaxLength} chars) with a concise description of the note's key content.`,
+          false,
+          { normalized_chars: normalizedForCheck.length, max_input_chars: SYSTEM_CONFIG.semantic.maxInputChars }
         )
       );
     }

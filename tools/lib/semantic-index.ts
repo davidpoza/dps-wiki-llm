@@ -350,6 +350,25 @@ export function normalizeTextForEmbedding(raw: string): string {
   return text;
 }
 
+/**
+ * Extract the plain-text content of a `## Summary` section from raw markdown.
+ *
+ * Returns `null` if no Summary section exists or if the section is empty.
+ * The extracted text is normalised (markup stripped, whitespace collapsed)
+ * so it can be used directly as embedding input.
+ *
+ * @param raw - Raw markdown file content.
+ * @returns Normalised summary text, or `null` if absent/empty.
+ */
+export function extractSummarySection(raw: string): string | null {
+  // Match ## Summary (case-insensitive) up to the next ## heading or end of string.
+  const match = raw.match(/^##+ *Summary\s*\n([\s\S]*?)(?=^##+ |\s*$)/im);
+  if (!match) return null;
+
+  const content = normalizeTextForEmbedding(match[1]);
+  return content.length > 0 ? content : null;
+}
+
 // ── Hash ─────────────────────────────────────────────────────────────────────
 
 /**
