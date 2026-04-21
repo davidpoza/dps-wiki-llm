@@ -1320,6 +1320,7 @@ async function main(): Promise<void> {
 
   const findings: MaintenanceFinding[] = [];
   const summaryNeeded: Array<{ doc: WikiDoc; normalizedChars: number }> = [];
+  const summaryMisplaced: WikiDoc[] = [];
 
   // ── per-doc checks ────────────────────────────────────────────────────────
 
@@ -1465,6 +1466,15 @@ async function main(): Promise<void> {
         );
       }
     }
+
+    // ── Summary position check ────────────────────────────────────────────────
+    // Summary must be the first ## section. Collect misplaced ones for auto-fix.
+    if (hasSummary) {
+      const summaryIdx = doc.sections.findIndex((s) => s.name.toLowerCase() === "summary");
+      if (summaryIdx > 0) {
+        summaryMisplaced.push(doc);
+      }
+    }
   }
 
   // ── concept-topic-candidate check ─────────────────────────────────────────
@@ -1553,6 +1563,77 @@ async function main(): Promise<void> {
     docs = excludeProjects(await loadWikiDocs(vaultRoot));
     graph = analyzeWikiGraph(docs);
   }
+
+  // ── reposition misplaced Summary sections ─────────────────────────────────
+  // A touch mutation (empty payload) is enough: renderMarkdown enforces
+  // Summary-first ordering on every render pass.
+
+  log.info(
+    { phase: "reposition-summary/start", candidates: summaryMisplaced.length },
+    "health-check: [reposition-summary] fixing misplaced Summary sections"
+  );
+
+  const repositionApplied: string[] = [];
+
+  for (const doc of summaryMisplaced) {
+    const plan: MutationPlan = {
+      plan_id: `health-check-reposition-summary-${path.basename(doc.relativePath, ".md")}-${Date.now()}`,
+      operation: "health-check",
+      summary: `health-check: reposition ## Summary to first section in ${doc.relativePath}`,
+      source_refs: [],
+      page_actions: [
+        {
+          path: doc.relativePath,
+          action: "update" as const,
+          change_type: "summary_repositioned",
+          payload: {}
+        }
+      ],
+      index_updates: [],
+      post_actions: { reindex: false, commit: false }
+    };
+
+    try {
+      await runToolJson("apply-update", { vault: vaultRoot, input: plan });
+      repositionApplied.push(doc.relativePath);
+      findings.push(
+        buildFinding(
+          "warning",
+          doc.relativePath,
+          "summary_wrong_position",
+          "The ## Summary section was not the first section of the note.",
+          "Automatically repositioned to the first ## section.",
+          true,
+          { auto_fixed: true }
+        )
+      );
+      log.info(
+        { phase: "reposition-summary/done", path: doc.relativePath },
+        "health-check: [reposition-summary] Summary repositioned"
+      );
+    } catch (err) {
+      findings.push(
+        buildFinding(
+          "warning",
+          doc.relativePath,
+          "summary_wrong_position",
+          "The ## Summary section is not the first section of the note.",
+          "Move ## Summary to be the first ## section after the H1 heading.",
+          false,
+          { auto_fixed: false }
+        )
+      );
+      log.warn(
+        { phase: "reposition-summary/error", path: doc.relativePath, err: err instanceof Error ? err.message : String(err) },
+        "health-check: [reposition-summary] apply-update failed — skipping"
+      );
+    }
+  }
+
+  log.info(
+    { phase: "reposition-summary/done", applied: repositionApplied.length },
+    "health-check: [reposition-summary] complete"
+  );
 
   // ── sanitize Related sections (structural cleanup, no embeddings needed) ───
 
@@ -1744,7 +1825,8 @@ async function main(): Promise<void> {
     ...synonymMergeResult.affected_paths,
     ...synonymMergeResult.merged_pairs.map((p) => p.canonical),
     ...synonymMergeResult.merged_pairs.map((p) => p.deleted),
-    ...summaryApplied
+    ...summaryApplied,
+    ...repositionApplied
   ];
   const uniqueAffected = [...new Set(allAffected)];
 
@@ -1757,13 +1839,13 @@ async function main(): Promise<void> {
     const newCount = countApplied(appliedNewLinks);
     const commitInput: CommitInput = {
       operation: "health-check",
-      summary: `Health check: ${fixCount} broken link(s) resolved, ${newCount} new link(s) added, ${synonymMergeResult.merges_applied} synonym merge(s), ${summaryApplied.length} summary section(s) generated`,
+      summary: `Health check: ${fixCount} broken link(s) resolved, ${newCount} new link(s) added, ${synonymMergeResult.merges_applied} synonym merge(s), ${summaryApplied.length} summary section(s) generated, ${repositionApplied.length} summary section(s) repositioned`,
       source_refs: [],
       affected_notes: uniqueAffected,
       paths_to_stage: [...uniqueAffected, SYSTEM_CONFIG.paths.dbPath],
       feedback_record_ref: null,
       mutation_result_ref: null,
-      commit_message: `health-check: ${fixCount} broken + ${newCount} new link(s) + ${synonymMergeResult.merges_applied} synonym merge(s) + ${summaryApplied.length} summary section(s) applied`
+      commit_message: `health-check: ${fixCount} broken + ${newCount} new link(s) + ${synonymMergeResult.merges_applied} synonym merge(s) + ${summaryApplied.length} summary generated + ${repositionApplied.length} summary repositioned`
     };
 
     log.info(

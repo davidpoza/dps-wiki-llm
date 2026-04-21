@@ -396,6 +396,15 @@ export function renderMarkdown(
     }
   }
 
+  // Enforce Summary as the first ## section when present.
+  // This applies regardless of where the section was inserted or pre-existed,
+  // so any apply-update call automatically corrects a misplaced Summary.
+  const summaryIdx = sections.findIndex((s) => s.name.toLowerCase() === "summary");
+  if (summaryIdx > 0) {
+    const [summarySection] = sections.splice(summaryIdx, 1);
+    sections.unshift(summarySection);
+  }
+
   const markdownBody = stringifySections({
     title,
     preamble: parsedBody.preamble,
