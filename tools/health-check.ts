@@ -1191,6 +1191,106 @@ async function applySynonymMerges(
   return result;
 }
 
+/**
+ * Call the LLM to produce a concise Summary for a wiki note.
+ * The prompt is given the full note body and asked to return only the summary text.
+ */
+async function generateSummaryText(doc: WikiDoc): Promise<string | null> {
+  const body = doc.raw.replace(/^---[\s\S]*?---\n?/, "").trim();
+  const maxBody = 6000; // send at most 6000 chars to the LLM to keep costs bounded
+  const truncatedBody = body.length > maxBody ? body.slice(0, maxBody) + "\n...[truncated]" : body;
+
+  const messages = [
+    {
+      role: "system" as const,
+      content: `You are a knowledge base curator. Write a concise, information-dense summary of the provided note.
+Rules:
+- Plain prose only — no headings, no bullet points, no markdown.
+- Maximum ${SYSTEM_CONFIG.semantic.summaryMaxLength} characters.
+- Capture the key concepts, facts, and relationships so the summary can stand in for the full note in semantic search.
+- Do not include filler phrases like "This note discusses..." — start directly with the content.
+- Respond with only the summary text, nothing else.`
+    },
+    {
+      role: "user" as const,
+      content: `Note title: ${doc.title}\n\n${truncatedBody}`
+    }
+  ];
+
+  try {
+    const response = await chatCompletion({ messages, temperature: 0.2 });
+    const text = chatText(response, "generate-summary").trim();
+    return text.length > 0 ? text.slice(0, SYSTEM_CONFIG.semantic.summaryMaxLength) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Generate and apply ## Summary sections for all docs in the list.
+ * Each doc gets its own apply-update call to isolate failures.
+ * Returns paths of successfully updated docs.
+ */
+async function applySummaryFixes(
+  candidates: Array<{ doc: WikiDoc; normalizedChars: number }>,
+  vaultRoot: string,
+  log: ReturnType<typeof createLogger>
+): Promise<string[]> {
+  const applied: string[] = [];
+
+  for (const { doc, normalizedChars } of candidates) {
+    log.info(
+      { phase: "generate-summary/start", path: doc.relativePath, normalized_chars: normalizedChars },
+      "health-check: [generate-summary] generating summary via LLM"
+    );
+
+    const summaryText = await generateSummaryText(doc);
+
+    if (!summaryText) {
+      log.warn(
+        { phase: "generate-summary/skip", path: doc.relativePath },
+        "health-check: [generate-summary] LLM returned empty summary — skipping"
+      );
+      continue;
+    }
+
+    const plan: MutationPlan = {
+      plan_id: `health-check-summary-${path.basename(doc.relativePath, ".md")}-${Date.now()}`,
+      operation: "health-check",
+      summary: `health-check: add ## Summary to ${doc.relativePath}`,
+      source_refs: [],
+      page_actions: [
+        {
+          path: doc.relativePath,
+          action: "update" as const,
+          change_type: "summary_added",
+          payload: {
+            sections: { Summary: summaryText }
+          }
+        }
+      ],
+      index_updates: [],
+      post_actions: { reindex: false, commit: false }
+    };
+
+    try {
+      await runToolJson("apply-update", { vault: vaultRoot, input: plan });
+      applied.push(doc.relativePath);
+      log.info(
+        { phase: "generate-summary/done", path: doc.relativePath, summary_chars: summaryText.length },
+        "health-check: [generate-summary] summary applied"
+      );
+    } catch (err) {
+      log.warn(
+        { phase: "generate-summary/error", path: doc.relativePath, err: err instanceof Error ? err.message : String(err) },
+        "health-check: [generate-summary] apply-update failed — skipping"
+      );
+    }
+  }
+
+  return applied;
+}
+
 async function main(): Promise<void> {
   const args = parseArgs();
   const log = createLogger("health-check");
@@ -1219,6 +1319,7 @@ async function main(): Promise<void> {
   );
 
   const findings: MaintenanceFinding[] = [];
+  const summaryNeeded: Array<{ doc: WikiDoc; normalizedChars: number }> = [];
 
   // ── per-doc checks ────────────────────────────────────────────────────────
 
@@ -1341,21 +1442,28 @@ async function main(): Promise<void> {
     // represented by the embedding model.  A ## Summary section acts as a
     // curated, length-bounded representation used during semantic indexing.
     const normalizedForCheck = normalizeTextForEmbedding(doc.raw);
-    if (
-      normalizedForCheck.length > SYSTEM_CONFIG.semantic.maxInputChars &&
-      !sectionHasContent(doc, "Summary")
-    ) {
-      findings.push(
-        buildFinding(
-          "warning",
-          doc.relativePath,
-          "missing_summary",
-          `The note's normalised text (${normalizedForCheck.length} chars) exceeds the embedding limit (${SYSTEM_CONFIG.semantic.maxInputChars} chars) but has no ## Summary section. The embedding will be truncated, reducing semantic search quality.`,
-          `Add a ## Summary section (up to ${SYSTEM_CONFIG.semantic.summaryMaxLength} chars) with a concise description of the note's key content.`,
-          false,
-          { normalized_chars: normalizedForCheck.length, max_input_chars: SYSTEM_CONFIG.semantic.maxInputChars }
-        )
-      );
+    const exceedsLimit = normalizedForCheck.length > SYSTEM_CONFIG.semantic.maxInputChars;
+    const hasSummary = sectionHasContent(doc, "Summary");
+    const isSummaryTarget =
+      doc.relativePath.startsWith("wiki/concepts/") || doc.relativePath.startsWith("wiki/sources/");
+
+    if (exceedsLimit && !hasSummary) {
+      if (isSummaryTarget) {
+        summaryNeeded.push({ doc, normalizedChars: normalizedForCheck.length });
+      } else {
+        // For other doc types: emit a warning but don't auto-fix.
+        findings.push(
+          buildFinding(
+            "warning",
+            doc.relativePath,
+            "missing_summary",
+            `The note's normalised text (${normalizedForCheck.length} chars) exceeds the embedding limit (${SYSTEM_CONFIG.semantic.maxInputChars} chars) but has no ## Summary section. The embedding will be truncated, reducing semantic search quality.`,
+            `Add a ## Summary section (up to ${SYSTEM_CONFIG.semantic.summaryMaxLength} chars) with a concise description of the note's key content.`,
+            false,
+            { normalized_chars: normalizedForCheck.length, max_input_chars: SYSTEM_CONFIG.semantic.maxInputChars }
+          )
+        );
+      }
     }
   }
 
@@ -1408,6 +1516,43 @@ async function main(): Promise<void> {
     },
     "health-check: [check-docs] per-doc checks completed"
   );
+
+  // ── generate missing Summary sections (concepts + sources only) ─────────
+
+  log.info(
+    { phase: "generate-summary/start", candidates: summaryNeeded.length },
+    "health-check: [generate-summary] starting Summary generation for long notes"
+  );
+
+  const summaryApplied = summaryNeeded.length > 0
+    ? await applySummaryFixes(summaryNeeded, vaultRoot, log)
+    : [];
+
+  // Emit a finding for each doc — auto_fixed=true when applied, warning when failed.
+  for (const { doc, normalizedChars } of summaryNeeded) {
+    const fixed = summaryApplied.includes(doc.relativePath);
+    findings.push(
+      buildFinding(
+        "warning",
+        doc.relativePath,
+        "missing_summary",
+        `The note's normalised text (${normalizedChars} chars) exceeds the embedding limit (${SYSTEM_CONFIG.semantic.maxInputChars} chars).${fixed ? " A ## Summary section was auto-generated." : " No ## Summary section could be generated."}`,
+        fixed ? "Summary generated — verify the content and re-run embed-index." : `Add a ## Summary section (up to ${SYSTEM_CONFIG.semantic.summaryMaxLength} chars) manually.`,
+        true,
+        { normalized_chars: normalizedChars, max_input_chars: SYSTEM_CONFIG.semantic.maxInputChars, auto_fixed: fixed }
+      )
+    );
+  }
+
+  log.info(
+    { phase: "generate-summary/done", applied: summaryApplied.length, skipped: summaryNeeded.length - summaryApplied.length },
+    "health-check: [generate-summary] done"
+  );
+
+  if (summaryApplied.length > 0) {
+    docs = excludeProjects(await loadWikiDocs(vaultRoot));
+    graph = analyzeWikiGraph(docs);
+  }
 
   // ── sanitize Related sections (structural cleanup, no embeddings needed) ───
 
@@ -1598,7 +1743,8 @@ async function main(): Promise<void> {
     ...(appliedNewLinks?.created ?? []),
     ...synonymMergeResult.affected_paths,
     ...synonymMergeResult.merged_pairs.map((p) => p.canonical),
-    ...synonymMergeResult.merged_pairs.map((p) => p.deleted)
+    ...synonymMergeResult.merged_pairs.map((p) => p.deleted),
+    ...summaryApplied
   ];
   const uniqueAffected = [...new Set(allAffected)];
 
@@ -1611,13 +1757,13 @@ async function main(): Promise<void> {
     const newCount = countApplied(appliedNewLinks);
     const commitInput: CommitInput = {
       operation: "health-check",
-      summary: `Health check: ${fixCount} broken link(s) resolved, ${newCount} new link(s) added, ${synonymMergeResult.merges_applied} synonym merge(s)`,
+      summary: `Health check: ${fixCount} broken link(s) resolved, ${newCount} new link(s) added, ${synonymMergeResult.merges_applied} synonym merge(s), ${summaryApplied.length} summary section(s) generated`,
       source_refs: [],
       affected_notes: uniqueAffected,
       paths_to_stage: [...uniqueAffected, SYSTEM_CONFIG.paths.dbPath],
       feedback_record_ref: null,
       mutation_result_ref: null,
-      commit_message: `health-check: ${fixCount} broken + ${newCount} new link(s) + ${synonymMergeResult.merges_applied} synonym merge(s) applied`
+      commit_message: `health-check: ${fixCount} broken + ${newCount} new link(s) + ${synonymMergeResult.merges_applied} synonym merge(s) + ${summaryApplied.length} summary section(s) applied`
     };
 
     log.info(
