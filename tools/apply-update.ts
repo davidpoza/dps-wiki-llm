@@ -226,9 +226,27 @@ async function applyPageAction({
     }
   }
 
-  const absolutePath = resolveWithinRoot(vaultRoot, action.path);
-  const existingText = await readTextIfExists(absolutePath);
-  const existing = existingText !== null;
+  let absolutePath = resolveWithinRoot(vaultRoot, action.path);
+  let existingText = await readTextIfExists(absolutePath);
+  let existing = existingText !== null;
+
+  // Redirect cross-folder slug conflicts for update actions.
+  // The LLM may propose `update: wiki/concepts/foo.md` when the file lives at
+  // `wiki/topics/foo.md` (or another typed folder).  Apply the same slug-conflict
+  // redirect already used for create actions above.
+  if (action.action === "update" && !existing) {
+    const conflictPath = await findSlugConflict(vaultRoot, action.path);
+    if (conflictPath) {
+      log.warn(
+        { proposed: action.path, redirected: conflictPath },
+        "apply-update: update target missing — redirecting to existing doc with same slug"
+      );
+      action.path = conflictPath;
+      absolutePath = resolveWithinRoot(vaultRoot, action.path);
+      existingText = await readTextIfExists(absolutePath);
+      existing = existingText !== null;
+    }
+  }
 
   if (action.idempotency_key) {
     const existingLedgerRecord = ledger[action.idempotency_key];
