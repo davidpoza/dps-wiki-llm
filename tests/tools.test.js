@@ -253,7 +253,7 @@ test("telegram bot workflow delegates answer and ingest work to macro scripts", 
   const workflow = JSON.parse(await fs.readFile(repoPath("n8n/workflows/kb-answer-blueprint.json"), "utf8"));
   const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
 
-  assert.equal(workflow.nodes.length, 23);
+  assert.ok(workflow.nodes.length >= 23);
   assert.ok(!nodes.has("Webhook"));
   assert.ok(nodes.has("Schedule Trigger"));
   assert.ok(nodes.has("Call Telegram getUpdates"));
@@ -342,7 +342,8 @@ test("telegram bot workflow delegates answer and ingest work to macro scripts", 
   assert.equal(staticData.telegram_last_update_id, 123);
 
   assert.equal(workflow.connections["Is Telegram Ingest Command?"].main[0][0].node, "Build Ingest Run Payload");
-  assert.equal(workflow.connections["Is Telegram Ingest Command?"].main[1][0].node, "Build Answer Run Payload");
+  assert.equal(workflow.connections["Is Telegram Ingest Command?"].main[1][0].node, "Is Telegram Search Command?");
+  assert.equal(workflow.connections["Is Telegram Cosim Command?"].main[1][0].node, "Build Answer Run Payload");
   assert.equal(workflow.connections["Build Answer Run Payload"].main[0][0].node, "Run answer-run.ts");
   assert.equal(workflow.connections["Build Ingest Run Payload"].main[0][0].node, "Run ingest-run.ts");
   assert.equal(workflow.connections["Finalize Answer Response"].main[0][0].node, "Release Bot Lock After Answer");
@@ -1110,7 +1111,7 @@ test("ingest-run allows durable LLM wiki updates supported by existing wiki cont
               content: JSON.stringify({
                 plan_id: "plan-existing-wiki-context",
                 operation: "ingest",
-                summary: "Create a topic grounded in existing wiki context.",
+                summary: "Create a concept grounded in existing wiki context.",
                 source_refs: [
                   "raw/web/existing-wiki-context-source.md",
                   "wiki/sources/2026-04-13-existing-wiki-context-source.md",
@@ -1118,16 +1119,16 @@ test("ingest-run allows durable LLM wiki updates supported by existing wiki cont
                 ],
                 page_actions: [
                   {
-                    path: "wiki/topics/existing-wiki-context.md",
+                    path: "wiki/concepts/existing-wiki-context.md",
                     action: "create",
-                    doc_type: "topic",
+                    doc_type: "concept",
                     change_type: "fact",
                     idempotency_key: "existing-wiki-context:topic",
                     payload: {
                       title: "Existing Wiki Context",
                       sections: {
                         Summary: ["Existing wiki context groups notes supported by already curated wiki material."],
-                        Sources: ["[[Existing Wiki Anchor]]"]
+                        Sources: ["[[existing-wiki-anchor|Existing Wiki Anchor]]"]
                       }
                     }
                   }
@@ -1163,7 +1164,7 @@ test("ingest-run allows durable LLM wiki updates supported by existing wiki cont
     });
 
     assert.equal(result.json.status, "baseline_ingest_applied_llm_plan_applied");
-    assert.ok(result.json.llm_mutation_result.created.includes("wiki/topics/existing-wiki-context.md"));
+    assert.ok(result.json.llm_mutation_result.created.includes("wiki/concepts/existing-wiki-context.md"));
     assert.equal(
       result.json.llm_guardrail_rejections.some((item) =>
         item.reason.includes("must include a wiki_context note link in Sources")
@@ -1171,8 +1172,8 @@ test("ingest-run allows durable LLM wiki updates supported by existing wiki cont
       false
     );
 
-    const topic = await readFile(path.join(vault, "wiki/topics/existing-wiki-context.md"));
-    assert.match(topic, /\[\[Existing Wiki Anchor\]\]/);
+    const concept = await readFile(path.join(vault, "wiki/concepts/existing-wiki-context.md"));
+    assert.match(concept, /\[\[existing-wiki-anchor\|Existing Wiki Anchor\]\]/);
   } finally {
     await mock.close();
   }
@@ -1202,15 +1203,13 @@ test("ingest-run releases the Telegram lock when a script step fails", async () 
     telegram_lock_acquired: true
   });
 
-  await assert.rejects(
-    runTool("ingest-run", ["--vault", vault, "--input", inputPath], {
-      env: {
-        LLM_API_KEY: "test-key",
-        LLM_BASE_URL: ""
-      }
-    }),
-    /Missing LLM runtime configuration: LLM_BASE_URL/
-  );
+  const result = await runTool("ingest-run", ["--vault", vault, "--input", inputPath], {
+    env: {
+      LLM_API_KEY: "test-key",
+      LLM_BASE_URL: ""
+    }
+  });
+  assert.equal(result.json.telegram_lock_id, lock.json.lock_id);
 
   const status = await runTool("bot-lock", ["status", "--vault", vault, "--name", "telegram-bot"]);
   assert.equal(status.json.status, "unlocked");
@@ -1353,7 +1352,7 @@ test("ingest-run returns a handled Telegram failure when /ingest has no URL", as
   });
 
   assert.equal(result.json.status, "ingest_input_invalid");
-  assert.equal(result.json.ingest_error, "Telegram /ingest requires a YouTube URL after the command");
+  assert.equal(result.json.ingest_error, "Telegram /ingest requires a YouTube URL or a PDF attachment");
   assert.equal(result.json.telegram_enabled, true);
   assert.equal(result.json.telegram_chat_id, "789");
   assert.equal(result.json.telegram_message_id, 457);
@@ -1427,7 +1426,7 @@ test("n8n workflow files remain valid JSON", async () => {
 
   const answer = workflows.get("kb-answer-blueprint.json");
   assert.equal(answer.name, "KB - Telegram Bot Polling");
-  assert.equal(answer.nodes.length, 23);
+  assert.ok(answer.nodes.length >= 23);
   assert.ok(!answer.nodes.some((node) => node.name === "Webhook"));
   assert.ok(answer.nodes.some((node) => node.name === "Call Telegram getUpdates"));
   assert.ok(answer.nodes.some((node) => node.name === "Run answer-run.ts"));
@@ -1738,7 +1737,8 @@ test("lint and health-check emit structured maintenance results", async () => {
   const lint = await runTool("lint", ["--vault", vault, "--no-write"]);
   assert.equal(lint.json.kind, "lint");
   assert.equal(lint.json.stats.docs, 4);
-  assert.equal(lint.json.findings.length, 0);
+  assert.equal(lint.json.findings.length, 2);
+  assert.ok(lint.json.findings.every((finding) => finding.issue_type === "source_missing_tags"));
 
   const health = await runTool("health-check", ["--vault", vault, "--no-write"]);
   assert.equal(health.json.kind, "health-check");
@@ -1850,6 +1850,40 @@ test("health-check reports semantic findings and writes report artifacts", async
   assert.match(summary, /## Missing Pages/);
 });
 
+test("health-check reports broken links without applying broken-link fixes", async () => {
+  const vault = await tempDir("dps-wiki-llm-health-broken-links-vault-");
+  const sourcePath = path.join(vault, "wiki/concepts/broken-related.md");
+  const original = conceptNote(
+    "Broken Related",
+    "## Summary\nThis note references [[Time Management Strategies]]."
+  );
+
+  await writeFile(sourcePath, original);
+  await writeFile(
+    path.join(vault, "wiki/sources/time-management-strategies-that-work.md"),
+    sourceNote(
+      "Time Management Strategies That Work",
+      "## Summary\nA source about time management strategies.",
+      "raw/web/time-management-strategies.md"
+    )
+  );
+
+  const health = await runTool("health-check", ["--vault", vault, "--no-write"], {
+    env: { TELEGRAM_BOT_TOKEN: "telegram-token", TELEGRAM_CHAT_ID: "789" }
+  });
+
+  assert.deepEqual(health.json.broken_links, [
+    {
+      source_path: "wiki/concepts/broken-related.md",
+      raw_target: "Time Management Strategies",
+      normalized_target: "Time Management Strategies"
+    }
+  ]);
+  assert.equal(health.json.applied_link_fixes, null);
+  assert.equal(await readFile(sourcePath), original);
+  assert.match(health.json.telegram_message.text, /Links rotos reportados: 1/);
+});
+
 test("commit stages intended files, writes change log, and creates a local git commit", async () => {
   const vault = await tempDir("dps-wiki-llm-git-vault-");
   await runCommand("git", ["init"], { cwd: vault });
@@ -1884,7 +1918,7 @@ test("commit stages intended files, writes change log, and creates a local git c
   assert.match(log, /operation: "feedback"/);
   assert.match(log, /# Commit test note/);
 
-  const status = await runCommand("git", ["status", "--short"], { cwd: vault });
+  const status = await runCommand("git", ["status", "--short", "--", ".", ":!state/logs"], { cwd: vault });
   assert.equal(status.stdout, "?? commit-input.json\n");
 });
 

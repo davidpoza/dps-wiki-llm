@@ -124,8 +124,8 @@ export type HealthCheckNotificationParams = {
   run_id: string;
   stats: { docs: number; findings: number; critical: number; warning: number; suggestion: number };
   missing_pages: number;
+  broken_links: number;
   link_resolutions: number;
-  applied_fixes: number;
   pruned_links: number;
   discovered_links: number;
   applied_new_links: number;
@@ -146,8 +146,8 @@ export function buildHealthCheckNotification(
     `Docs escaneados: ${params.stats.docs}`,
     `Findings: ${params.stats.findings} (critical: ${params.stats.critical}, warning: ${params.stats.warning}, suggestion: ${params.stats.suggestion})`,
     `Missing pages: ${params.missing_pages}`,
-    `Links resueltos (broken): ${params.link_resolutions}`,
-    params.applied_fixes > 0 ? `Links aplicados (broken): ${params.applied_fixes}` : "",
+    `Links rotos reportados: ${params.broken_links}`,
+    `Sugerencias para links rotos: ${params.link_resolutions}`,
     params.pruned_links > 0 ? `Links eliminados (irrelevantes): ${params.pruned_links}` : "",
     `Links nuevos descubiertos: ${params.discovered_links}`,
     params.applied_new_links > 0 ? `Links nuevos aplicados: ${params.applied_new_links}` : "",

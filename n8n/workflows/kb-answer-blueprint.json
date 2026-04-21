@@ -696,7 +696,7 @@
         740
       ],
       "notesInFlow": true,
-      "notes": "Runs broken-link resolution, new-link discovery, and synonym merge."
+      "notes": "Reports broken links and resolution suggestions without applying broken-link fixes; still runs new-link discovery."
     },
     {
       "parameters": {

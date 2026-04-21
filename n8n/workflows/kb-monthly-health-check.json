@@ -46,7 +46,7 @@
         16
       ],
       "notesInFlow": true,
-      "notes": "Runs health-check: validates wiki quality, resolves broken links via search, writes reports to state/maintenance/, and emits Telegram notification fields."
+      "notes": "Runs health-check: validates wiki quality, reports broken links and resolution suggestions without applying broken-link fixes, writes reports to state/maintenance/, and emits Telegram notification fields."
     },
     {
       "parameters": {
