@@ -654,6 +654,7 @@ async function main(): Promise<void> {
       {
         phase: "resolve-terms",
         topic_matches: resolveResult.topicMatches,
+        concept_matches: resolveResult.conceptMatches,
         concept_dedups: resolveResult.conceptDedups,
         nooped: resolveResult.nooped
       },
@@ -664,7 +665,7 @@ async function main(): Promise<void> {
     const topicSlugs = topicSlugsFromPlan(resolveResult.plan);
     const planWithTags = injectTopicTags(resolveResult.plan, sourceNotePath, topicSlugs);
     const llmMutationPlan = injectDefaultConfidence(planWithTags, SYSTEM_CONFIG.health.defaultConfidence);
-    const hasChanges = guardrailHasChanges || resolveResult.topicMatches > 0 || resolveResult.conceptDedups > 0
+    const hasChanges = guardrailHasChanges || resolveResult.topicMatches > 0 || resolveResult.conceptMatches > 0 || resolveResult.conceptDedups > 0
       || resolveResult.plan.page_actions.some((a) => a.action !== "noop")
       || topicSlugs.length > 0;
 

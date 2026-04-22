@@ -10,14 +10,17 @@
  *      similarity.  If the term is already covered by a topic (score ≥
  *      TOPIC_MATCH_THRESHOLD) the action is converted into an update on that
  *      topic instead of creating a concept.
- *   3. If no topic match → check whether the concept file already exists on
+ *   2.5. If no topic match → check against existing concept embeddings (score ≥
+ *      CONCEPT_MATCH_THRESHOLD, default 0.82).  Handles cross-language synonyms
+ *      (e.g. "mastocito" → "mast-cell") by redirecting to the existing concept.
+ *   3. If no semantic match → check whether the concept file already exists on
  *      disk.  If so, change action from "create" to "update" (dedup).
  *   4. Validate that the concept slug is valid kebab-case.  Invalid slugs are
  *      converted to noop with a warning.
  *   5. All other actions pass through unchanged.
  *
- * Fail-safe: if the semantic index is absent or empty, steps 2 is skipped and
- * processing continues as if no topic matched.
+ * Fail-safe: if the semantic index is absent or empty, steps 2 and 2.5 are
+ * skipped and processing continues with disk-level dedup only.
  */
 
 import path from "node:path";
@@ -31,7 +34,7 @@ import {
 } from "../../lib/semantic-index.js";
 import { createLocalTransformersProvider } from "../../lib/local-transformers-provider.js";
 import type { MutationPlan, MutationPageAction } from "../../lib/contracts.js";
-import { resolvedTopicMatchThreshold } from "../../config.js";
+import { resolvedTopicMatchThreshold, resolvedConceptMatchThreshold } from "../../config.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -39,6 +42,8 @@ export interface ResolveTermsResult {
   plan: MutationPlan;
   /** Number of concept terms matched and redirected to an existing topic. */
   topicMatches: number;
+  /** Number of concept "create" actions redirected to an existing concept via semantic match. */
+  conceptMatches: number;
   /** Number of concept "create" actions changed to "update" due to existing file. */
   conceptDedups: number;
   /** Number of actions converted to noop (blocked topic creates or invalid slugs). */
@@ -61,34 +66,42 @@ function isKebabCase(slug: string): boolean {
  * @param plan       - The guardrailed mutation plan from the LLM.
  * @param vaultRoot  - Absolute path to the vault root.
  * @param log        - Pino logger instance from the calling pipeline.
- * @param threshold  - Cosine similarity threshold for topic matching.
- *                     Defaults to TOPIC_MATCH_THRESHOLD env var or 0.72.
+ * @param threshold        - Cosine similarity threshold for topic matching.
+ *                           Defaults to TOPIC_MATCH_THRESHOLD env var or 0.72.
+ * @param conceptThreshold - Cosine similarity threshold for concept-to-concept matching.
+ *                           Defaults to CONCEPT_MATCH_THRESHOLD env var or 0.82.
  */
 export async function resolveTerms(
   plan: MutationPlan,
   vaultRoot: string,
   log: Logger,
-  threshold: number = resolvedTopicMatchThreshold()
+  threshold: number = resolvedTopicMatchThreshold(),
+  conceptThreshold: number = resolvedConceptMatchThreshold()
 ): Promise<ResolveTermsResult> {
-  // ── Load topic embedding units (fail-safe) ───────────────────────────────
+  // ── Load topic and concept embedding units (fail-safe) ───────────────────
 
   type EmbeddingUnit = Awaited<ReturnType<typeof loadAllEmbeddingUnits>>[number];
   let topicUnits: EmbeddingUnit[] = [];
+  let conceptUnits: EmbeddingUnit[] = [];
 
   try {
     const manifest = await loadManifest(vaultRoot);
     const allUnits = await loadAllEmbeddingUnits(vaultRoot, manifest);
     topicUnits = allUnits.filter((u) => u.doc_type === "topic");
+    conceptUnits = allUnits.filter((u) => u.doc_type === "concept");
   } catch (err) {
     log.warn(
       { err: err instanceof Error ? err.message : String(err) },
-      "resolve-terms: could not load semantic index — topic matching skipped"
+      "resolve-terms: could not load semantic index — topic/concept matching skipped"
     );
   }
 
-  const provider = topicUnits.length > 0 ? createLocalTransformersProvider() : null;
+  const provider = (topicUnits.length > 0 || conceptUnits.length > 0)
+    ? createLocalTransformersProvider()
+    : null;
 
   let topicMatches = 0;
+  let conceptMatches = 0;
   let conceptDedups = 0;
   let nooped = 0;
 
@@ -130,23 +143,26 @@ export async function resolveTerms(
 
       let matchedTopicUnit: EmbeddingUnit | null = null;
       let matchScore = 0;
+      let queryVec: number[] | null = null;
 
-      if (provider && topicUnits.length > 0) {
+      if (provider && (topicUnits.length > 0 || conceptUnits.length > 0)) {
         try {
-          const [queryVec] = await provider.embed([query]);
-          for (const unit of topicUnits) {
-            const score = cosineSimilarity(queryVec, unit.embedding);
-            if (score > matchScore) {
-              matchScore = score;
-              matchedTopicUnit = unit;
-            }
-          }
+          [queryVec] = await provider.embed([query]);
         } catch (err) {
           log.warn(
             { err: err instanceof Error ? err.message : String(err), path: action.path },
-            "resolve-terms: embedding error during topic matching — skipping match"
+            "resolve-terms: embedding error — skipping semantic matching"
           );
-          matchedTopicUnit = null;
+        }
+      }
+
+      if (queryVec && topicUnits.length > 0) {
+        for (const unit of topicUnits) {
+          const score = cosineSimilarity(queryVec, unit.embedding);
+          if (score > matchScore) {
+            matchScore = score;
+            matchedTopicUnit = unit;
+          }
         }
       }
 
@@ -177,6 +193,40 @@ export async function resolveTerms(
         continue;
       }
 
+      // 2b.5. Try to match against existing concepts via embedding (cross-language dedup)
+      if (queryVec && conceptUnits.length > 0) {
+        let matchedConceptUnit: EmbeddingUnit | null = null;
+        let conceptMatchScore = 0;
+
+        for (const unit of conceptUnits) {
+          const score = cosineSimilarity(queryVec, unit.embedding);
+          if (score > conceptMatchScore) {
+            conceptMatchScore = score;
+            matchedConceptUnit = unit;
+          }
+        }
+
+        if (matchedConceptUnit && conceptMatchScore >= conceptThreshold) {
+          log.info(
+            {
+              proposed_path: action.path,
+              existing_path: matchedConceptUnit.path,
+              score: conceptMatchScore,
+              threshold: conceptThreshold
+            },
+            "resolve-terms: term matched to existing concept — converting to concept update"
+          );
+
+          resolvedActions.push({
+            ...action,
+            path: matchedConceptUnit.path,
+            action: "update"
+          });
+          conceptMatches++;
+          continue;
+        }
+      }
+
       // 2c. Dedup: check if concept file already exists on disk
       const conceptAbsPath = path.join(vaultRoot, action.path);
       const exists = await pathExists(conceptAbsPath);
@@ -201,13 +251,14 @@ export async function resolveTerms(
   }
 
   log.info(
-    { topicMatches, conceptDedups, nooped, total: plan.page_actions.length },
+    { topicMatches, conceptMatches, conceptDedups, nooped, total: plan.page_actions.length },
     "resolve-terms: term resolution complete"
   );
 
   return {
     plan: { ...plan, page_actions: resolvedActions },
     topicMatches,
+    conceptMatches,
     conceptDedups,
     nooped
   };

@@ -196,6 +196,11 @@ export function resolvedTopicMatchThreshold(): number {
   return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.72;
 }
 
+export function resolvedConceptMatchThreshold(): number {
+  const v = parseFloat(process.env.CONCEPT_MATCH_THRESHOLD ?? "");
+  return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.82;
+}
+
 export function resolvedConceptTopicCandidateThreshold(): number {
   const v = parseInt(process.env.CONCEPT_TOPIC_CANDIDATE_THRESHOLD ?? "", 10);
   return Number.isFinite(v) && v > 0 ? v : 8;
