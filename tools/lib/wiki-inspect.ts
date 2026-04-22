@@ -152,7 +152,7 @@ function buildAliases(relativePath: string, title: string): Set<string> {
  */
 export function extractWikiLinks(body: string): WikiLink[] {
   const results: WikiLink[] = [];
-  const regex = /\[\[([^\]]+)\]\]/g;
+  const regex = /(?<!!)\[\[([^\]]+)\]\]/g;
 
   for (const match of body.matchAll(regex)) {
     const rawTarget = match[1].trim();
