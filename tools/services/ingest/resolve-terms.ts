@@ -87,8 +87,8 @@ export async function resolveTerms(
   try {
     const manifest = await loadManifest(vaultRoot);
     const allUnits = await loadAllEmbeddingUnits(vaultRoot, manifest);
-    topicUnits = allUnits.filter((u) => u.doc_type === "topic");
-    conceptUnits = allUnits.filter((u) => u.doc_type === "concept");
+    topicUnits = allUnits.filter((u) => u.doc_type === "topic" && u.path.startsWith("wiki/topics/"));
+    conceptUnits = allUnits.filter((u) => u.doc_type === "concept" && u.path.startsWith("wiki/concepts/"));
   } catch (err) {
     log.warn(
       { err: err instanceof Error ? err.message : String(err) },
@@ -244,6 +244,68 @@ export async function resolveTerms(
       // No topic match and file doesn't exist → create as-is
       resolvedActions.push(action);
       continue;
+    }
+
+    // ── 3. Resolve concept update actions on missing files ────────────────
+    // The LLM sometimes proposes an update with an English slug when only a
+    // Spanish-slug equivalent exists on disk.  Redirect to the semantically
+    // nearest existing concept; if no match, convert to noop so the pipeline
+    // does not throw "Refusing to update a missing file".
+    if (action.doc_type === "concept" && action.action === "update") {
+      const absPath = path.join(vaultRoot, action.path);
+      const exists = await pathExists(absPath);
+
+      if (!exists) {
+        log.warn(
+          { path: action.path },
+          "resolve-terms: concept update targets a missing file — attempting semantic redirect"
+        );
+
+        const query = typeof action.payload?.title === "string" && action.payload.title
+          ? action.payload.title
+          : path.basename(action.path, ".md").replace(/-/g, " ");
+
+        let queryVec: number[] | null = null;
+        if (provider && conceptUnits.length > 0) {
+          try {
+            [queryVec] = await provider.embed([query]);
+          } catch (err) {
+            log.warn(
+              { err: err instanceof Error ? err.message : String(err), path: action.path },
+              "resolve-terms: embedding error for missing-file update — converting to noop"
+            );
+          }
+        }
+
+        let redirected = false;
+        if (queryVec && conceptUnits.length > 0) {
+          let best: EmbeddingUnit | null = null;
+          let bestScore = 0;
+          for (const unit of conceptUnits) {
+            const score = cosineSimilarity(queryVec, unit.embedding);
+            if (score > bestScore) { bestScore = score; best = unit; }
+          }
+          if (best && bestScore >= conceptThreshold) {
+            log.info(
+              { original_path: action.path, redirected_path: best.path, score: bestScore },
+              "resolve-terms: missing concept update redirected to existing concept"
+            );
+            resolvedActions.push({ ...action, path: best.path });
+            conceptMatches++;
+            redirected = true;
+          }
+        }
+
+        if (!redirected) {
+          log.warn(
+            { path: action.path },
+            "resolve-terms: no semantic match for missing concept update — converting to noop"
+          );
+          resolvedActions.push({ ...action, action: "noop" });
+          nooped++;
+        }
+        continue;
+      }
     }
 
     // ── All other actions pass through unchanged ──────────────────────────
