@@ -17,7 +17,6 @@ import { loadManifest, loadAllEmbeddingUnits, cosineSimilarity, manifestPath, no
 import { chatCompletion, chatText } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { hybridSearch } from "./lib/hybrid-search-fn.js";
-import { semanticSearch } from "./lib/semantic-search-fn.js";
 import { ftsSearch } from "./lib/fts-search-fn.js";
 import { getGitHead } from "./lib/git.js";
 import { SYSTEM_CONFIG, resolvedConceptTopicCandidateThreshold } from "./config.js";
@@ -596,18 +595,33 @@ async function applyDiscoveredLinks(
 }
 
 /**
- * For each typed doc, search the wiki for relevant notes not yet linked and return candidates.
+ * For each typed doc, find wiki notes not yet linked with cosine similarity >= threshold
+ * using the stored document embeddings from the semantic index (same cosim values used
+ * by pruneWeakRelatedLinks, avoiding the title-query vs full-doc embedding mismatch).
  */
 async function discoverNewLinks(
   docs: WikiDoc[],
   graph: WikiGraph,
   vaultRoot: string,
-  searchFn: SearchFn,
   excludedPaths: Set<string>,
-  log: ReturnType<typeof createLogger>,
-  applyScoreFilter = false
+  log: ReturnType<typeof createLogger>
 ): Promise<NewLinkCandidate[]> {
+  const manifest = await loadManifest(vaultRoot).catch(() => null);
+  if (!manifest) {
+    log.info(
+      { phase: "discover-new-links/no-index" },
+      "health-check: [discover-new-links] no semantic index — skipping"
+    );
+    return [];
+  }
+
+  const units = await loadAllEmbeddingUnits(vaultRoot, manifest);
+  if (units.length === 0) return [];
+
+  const embeddingMap = new Map<string, number[]>(units.map((u) => [u.path, u.embedding]));
+
   const typedDocs = docs.filter((doc) => SYSTEM_CONFIG.wiki.typedDocTypes.includes(doc.docType) || doc.docType === "source");
+  const minCosine = SYSTEM_CONFIG.enrich.minCosineSimilarity;
 
   log.info(
     { phase: "discover-new-links/start", typed_docs: typedDocs.length },
@@ -617,6 +631,9 @@ async function discoverNewLinks(
   const candidates: NewLinkCandidate[] = [];
 
   for (const doc of typedDocs) {
+    const sourceEmbedding = embeddingMap.get(doc.relativePath);
+    if (!sourceEmbedding) continue;
+
     const resolvedPaths = new Set(graph.resolvedLinks.get(doc.relativePath) ?? []);
 
     // Also track normalized slugs of ALL links in Related (resolved or broken).
@@ -627,51 +644,33 @@ async function discoverNewLinks(
       relatedSection ? extractWikiLinks(relatedSection.content).map((l) => l.normalized) : []
     );
 
-    let searchResult: SearchResult;
-    try {
-      searchResult = await searchFn(doc.title, 5);
-    } catch (err) {
-      log.warn(
-        {
-          phase: "discover-new-links/search",
-          source_path: doc.relativePath,
-          err: err instanceof Error ? err.message : String(err)
-        },
-        "health-check: [discover-new-links] search failed — skipping doc"
-      );
-      continue;
-    }
+    // Score all indexed docs using stored embeddings (same cosim as pruneWeakRelatedLinks)
+    const scored: Array<{ path: string; title: string; score: number }> = [];
+    for (const unit of units) {
+      if (unit.path === doc.relativePath) continue;
+      if (resolvedPaths.has(unit.path)) continue;
+      if (excludedPaths.has(unit.path)) continue;
+      const score = cosineSimilarity(sourceEmbedding, unit.embedding);
+      if (score < minCosine) continue;
+      const candidateSlug = unit.path.split("/").pop()?.replace(/\.md$/, "") ?? "";
+      if (existingRelatedSlugs.has(candidateSlug)) continue;
 
-    const minCosine = SYSTEM_CONFIG.enrich.minCosineSimilarity;
-
-    for (const r of searchResult.results) {
-      if (r.path === doc.relativePath) continue;
       log.info(
         {
           phase: "discover-new-links/score",
           source_path: doc.relativePath,
-          candidate: r.path,
-          score: r.score,
-          threshold: applyScoreFilter ? minCosine : null,
-          above_threshold: applyScoreFilter ? r.score >= minCosine : null,
-          already_linked: resolvedPaths.has(r.path)
+          candidate: unit.path,
+          score,
+          threshold: minCosine
         },
         "health-check: [discover-new-links] candidate score"
       );
+
+      scored.push({ path: unit.path, title: unit.title, score });
     }
 
-    const newCandidates = searchResult.results
-      .filter((r) => {
-        if (r.path === doc.relativePath) return false;
-        if (resolvedPaths.has(r.path)) return false;
-        if (excludedPaths.has(r.path)) return false;
-        if (applyScoreFilter && r.score < minCosine) return false;
-        // Exclude if a link to this target already exists in Related (even as broken)
-        const candidateSlug = r.path.split("/").pop()?.replace(/\.md$/, "") ?? "";
-        if (existingRelatedSlugs.has(candidateSlug)) return false;
-        return true;
-      })
-      .slice(0, 3);
+    scored.sort((a, b) => b.score - a.score);
+    const newCandidates = scored.slice(0, 3);
 
     if (newCandidates.length === 0) {
       log.info(
@@ -690,7 +689,7 @@ async function discoverNewLinks(
           candidate_path: candidate.path,
           candidate_title: candidate.title,
           score: candidate.score,
-          threshold: applyScoreFilter ? minCosine : null
+          threshold: minCosine
         },
         "health-check: [discover-new-links] new candidate found"
       );
@@ -1315,11 +1314,6 @@ async function main(): Promise<void> {
     ? (query, limit) => hybridSearch(query, { vault: vaultRoot, limit })
     : (query, limit) => ftsSearch(query, { vault: vaultRoot, limit });
 
-  // Related-link discovery: semantic only (cosine similarity has stable absolute meaning)
-  const discoverSearchFn: SearchFn = hasSemanticIndex
-    ? (query, limit) => semanticSearch(query, { vault: vaultRoot, limit })
-    : (query, limit) => ftsSearch(query, { vault: vaultRoot, limit });
-
   log.info(
     { phase: "resolve-broken-links/start", has_semantic_index: hasSemanticIndex },
     "health-check: [resolve-broken-links] starting broken link suggestion search"
@@ -1409,7 +1403,7 @@ async function main(): Promise<void> {
     "health-check: [discover-new-links] starting new link discovery"
   );
 
-  const discoveredLinks = await discoverNewLinks(docs, graph, vaultRoot, discoverSearchFn, new Set(), log, hasSemanticIndex);
+  const discoveredLinks = await discoverNewLinks(docs, graph, vaultRoot, new Set(), log);
 
   // ── apply discovered links ────────────────────────────────────────────────
 
