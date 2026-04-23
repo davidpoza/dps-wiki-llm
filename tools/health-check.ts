@@ -13,7 +13,7 @@ import {
 } from "./lib/fs-utils.js";
 import { analyzeWikiGraph, loadWikiDocs, extractWikiLinks } from "./lib/wiki-inspect.js";
 import { parseSections } from "./lib/markdown.js";
-import { loadManifest, loadAllEmbeddingUnits, cosineSimilarity, manifestPath, normalizeTextForEmbedding } from "./lib/semantic-index.js";
+import { loadManifest, loadAllEmbeddingUnits, cosineSimilarity, manifestPath, normalizeTextForEmbedding, extractSummarySection, hashText } from "./lib/semantic-index.js";
 import { chatCompletion, chatText } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { hybridSearch } from "./lib/hybrid-search-fn.js";
@@ -889,6 +889,37 @@ async function applySummaryFixes(
   return applied;
 }
 
+/**
+ * Returns true if any wiki doc has a missing or stale embedding entry.
+ * Replicates the hash-diff logic from embed-index without calling the model.
+ */
+async function hasStaleEmbeddings(vaultRoot: string, docs: WikiDoc[]): Promise<boolean> {
+  const manifest = await loadManifest(vaultRoot).catch(() => null);
+  const items = manifest?.items ?? {};
+
+  for (const doc of docs) {
+    const noteId = doc.relativePath.replace(/\\/g, "/");
+    const normalized = normalizeTextForEmbedding(doc.raw);
+
+    if (normalized.length < SYSTEM_CONFIG.semantic.minChars) continue;
+
+    let embedInput: string;
+    if (normalized.length <= SYSTEM_CONFIG.semantic.maxInputChars) {
+      embedInput = normalized;
+    } else {
+      const summary = extractSummarySection(doc.raw);
+      embedInput = summary
+        ? summary.slice(0, SYSTEM_CONFIG.semantic.summaryMaxLength)
+        : normalized.slice(0, SYSTEM_CONFIG.semantic.maxInputChars);
+    }
+
+    const hash = hashText(embedInput);
+    if (items[noteId]?.hash !== hash) return true;
+  }
+
+  return false;
+}
+
 async function main(): Promise<void> {
   const args = parseArgs();
   const log = createLogger("health-check");
@@ -910,6 +941,16 @@ async function main(): Promise<void> {
     d.filter((doc) => !doc.relativePath.startsWith("wiki/projects/"));
 
   let docs = excludeProjects(await loadWikiDocs(vaultRoot));
+
+  const stale = await hasStaleEmbeddings(vaultRoot, docs);
+  if (stale) {
+    log.info({ phase: "startup-embedindex" }, "health-check: [startup-embedindex] stale embeddings detected — rebuilding semantic index");
+    await runToolJson("embed-index", { vault: vaultRoot });
+    log.info({ phase: "startup-embedindex" }, "health-check: [startup-embedindex] semantic index rebuilt");
+  } else {
+    log.info({ phase: "startup-embedindex" }, "health-check: [startup-embedindex] semantic index up to date — skipping");
+  }
+
   let graph = analyzeWikiGraph(docs);
   const docsByPath = new Map(docs.map((doc) => [doc.relativePath, doc]));
 
