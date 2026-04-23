@@ -6,6 +6,7 @@ import type {
 } from "../../lib/contracts.js";
 import type { ChatCompletionResponse } from "../../lib/llm.js";
 import { chatText, extractJson } from "../../lib/llm.js";
+import { isRecord } from "../../lib/type-guards.js";
 
 import { ALLOWED_PAGE_PREFIXES } from "./build-llm-plan.js";
 
@@ -20,10 +21,6 @@ export type GuardrailPlanResult = {
   rejections: GuardrailRejection[];
   hasChanges: boolean;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 function isSafeRelativePath(value: unknown): value is string {
   return (

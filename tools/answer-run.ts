@@ -18,6 +18,7 @@ import type {
   SearchResult
 } from "./lib/contracts.js";
 
+import { isRecord, stringValue } from "./lib/type-guards.js";
 import { answerRequest } from "./services/answers/generate-answer.js";
 import { feedbackRequest, parseFeedback } from "./services/answers/propose-feedback.js";
 import { buildAnswerNotification } from "./services/notifications/telegram.js";
@@ -63,14 +64,6 @@ type AnswerRunOutput = TelegramBaseFields & {
   telegram_lock_id: unknown;
   telegram_answer_message: TelegramMessage | null;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
 
 function stripTelegramCommand(text: string): string {
   return text.replace(/^\/(?:ask|answer|query)(?:@\w+)?\s*/i, "").trim();

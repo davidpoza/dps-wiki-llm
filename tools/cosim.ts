@@ -11,6 +11,7 @@ import {
 import type { EmbeddingUnit } from "./lib/semantic-index.js";
 import { createLogger } from "./lib/logger.js";
 import { releaseTelegramLockAfterFailure } from "./lib/telegram-lock.js";
+import { isRecord } from "./lib/type-guards.js";
 import {
   resolveTelegramConfig,
   type TelegramBaseFields,
@@ -38,10 +39,6 @@ type CosimOutput = TelegramBaseFields & {
   telegram_lock_id: unknown;
   telegram_cosim_message: TelegramMessage | null;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 class CosimUsageError extends Error {
   context: Omit<ReturnType<typeof telegramContextFromInput>, "note_a" | "note_b" | "telegram_text">;

@@ -8,6 +8,7 @@ import { createLogger } from "./lib/logger.js";
 import { ensureDirectory, resolveVaultRoot, resolveWithinRoot, writeTextFile } from "./lib/fs-utils.js";
 import { SYSTEM_CONFIG } from "./config.js";
 import type { CommitInput, CommitResult } from "./lib/contracts.js";
+import { isRecord } from "./lib/type-guards.js";
 
 const execFile = promisify(execFileCallback);
 
@@ -64,16 +65,6 @@ function slugify(value: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, SYSTEM_CONFIG.commit.changeLogSlugMaxLength);
-}
-
-/**
- * Validate and normalize the commit input contract.
- *
- * @param {unknown} input
- * @returns {Record<string, any>}
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object";
 }
 
 function stringArray(value: unknown): string[] {

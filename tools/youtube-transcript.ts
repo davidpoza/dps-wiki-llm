@@ -12,6 +12,10 @@ import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
 import type { JsonObject } from "./lib/contracts.js";
 import { resolveVaultRoot, resolveWithinRoot, writeTextFile } from "./lib/fs-utils.js";
+import { slugify } from "./lib/text.js";
+import { isRecord, stringValue } from "./lib/type-guards.js";
+
+const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 
 type TranscriptSegment = {
   start_ms: number;
@@ -76,14 +80,6 @@ type CommandResult = {
   stderr: string;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
 function extractVideoId(inputUrl: string): string | null {
   let parsed: URL;
 
@@ -116,7 +112,7 @@ function extractVideoId(inputUrl: string): string | null {
 }
 
 function isValidVideoId(value: string | null | undefined): value is string {
-  return typeof value === "string" && /^[a-zA-Z0-9_-]{11}$/.test(value);
+  return typeof value === "string" && VIDEO_ID_RE.test(value);
 }
 
 function normalizeCapturedAt(value: unknown): string {
@@ -605,18 +601,6 @@ function decodeXml(value: string): string {
     .replace(/&#(\d+);/g, (_match, code: string) => String.fromCharCode(Number(code)));
 }
 
-function slugify(value: string, fallback: string): string {
-  const slug = value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-
-  return slug || fallback;
-}
-
 function formatTimestamp(milliseconds: number): string {
   const totalSeconds = Math.floor(milliseconds / 1000);
   const hours = Math.floor(totalSeconds / 3600);
@@ -724,7 +708,7 @@ async function main(): Promise<void> {
   const author = stringValue(info.uploader) || stringValue(info.channel);
   const canonicalUrl = stringValue(info.webpage_url) || url;
   const datePrefix = capturedAt.slice(0, 10);
-  const slug = slugify(title, videoId);
+  const slug = slugify(title, 80, videoId);
   const hash = crypto.createHash("sha256").update(`${videoId}:${selectedSubtitle.language}:${selectedSubtitle.kind}:${segments.length}`).digest("hex").slice(0, 8);
   const rawPath = path.posix.join(SYSTEM_CONFIG.paths.rawDir, "web", `${datePrefix}-youtube-${slug}-${hash}.md`);
   const markdown = buildRawMarkdown({

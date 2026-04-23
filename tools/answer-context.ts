@@ -9,6 +9,7 @@ import type { AnswerContextDoc, AnswerContextPacket, AnswerRecord, SearchResult,
 import { resolveVaultRoot, resolveWithinRoot } from "./lib/fs-utils.js";
 import { splitFrontmatter } from "./lib/frontmatter.js";
 import { slugify, stableHash } from "./lib/text.js";
+import { isRecord, stringValue } from "./lib/type-guards.js";
 
 interface AnswerContextInput {
   question: string;
@@ -22,14 +23,6 @@ interface AnswerContextInput {
 /**
  * Read retrieved wiki notes and build the deterministic context packet consumed by an LLM answer node.
  */
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
 
 function normalizeSearchItem(item: unknown, index: number): SearchResultItem {
   if (!isRecord(item)) {

@@ -1,16 +1,9 @@
 import type { Logger } from "pino";
 
 import { runToolJson } from "../../lib/run-tool.js";
+import { isRecord, stringValue } from "../../lib/type-guards.js";
 
 export type IngestRawEvent = Record<string, unknown>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
 
 function telegramMessageFromBody(
   body: Record<string, unknown>

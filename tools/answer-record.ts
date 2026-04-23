@@ -6,6 +6,7 @@ import { createLogger } from "./lib/logger.js";
 import type { AnswerRecord, AnswerRecordInput } from "./lib/contracts.js";
 import { resolveVaultRoot, resolveWithinRoot, writeTextFile } from "./lib/fs-utils.js";
 import { slugify, stableHash } from "./lib/text.js";
+import { isRecord, stringValue } from "./lib/type-guards.js";
 
 interface AnswerRecordOutput {
   record: AnswerRecord;
@@ -16,14 +17,6 @@ interface AnswerRecordOutput {
 /**
  * Persist a generated answer artifact and emit the canonical answer record for feedback evaluation.
  */
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
 
 function defaultOutputId(question: string): string {
   return `out-${new Date().toISOString().slice(0, 10)}-answer-${stableHash(

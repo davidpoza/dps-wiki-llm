@@ -8,6 +8,7 @@ import { createLogger } from "./lib/logger.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { releaseTelegramLockAfterFailure } from "./lib/telegram-lock.js";
 import type { SearchResult } from "./lib/contracts.js";
+import { isRecord, stringValue } from "./lib/type-guards.js";
 import { buildSearchNotification } from "./services/notifications/telegram.js";
 import type { TelegramBaseFields, TelegramMessage } from "./services/notifications/telegram.js";
 
@@ -26,14 +27,6 @@ type SearchRunOutput = TelegramBaseFields & {
   telegram_lock_id: unknown;
   telegram_search_message: TelegramMessage | null;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
 
 function stripTelegramCommand(text: string): string {
   return text.replace(/^\/search(?:@\w+)?\s*/i, "").trim();

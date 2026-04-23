@@ -3,6 +3,7 @@
 import crypto from "node:crypto";
 
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
+import { isRecord } from "./lib/type-guards.js";
 import { createLogger } from "./lib/logger.js";
 import {
   ensureDirectory,
@@ -81,15 +82,6 @@ async function main(): Promise<void> {
     "apply-update completed"
   );
   writeJsonStdout(result, args.pretty);
-}
-
-/**
- * Validate the minimum structure required by the mutation plan contract.
- *
- * @param {unknown} plan
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object";
 }
 
 function validatePlan(plan: unknown): asserts plan is MutationPlan {

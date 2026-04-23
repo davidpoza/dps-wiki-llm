@@ -10,18 +10,11 @@ import { createLogger } from "./lib/logger.js";
 import type { JsonObject, JsonValue, NormalizedSourcePayload } from "./lib/contracts.js";
 import { relativeVaultPath, resolveVaultRoot, resolveWithinRoot } from "./lib/fs-utils.js";
 import { splitFrontmatter } from "./lib/frontmatter.js";
+import { isRecord, stringValue } from "./lib/type-guards.js";
 
 /**
  * Normalize a raw vault artifact into the canonical source payload consumed by planners.
  */
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
 
 function jsonValue(value: unknown): JsonValue | undefined {
   if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {

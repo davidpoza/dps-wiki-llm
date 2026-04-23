@@ -5,6 +5,7 @@ import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
 import type { CommitInput, JsonObject, LlmSourceNote, MutationPlan, NormalizedSourcePayload } from "./lib/contracts.js";
 import { firstMeaningfulParagraph, slugify, stableHash, truncateText } from "./lib/text.js";
+import { isRecord, stringValue } from "./lib/type-guards.js";
 
 interface SourceNotePlanOutput {
   source_payload: NormalizedSourcePayload;
@@ -17,14 +18,6 @@ interface SourceNotePlanOutput {
  *
  * This does not replace a richer LLM planner. It creates the safe source-note baseline that every ingestion can apply.
  */
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
 
 function normalizeStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {

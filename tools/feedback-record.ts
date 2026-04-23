@@ -6,6 +6,7 @@ import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
 import { ensureDirectory, resolveVaultRoot, resolveWithinRoot, writeJsonFile, writeTextFile } from "./lib/fs-utils.js";
 import { configuredSet, SYSTEM_CONFIG } from "./config.js";
+import { isRecord } from "./lib/type-guards.js";
 import type {
   FeedbackCandidateItem,
   FeedbackDecision,
@@ -117,10 +118,6 @@ function stableHash(value: string): string {
  * @param {number} index
  * @returns {Record<string, any>}
  */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object";
-}
-
 function normalizeCandidateItem(item: unknown, index: number): FeedbackCandidateItem {
   if (!isRecord(item)) {
     throw new Error(`candidate_items[${index}] must be an object`);

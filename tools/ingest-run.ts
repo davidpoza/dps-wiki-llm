@@ -7,6 +7,8 @@ import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
 import { resolveVaultRoot, resolveWithinRoot, pathExists, loadJsonFile, writeJsonFile } from "./lib/fs-utils.js";
 import { manifestPath, normalizeTextForEmbedding, extractSummarySection } from "./lib/semantic-index.js";
+import { truncateText } from "./lib/text.js";
+import { isRecord } from "./lib/type-guards.js";
 import { getGitHead, gitResetHard } from "./lib/git.js";
 import { PipelineTx } from "./lib/pipeline-tx.js";
 import { SYSTEM_CONFIG } from "./config.js";
@@ -35,6 +37,7 @@ import {
 } from "./services/ingest/build-llm-plan.js";
 import { parseAndGuardrailPlan } from "./services/ingest/guardrail-plan.js";
 import type { GuardrailRejection } from "./services/ingest/guardrail-plan.js";
+import { injectTopicTags, injectDefaultConfidence } from "./services/ingest/plan-transforms.js";
 import { resolveTerms } from "./services/ingest/resolve-terms.js";
 import {
   buildIngestNotification,
@@ -91,20 +94,12 @@ type IngestRunOutput = TelegramBaseFields & {
   telegram_ingest_message: TelegramMessage | null;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 function unique(values: Array<string | null | undefined>): string[] {
   return [
     ...new Set(
       values.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
     )
   ];
-}
-
-function truncate(value: string, maxLength: number): string {
-  return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
 }
 
 function buildLlmCommitInput(packet: {
@@ -135,7 +130,7 @@ function buildLlmCommitInput(packet: {
     ]),
     feedback_record_ref: null,
     mutation_result_ref: null,
-    commit_message: `ingest: apply LLM plan for ${truncate(title, 60)}`
+    commit_message: `ingest: apply LLM plan for ${truncateText(title, 60)}`
   };
 }
 
@@ -148,51 +143,6 @@ function topicSlugsFromPlan(plan: MutationPlan): string[] {
     .filter((a) => a.doc_type === "topic" && a.action !== "noop")
     .map((a) => a.path.split("/").pop()?.replace(/\.md$/, "") ?? "")
     .filter(Boolean);
-}
-
-function injectTopicTags(
-  plan: MutationPlan,
-  sourceNotePath: string,
-  topicSlugs: string[]
-): MutationPlan {
-  if (topicSlugs.length === 0 || !sourceNotePath) {
-    return plan;
-  }
-
-  return {
-    ...plan,
-    page_actions: [
-      ...plan.page_actions,
-      {
-        path: sourceNotePath,
-        action: "update",
-        doc_type: "source",
-        change_type: "tag_update",
-        payload: {
-          frontmatter: {
-            tags: topicSlugs
-          }
-        }
-      }
-    ]
-  };
-}
-
-function injectDefaultConfidence(plan: MutationPlan, defaultConfidence: string): MutationPlan {
-  const injected = plan.page_actions.map((a) => {
-    if (a.action !== "create") return a;
-    const existingFrontmatter = (a.payload?.frontmatter ?? {}) as Record<string, unknown>;
-    if (existingFrontmatter.confidence) return a;
-    return {
-      ...a,
-      payload: {
-        ...a.payload,
-        frontmatter: { ...existingFrontmatter, confidence: defaultConfidence }
-      }
-    };
-  });
-
-  return { ...plan, page_actions: injected };
 }
 
 function usageSummary(meta: LlmMeta): Record<string, unknown> {
@@ -833,7 +783,7 @@ async function main(): Promise<void> {
           paths_to_stage: [...summaryApplied, SYSTEM_CONFIG.paths.dbPath],
           feedback_record_ref: null,
           mutation_result_ref: null,
-          commit_message: `ingest: add Summary to ${summaryApplied.length} note(s) for ${truncate(sourcePayload.title || "source", 40)}`
+          commit_message: `ingest: add Summary to ${summaryApplied.length} note(s) for ${truncateText(sourcePayload.title || "source", 40)}`
         };
         await runToolJson("commit", { vault: args.vault, input: summaryCommitInput });
         log.info(
@@ -902,7 +852,7 @@ async function main(): Promise<void> {
             paths_to_stage: [...enrichResult.updated, SYSTEM_CONFIG.paths.dbPath],
             feedback_record_ref: null,
             mutation_result_ref: null,
-            commit_message: `ingest: enrich Related links for ${truncate(sourcePayload.title || "source", 50)}`
+            commit_message: `ingest: enrich Related links for ${truncateText(sourcePayload.title || "source", 50)}`
           };
           await runToolJson("commit", { vault: args.vault, input: enrichCommitInput });
           log.info(

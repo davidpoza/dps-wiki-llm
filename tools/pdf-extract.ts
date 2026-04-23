@@ -25,6 +25,7 @@ import { SYSTEM_CONFIG } from "./config.js";
 import { parseArgs, readJsonInput, writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
 import { resolveVaultRoot, resolveWithinRoot, writeTextFile } from "./lib/fs-utils.js";
+import { isRecord, stringValue } from "./lib/type-guards.js";
 
 type InputPayload = {
   telegram_file_id?: string;
@@ -47,14 +48,6 @@ type Result =
       reason: string;
       filename?: string;
     };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
 
 function slugify(value: string, fallback: string): string {
   const slug = value

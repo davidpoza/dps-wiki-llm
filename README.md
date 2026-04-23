@@ -2,520 +2,70 @@
   <img src="docs/assets/logo.png" alt="dps-wiki-llm logo" width="132">
   <h1>dps-wiki-llm</h1>
   <p><strong>Deterministic Node.js tooling for a persistent markdown-based knowledge system.</strong></p>
-  <p><code>raw/</code> for events, <code>wiki/</code> for curated state, <code>state/</code> for indexes and logs, and <code>outputs/</code> for artifacts.</p>
 </div>
 
 ## Overview
 
-`dps-wiki-llm` is the local, deterministic tooling layer of a persistent knowledge workflow built around `raw -> wiki -> state -> outputs`.
-
-The repository is responsible for:
-
-- applying controlled markdown updates to a vault
-- indexing `wiki/**/*.md` into SQLite FTS
-- querying the index for retrieval
-- generating maintenance reports
-- recording feedback and git-backed change logs
+`dps-wiki-llm` is the local tooling layer of a `raw → wiki → state → outputs` knowledge workflow. It applies controlled markdown updates to a vault, maintains SQLite FTS and local vector indexes, generates maintenance reports, and records feedback with git-backed change logs.
 
 The repository is not the orchestration layer. `n8n`, LLM planning, and answer synthesis sit around these scripts, not inside them.
 
-## Architecture Boundaries
-
-- `raw/` is the reactive event stream.
-- `wiki/` is stable derived state.
-- Only trigger automation on `raw/**`.
-- Never trigger automation on `wiki/**`.
-- Generated answers do not update the wiki directly.
-- Feedback evaluation is mandatory; propagation is conditional.
-
-Breaking the `raw/` versus `wiki/` boundary creates loops, noisy state, and non-deterministic behavior.
-
-## Implemented Tooling
-
-The repo now includes the local toolchain plus compact importable n8n workflows for a manual LLM production cut. n8n handles orchestration and Telegram I/O; fragile LLM and vault operations live in explicit Node.js macro scripts.
-
-| Script | Purpose | Main outputs |
-|---|---|---|
-| `init-db.ts` | Creates the SQLite schema and FTS tables. | `state/kb.db` |
-| `ingest-source.ts` | Normalizes a `raw/**` artifact into the canonical source payload. | stdout JSON |
-| `youtube-transcript.ts` | Calls `yt-dlp` to fetch YouTube subtitles and writes them as a raw transcript artifact. | `raw/web/**` plus stdout JSON |
-| `ingest-run.ts` | Runs the full ingest path: optional YouTube transcript creation, source normalization, LLM source-note cleanup, baseline apply, reindex, commit, and optional guarded LLM wiki updates. After guardrail validation, runs `resolve-terms.ts` to match concept candidates against existing topics via embedding (redirecting matched terms to topic updates) and to dedup concept creates against disk. Topics are never created automatically. Uses hybrid search for wiki context retrieval when the semantic index is present. Transactional: on failure after the first mutation, rolls back via `git reset --hard`, restores the idempotency-key ledger, and rebuilds the FTS index. | stdout JSON, `raw/**`, `wiki/**`, `state/**`, git commit |
-| `answer-run.ts` | Runs retrieval, answer synthesis, answer artifact persistence, and feedback-record validation without mutating `wiki/`. Accepts `retrieval_mode` (`fts`/`semantic`/`hybrid`); defaults to `hybrid` when the semantic index exists. Deletes the answer artifact from `outputs/` if any step after writing it fails. | stdout JSON, `outputs/**` |
-| `render-n8n-workflows.ts` | Legacy helper for rendering workflows that still contain n8n LLM HTTP nodes. The compact workflows no longer need it. | updated workflow JSON when applicable |
-| `plan-source-note.ts` | Builds a safe baseline Mutation Plan that creates the source note and root index entry, using an LLM-cleaned `source_note` when provided. | stdout JSON |
-| `apply-update.ts` | Applies a Mutation Plan to markdown files with idempotency tracking. | `wiki/**`, `INDEX.md`, `state/runtime/idempotency-keys.json` |
-| `answer-context.ts` | Reads retrieved wiki notes and builds the LLM context packet plus Answer Record shell. | stdout JSON |
-| `answer-record.ts` | Persists a generated answer artifact under `outputs/`. | `outputs/**` |
-| `feedback-record.ts` | Writes feedback records and can derive a follow-up mutation plan. | `state/feedback/**` |
-| `reindex.ts` | Rebuilds the `docs` table and FTS index from `wiki/**/*.md`. | `state/kb.db` |
-| `search.ts` | Runs FTS queries and returns ranked results as JSON. | stdout JSON |
-| `embed-index.ts` | Builds or incrementally updates the local semantic vector index. Only re-embeds changed documents (hash diff). | `state/semantic/**`, stdout JSON |
-| `semantic-search.ts` | Embeds a query and retrieves top-K semantically similar documents via cosine similarity. | stdout JSON (SearchResult-compatible) |
-| `hybrid-search.ts` | Fuses FTS and semantic results with min-max normalisation and weighted scoring (60% semantic / 40% lexical). Falls back to FTS when the semantic index is absent. | stdout JSON (SearchResult-compatible) |
-| `lint.ts` | Performs structural wiki checks. | `state/maintenance/*-lint.{json,md}` |
-| `health-check.ts` | Performs deeper semantic and traceability checks. | `state/maintenance/*-health-check.{json,md}` |
-| `commit.ts` | Stages material paths, writes a structured change log, and creates a git commit. | `state/change-log/**`, git commit |
-
-Production V1 gaps relative to the target architecture:
-
-- workflows should remain manually run until the VM, WebDAV behavior, and approval path are validated
-- the LLM ingest planner inside `ingest-run.ts` auto-applies non-empty plans after guardrail validation
-- scheduled maintenance and raw file watching are intentionally left inactive for the first production cut
-
-## Code Documentation
-
-Detailed English documentation for every script and shared library module lives in [`docs/code-reference.md`](docs/code-reference.md).
-
-The production V1 runbook lives in [`docs/production-runbook.md`](docs/production-runbook.md).
-
-Docker Compose deployments can build the n8n runtime from [`Dockerfile`](Dockerfile), which installs n8n, includes `git` and `yt-dlp`, and bakes the compiled local scripts into `/app` for the workflow command nodes.
-
-## Docker Compose Example
-
-This example uses the published GHCR images for n8n plus the external runner. It mounts `./local-files` both at `/files` for normal n8n local files and at `/data/vault` for the repository workflows, because the workflow command nodes use `/data/vault`.
-
-Copy [`.env.sample`](.env.sample) to `.env` and fill the secrets before starting the stack.
-
-```yaml
-version: "3.3"
-
-services:
-  n8n:
-    image: ghcr.io/davidpoza/dps-wiki-llm:latest
-    restart: always
-    ports:
-      - "5678:5678"
-    environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
-
-      - DB_TYPE=postgresdb
-      - DB_POSTGRESDB_HOST=db
-      - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
-      - DB_POSTGRESDB_USER=${POSTGRES_NON_ROOT_USER}
-      - DB_POSTGRESDB_PASSWORD=${POSTGRES_NON_ROOT_PASSWORD}
-
-      - N8N_RUNNERS_ENABLED=true
-      - N8N_RUNNERS_MODE=external
-      - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
-      - N8N_RUNNERS_BROKER_LISTEN_ADDRESS=0.0.0.0
-      - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE}
-
-      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
-      - N8N_HOST=${DOMAIN_NAME}
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=https
-      - NODE_ENV=production
-      - WEBHOOK_URL=https://${DOMAIN_NAME}/
-      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
-      - TZ=${GENERIC_TIMEZONE}
-
-      - NODE_FUNCTION_ALLOW_EXTERNAL=axios,qs
-      - NODES_EXCLUDE=[]
-
-      - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_API_KEY_HEADER=${LLM_API_KEY_HEADER}
-      - LLM_BASE_URL=${LLM_BASE_URL}
-      - LLM_MODEL=${LLM_MODEL}
-      - LLM_ANSWER_TEMPERATURE=0.2
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-
-      - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME}
-      - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL}
-      - GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME}
-      - GIT_COMMITTER_EMAIL=${GIT_COMMITTER_EMAIL}
-    depends_on:
-      - db
-    volumes:
-      - ./n8n_data:/home/node/.n8n
-      - ./local-files:/files
-      - ./local-files:/data/vault
-
-  n8n-runner:
-    image: ghcr.io/davidpoza/dps-wiki-llm-runner:latest
-    restart: always
-    environment:
-      - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
-      - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
-      - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE}
-      - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_BASE_URL=${LLM_BASE_URL}
-      - LLM_API_KEY_HEADER=${LLM_API_KEY_HEADER}
-      - LLM_MODEL=${LLM_MODEL}
-      - LLM_ANSWER_TEMPERATURE=0.2
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-
-      - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME}
-      - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL}
-      - GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME}
-      - GIT_COMMITTER_EMAIL=${GIT_COMMITTER_EMAIL}
-    depends_on:
-      - n8n
-    volumes:
-      - ./local-files:/data/vault
-
-  db:
-    image: postgres:16
-    restart: always
-    environment:
-      - POSTGRES_USER
-      - POSTGRES_PASSWORD
-      - POSTGRES_DB
-      - POSTGRES_NON_ROOT_USER
-      - POSTGRES_NON_ROOT_PASSWORD
-    volumes:
-      - ./db-data:/var/lib/postgresql/data
-      - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-```
-
-## Repository Structure
-
-```text
-.
-├── README.md
-├── package.json
-├── tsconfig.json
-├── .env.sample
-├── Dockerfile                  ← n8n + toolchain image (node:22 Debian)
-├── Dockerfile.runner           ← external n8n task runner image
-├── docs/
-│   ├── production-runbook.md
-│   ├── code-reference.md
-│   ├── assets/
-│   │   └── logo.svg
-│   └── diagrams/
-│       ├── workflow.puml
-│       └── workflow.svg
-├── n8n/
-│   ├── README.md
-│   └── workflows/
-│       ├── kb-answer-blueprint.json
-│       ├── kb-apply-feedback.json
-│       ├── kb-embed-index.json         ← incremental + full-rebuild triggers
-│       ├── kb-ingest-raw-blueprint.json
-│       ├── kb-monthly-health-check.json
-│       ├── kb-reindex-wiki.json
-│       └── kb-weekly-lint.json
-└── tools/
-    ├── config.ts
-    ├── init-db.ts
-    ├── ingest-source.ts
-    ├── ingest-run.ts               ← full ingest pipeline (includes embed-index step)
-    ├── answer-run.ts
-    ├── plan-source-note.ts
-    ├── apply-update.ts
-    ├── answer-context.ts
-    ├── answer-record.ts
-    ├── feedback-record.ts
-    ├── reindex.ts
-    ├── search.ts
-    ├── embed-index.ts              ← semantic index builder (incremental hash-diff)
-    ├── semantic-search.ts          ← pure semantic retrieval
-    ├── hybrid-search.ts            ← fused FTS + semantic retrieval
-    ├── youtube-transcript.ts       ← yt-dlp subtitle extraction
-    ├── bot-lock.ts                 ← Telegram bot lock CLI
-    ├── log-tail.ts                 ← tail app.log as JSON for n8n
-    ├── render-n8n-workflows.ts     ← legacy workflow renderer
-    ├── lint.ts
-    ├── health-check.ts
-    ├── commit.ts
-    ├── services/
-    │   ├── ingest/
-    │   │   ├── normalize-event.ts      ← raw event normalization + YouTube fetch
-    │   │   ├── build-source-note.ts    ← LLM source-note prompt builder
-    │   │   ├── build-llm-plan.ts       ← wiki context query + ingest plan prompt
-    │   │   └── guardrail-plan.ts       ← mutation plan validation
-    │   ├── answers/
-    │   │   ├── generate-answer.ts      ← LLM answer prompt builder
-    │   │   └── propose-feedback.ts     ← LLM feedback prompt builder
-    │   └── notifications/
-    │       └── telegram.ts             ← Telegram message builders
-    └── lib/
-        ├── cli.ts                      ← parseArgs, readJsonInput, writeJsonStdout
-        ├── config.ts                   → re-exported from ../config.ts
-        ├── contracts.ts                ← shared TypeScript payload interfaces
-        ├── db.ts                       ← SQLite helpers
-        ├── embedding-provider.ts       ← EmbeddingProvider interface
-        ├── frontmatter.ts              ← YAML frontmatter parse/serialize
-        ├── fs-utils.ts                 ← vault path resolution, file helpers
-        ├── git.ts                      ← getGitHead, gitResetHard (used by pipeline-tx)
-        ├── llm.ts                      ← chatCompletion with exponential-backoff retry (3×, 429/5xx)
-        ├── local-transformers-provider.ts ← CPU inference via @xenova/transformers
-        ├── logger.ts                   ← pino rotating logger factory
-        ├── markdown.ts                 ← markdown section manipulation
-        ├── pipeline-tx.ts              ← PipelineTx saga: register compensating actions, rollback on failure
-        ├── run-tool.ts                 ← execFile wrapper for sub-tool calls
-        ├── semantic-index.ts           ← manifest, cosine similarity, I/O
-        ├── telegram-lock.ts            ← atomic filesystem bot lock
-        ├── text.ts                     ← text normalization helpers
-        └── wiki-inspect.ts             ← wiki note reading helpers
-```
-
-Expected vault layout:
+## Storage Layers
 
 ```text
 vault/
-├── raw/
-├── wiki/
-├── state/
-│   ├── kb.db              ← SQLite FTS index (reindex.ts)
-│   └── semantic/          ← vector index (embed-index.ts) — gitignored
-│       ├── manifest.json
-│       └── notes/
-└── outputs/
+├── raw/         ← reactive event stream (ingest triggers here)
+├── wiki/        ← curated, derived knowledge state
+├── state/       ← indexes, logs, and metadata
+│   ├── kb.db               ← SQLite FTS index
+│   └── semantic/           ← vector index (gitignored)
+└── outputs/     ← ephemeral answer artifacts
+```
+
+Breaking the `raw/` versus `wiki/` boundary creates loops, noisy state, and non-deterministic behavior. **Only trigger on `raw/**`. Never trigger on `wiki/**`.**
+
+## Quick Start
+
+Requirements: Node.js `>=22.5.0`, `npm install` (runs build via `prepare`).
+
+```bash
+# Build
+npm run build
+
+# Type-check
+npm run typecheck
+
+# Test
+npm test
+
+# Initialize a vault
+npm run --silent init-db -- --vault /path/to/vault
+npm run --silent reindex -- --vault /path/to/vault
+npm run --silent embed-index -- --vault /path/to/vault
 ```
 
 ## Workflow
 
-The diagram below summarizes the intended workflow. Green nodes are scripts available in this repo; yellow nodes are external orchestration or provider-specific LLM components.
-
-Rendered using the official PlantUML web service:
-
 ![Workflow dps-wiki-llm](docs/diagrams/workflow.svg)
 
-Canonical source: [`docs/diagrams/workflow.puml`](docs/diagrams/workflow.puml)  
-Versioned render: [`docs/diagrams/workflow.svg`](docs/diagrams/workflow.svg)
+Canonical source: [`docs/diagrams/workflow.puml`](docs/diagrams/workflow.puml)
 
-## Typical Usage
+## Documentation
 
-Requirements:
+| Document | Audience | Contents |
+|----------|----------|----------|
+| [`docs/architecture.md`](docs/architecture.md) | Engineers | Entry points, contracts, indexing model, CLI conventions, environment variables |
+| [`docs/production-runbook.md`](docs/production-runbook.md) | Operators | Docker Compose, LLM config, n8n workflows, initial bootstrap, Telegram |
+| [`AGENTS.md`](AGENTS.md) | AI agents | System intent, boundaries, knowledge model, templates, design principles |
 
-- Node.js `>=22.5.0`, for built-in `node:sqlite` support
-- dependencies installed with `npm install`
-- Git identity configured if you plan to use `commit.ts`; either set `user.name` and `user.email`, or provide `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` or `GIT_COMMITTER_NAME`/`GIT_COMMITTER_EMAIL` in the runtime environment
+## Repository Structure
 
-The tools are TypeScript source files compiled to `dist/` and executed from the generated JavaScript in the package scripts. `npm install` runs the build through `prepare`; run `npm run build` again after changing source. Use `--silent` when command output must remain parseable JSON for automation.
-
-Check the TypeScript build:
-
-```bash
-npm run typecheck
+```text
+tools/
+├── <tool>.ts               ← CLI entry points (n8n calls node dist/tools/<tool>.js)
+├── config.ts               ← central behavior configuration
+├── services/               ← LLM prompt builders and event normalizers
+└── lib/                    ← shared utilities (db, fs, llm, markdown, text, …)
 ```
 
-Run the test suite:
-
-```bash
-npm test
-npm run test:coverage
-```
-
-Initialize the database:
-
-```bash
-npm run --silent init-db -- --vault /path/to/vault
-```
-
-Apply a mutation plan:
-
-```bash
-npm run --silent apply-update -- --vault /path/to/vault --input ./plan.json
-```
-
-Normalize a raw source and create the baseline source-note plan:
-
-```bash
-npm run --silent ingest-source -- --vault /path/to/vault --input ./raw-event.json
-npm run --silent plan-source-note -- --vault /path/to/vault --input ./source-payload.json
-```
-
-Rebuild the search index:
-
-```bash
-npm run --silent reindex -- --vault /path/to/vault
-```
-
-Run a search query:
-
-```bash
-npm run --silent search -- --vault /path/to/vault "model context protocol" --limit 5
-```
-
-Build the semantic vector index (run once after `reindex`, then again when wiki content changes):
-
-```bash
-npm run --silent embed-index -- --vault /path/to/vault
-# Force a full rebuild regardless of cached hashes:
-npm run --silent embed-index -- --vault /path/to/vault --rebuild
-```
-
-Query semantically (no keyword overlap required):
-
-```bash
-npm run --silent semantic-search -- --vault /path/to/vault "cómo organizo mi base de conocimiento" --limit 5
-```
-
-Query with hybrid fusion (FTS + semantic, recommended default):
-
-```bash
-npm run --silent hybrid-search -- --vault /path/to/vault "model context protocol" --limit 8
-```
-
-Run `answer-run` with an explicit retrieval mode:
-
-```bash
-echo '{"question":"¿qué es RAG?","retrieval_mode":"hybrid"}' | \
-  npm run --silent answer-run -- --vault /path/to/vault
-```
-
-Build answer context and persist an answer artifact after LLM synthesis:
-
-```bash
-npm run --silent answer-context -- --vault /path/to/vault --input ./answer-context-input.json
-npm run --silent answer-record -- --vault /path/to/vault --input ./answer-record-input.json
-```
-
-Record feedback:
-
-```bash
-npm run --silent feedback-record -- --vault /path/to/vault --input ./feedback.json
-```
-
-Run the production V1 n8n flow manually:
-
-1. Import the workflows from `n8n/workflows/`.
-2. Set `LLM_API_KEY` in the runtime that executes n8n command nodes. Optionally set `LLM_MODEL` and `LLM_API_KEY_HEADER`.
-3. Run `KB - Reindex Wiki`.
-4. Run `KB - Telegram Bot Polling` or `KB - Ingest Raw LLM Manual`.
-5. Review any proposed feedback and the LLM ingest plan results.
-6. Run `KB - Apply Feedback` with `approved=true` only after review.
-
-Run maintenance checks without writing reports:
-
-```bash
-npm run --silent lint -- --vault /path/to/vault --no-write
-npm run --silent health-check -- --vault /path/to/vault --no-write
-```
-
-Create a structured commit:
-
-```bash
-npm run --silent commit -- --vault /path/to/vault --input ./commit.json
-```
-
-## CLI Conventions
-
-- `--vault` is the root of the target vault and defaults to the current working directory.
-- `--input` is used by JSON-driven scripts such as `ingest-run.ts`, `answer-run.ts`, `ingest-source.ts`, `youtube-transcript.ts`, `plan-source-note.ts`, `apply-update.ts`, `answer-context.ts`, `answer-record.ts`, `feedback-record.ts`, and `commit.ts`.
-- `--db` can override the database path for `init-db.ts`, `reindex.ts`, and `search.ts`.
-- `--limit` controls result count in `search.ts`, `semantic-search.ts`, and `hybrid-search.ts`.
-- `--no-write` is supported by `feedback-record.ts`, `lint.ts`, and `health-check.ts`.
-- `--rebuild` is supported by `embed-index.ts` to force re-embedding of all documents.
-- Scripts emit machine-readable JSON on success.
-
-## Configuration
-
-`tools/config.ts` is the central behavior configuration for the toolchain. It defines vault paths, ingest defaults, answer artifact defaults, search limits, SQLite schema and pragmas, valid mutation and feedback values, note lint thresholds, health-check thresholds, markdown section behavior, report directories, and semantic index settings.
-
-The `semantic` block controls the vector index:
-
-```typescript
-semantic: {
-  dir: "state/semantic",                   // index directory, relative to vault root
-  mode: "note",                            // granularity: whole-file (phase 1)
-  minChars: 250,                           // documents shorter than this are not indexed
-  topK: 8,                                 // default result count for semantic-search
-  model: "Xenova/multilingual-e5-small",   // Hugging Face model identifier
-  batchSize: 16                            // max texts per embedding batch
-}
-```
-
-Override the model without touching code by setting `EMBED_MODEL` before running `embed-index`, `semantic-search`, or any tool that loads the vector index:
-
-```bash
-EMBED_MODEL=Xenova/bge-small-en-v1.5 npm run embed-index -- --vault .
-```
-
-`resolvedEmbedModel()` in `config.ts` reads `EMBED_MODEL` from the environment and falls back to `SYSTEM_CONFIG.semantic.model` when the variable is absent. The LLM model is similarly overridable via `LLM_MODEL`.
-
-The canonical JSON payload contracts from `AGENTS.md` are represented as TypeScript interfaces in `tools/lib/contracts.ts`.
-
-## Embedding Model
-
-The semantic index uses `@xenova/transformers` to run a transformer model locally, fully offline after the first download.
-
-### Cómo se incorpora al proyecto
-
-| Aspecto | Detalle |
-|---|---|
-| **Dependencia** | `@xenova/transformers ^2.17.2` en `package.json` — sin servidor externo, sin API key |
-| **Modelo por defecto** | `Xenova/multilingual-e5-small` (100 idiomas, 384 dimensiones, INT8 cuantizado) |
-| **Primera ejecución** | Descarga los pesos ONNX desde Hugging Face Hub → `~/.cache/huggingface/` |
-| **Ejecuciones siguientes** | Lee desde caché local, sin red, completamente offline |
-| **Inferencia** | CPU, ONNX Runtime embebido en el paquete npm — no requiere GPU ni instalación extra |
-| **Cuantización** | `quantized: true` (INT8): ~4× menor en disco, 2–4× más rápido en CPU, pérdida de calidad inapreciable para retrieval |
-| **Mean pooling** | El modelo produce un tensor `[1, seq_len, dim]`; se promedia sobre `seq_len` para obtener un vector `[dim]` por documento. Cuando el pipeline aplica pooling internamente devuelve `[1, dim]` directamente. |
-| **L2 normalización** | `normalize: true` produce vectores unitarios; la similitud coseno es equivalente al producto escalar |
-| **Singleton** | El pipeline ONNX se carga una vez por proceso y se reutiliza para todas las llamadas sucesivas |
-| **Almacenamiento** | Los vectores se guardan en `state/semantic/notes/*.json` — gitignoreados, nunca se commitean |
-
-### Por qué no hay servidor externo
-
-El sistema corre en una VM personal con acceso VPN restringido. Cada embedding de documentos o consultas ocurre dentro del mismo proceso Node.js que ya ejecuta los scripts del toolchain — sin latencia de red, sin costes de API, sin dependencia de disponibilidad externa.
-
-### Ciclo de vida del índice
-
-```
-npm run embed-index -- --vault .          # primera vez: descarga modelo + indexa todo
-                                           # sucesivas: solo re-embebe documentos cambiados
-
-# Cuando el wiki cambia significativamente:
-npm run reindex -- --vault .              # reconstruye FTS (SQLite)
-npm run embed-index -- --vault .          # actualiza índice semántico (hash-diff)
-
-# Reconstrucción forzada de todos los embeddings:
-npm run embed-index -- --vault . --rebuild
-```
-
-### Trazas de log de la llamada al modelo
-
-Cada llamada de inferencia emite una traza estructurada en `state/logs/app.log`:
-
-```json
-{
-  "level": "info",
-  "script": "embedding-provider",
-  "phase": "inference",
-  "model": "Xenova/multilingual-e5-small",
-  "input_chars": 1247,
-  "input_preview": "Model Context Protocol es un estándar abierto que permite...",
-  "options": { "pooling": "mean", "normalize": true },
-  "duration_ms": 312,
-  "output_dim": 384,
-  "output_norm": 1.000000
-}
-```
-
-La carga del pipeline también se registra:
-
-```json
-{ "phase": "model-load", "model": "Xenova/multilingual-e5-small", "quantized": true, "duration_ms": 4821 }
-```
-
-## Operational Notes
-
-- `apply-update.ts` enforces `create`, `update`, and `noop` actions and tracks idempotency keys in `state/runtime/idempotency-keys.json`.
-- `ingest-source.ts` accepts only `raw/**` paths and emits a normalized source payload.
-- `plan-source-note.ts` builds the baseline source note plan. `ingest-run.ts` requires an LLM-cleaned `source_note` before mutating `wiki/`, then proposes and auto-applies richer wiki propagation only after guardrail validation and term resolution.
-- **Topic creation is user-only.** The LLM is instructed never to propose `create` actions under `wiki/topics/`. After guardrail validation, `resolve-terms.ts` enforces this programmatically, converting any escaped topic creates to `noop`. Concept terms are matched against existing topics via embedding (threshold `TOPIC_MATCH_THRESHOLD`, default 0.72); matches are redirected to topic updates. If no topic matches, `resolve-terms.ts` checks if the concept file already exists and switches `create` to `update` as needed.
-- **`wiki/projects/` is excluded from all automation.** The `projects/` subdirectory is filtered out of FTS indexing (`reindex.ts`), semantic indexing (`embed-index.ts`), structural linting (`lint.ts`), health checks (`health-check.ts`), and LLM wiki context.
-- `health-check.ts` emits a `concept-topic-candidate` suggestion (never an automatic action) for concepts whose total wikilink count exceeds `CONCEPT_TOPIC_CANDIDATE_THRESHOLD` (default 8).
-- `ingest-run.ts` is transactional: a git HEAD checkpoint and an idempotency-key snapshot are taken before the first mutation. On any failure, `PipelineTx` runs three compensating actions in order — `git reset --hard <pre-run-sha>`, restore `idempotency-keys.json`, rebuild FTS via `reindex`. If the failure occurs before the first mutation, rollback is a no-op.
-- `answer-run.ts` tracks the answer artifact path written by `answer-record.ts`. If any step after that write fails, the artifact is deleted before re-throwing.
-- `reindex.ts` indexes markdown derived from `wiki/`, not `raw/`. ROLLBACK failures are logged at `error` level instead of being silently swallowed.
-- `search.ts` queries the FTS index and returns ranked results with `path`, `title`, `doc_type`, and `score`.
-- `answer-context.ts` reads retrieved wiki markdown for LLM context; `answer-run.ts` stores the answer under `outputs/` with `answer-record.ts` and returns feedback for review.
-- `lint.ts` focuses on structure and maintainability.
-- `health-check.ts` focuses on unsupported claims, stale low-confidence notes, and missing pages.
-- `commit.ts` writes a change log to `state/change-log/` before creating the git commit.
-- `docs/code-reference.md` is the file-level reference for the entire codebase.
+See [`docs/architecture.md`](docs/architecture.md) for per-module details.

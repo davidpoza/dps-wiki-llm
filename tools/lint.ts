@@ -16,61 +16,11 @@ import { analyzeWikiGraph, extractWikiLinks, loadWikiDocs } from "./lib/wiki-ins
 import { splitFrontmatter, stringifyFrontmatter } from "./lib/frontmatter.js";
 import { SYSTEM_CONFIG } from "./config.js";
 import type { MaintenanceFinding, MaintenanceResult, Severity, WikiDoc, WikiGraph } from "./lib/contracts.js";
+import { buildFinding, nowStamp, severityRank } from "./lib/maintenance.js";
 
 /**
  * Run structural wiki linting and optionally persist the report artifacts.
  */
-
-/**
- * Create a filesystem-safe timestamp used in report filenames.
- *
- * @returns {string}
- */
-function nowStamp(): string {
-  return new Date().toISOString().replaceAll(":", "-");
-}
-
-/**
- * Normalize a lint finding into the shared maintenance result shape.
- *
- * @param {"critical" | "warning" | "suggestion"} severity
- * @param {string} targetPath
- * @param {string} issueType
- * @param {string} description
- * @param {string} recommendedAction
- * @param {boolean} [autoFixable=false]
- * @param {Record<string, any>} [extra={}]
- * @returns {Record<string, any>}
- */
-function buildFinding(
-  severity: Severity,
-  targetPath: string,
-  issueType: string,
-  description: string,
-  recommendedAction: string,
-  autoFixable = false,
-  extra: Record<string, unknown> = {}
-): MaintenanceFinding {
-  return {
-    severity,
-    path: targetPath,
-    issue_type: issueType,
-    description,
-    recommended_action: recommendedAction,
-    auto_fixable: autoFixable,
-    ...extra
-  };
-}
-
-/**
- * Sort findings by severity before path-level tie breaking.
- *
- * @param {string} severity
- * @returns {number}
- */
-function severityRank(severity: Severity): number {
-  return SYSTEM_CONFIG.maintenance.severityOrder[severity];
-}
 
 /**
  * Enforce lowercase kebab-case names for stable linking and maintenance.

@@ -4,10 +4,7 @@ import type {
   ChatCompletionResponse
 } from "../../lib/llm.js";
 import { chatText, extractJson } from "../../lib/llm.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+import { isRecord } from "../../lib/type-guards.js";
 
 function stringField(record: Record<string, unknown>, field: string): string {
   const value = record[field];
