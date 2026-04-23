@@ -325,8 +325,10 @@ export function parseAndGuardrailPlan(
       reject(rejections, action, "page path outside allowed wiki areas", log);
       continue;
     }
+    // Creating new topic files is forbidden for all automation — only the user creates them.
+    // UPDATE actions on existing topic files are allowed (e.g. adding Related links, grounded context).
     if (action.action === "create" && actionPath.startsWith("wiki/topics/")) {
-      reject(rejections, action, "auto-create of wiki/topics/ notes is forbidden — topics are created exclusively by the user", log);
+      reject(rejections, action, "auto-create of wiki/topics/ notes is forbidden — topics are created exclusively by the user; use action \"update\" to modify an existing topic", log);
       continue;
     }
     if (

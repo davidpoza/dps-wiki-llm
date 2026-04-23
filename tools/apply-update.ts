@@ -202,10 +202,12 @@ async function applyPageAction({
     return;
   }
 
-  // Hard guard: topics may never be auto-created — only the user creates them manually.
+  // Hard guard: new topic files may never be created by automation — only the user creates them.
+  // UPDATE actions on existing topic files are explicitly allowed (e.g. adding Related links,
+  // adding grounded context).  Only CREATE is blocked here.
   if (action.action === "create" && action.path.startsWith("wiki/topics/")) {
     throw new Error(
-      `Refusing to auto-create topic "${action.path}": wiki/topics/ notes are created exclusively by the user.`
+      `Refusing to auto-create topic "${action.path}": wiki/topics/ files are created exclusively by the user. Use action "update" to modify an existing topic.`
     );
   }
 

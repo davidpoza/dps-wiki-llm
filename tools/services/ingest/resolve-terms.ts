@@ -110,6 +110,8 @@ export async function resolveTerms(
   for (const action of plan.page_actions) {
 
     // ── 1. Block auto-create of topics ──────────────────────────────────────
+    // Creating new topic files is forbidden for all automation — only the user creates them.
+    // UPDATE actions on existing topic files are allowed (adding Related links, grounded context, etc.).
     // Guard on BOTH doc_type and path prefix to catch mismatched doc_type values.
     if (action.action === "create" && (action.doc_type === "topic" || action.path.startsWith("wiki/topics/"))) {
       log.warn(

@@ -6,7 +6,8 @@ import { writeJsonStdout } from "./lib/cli.js";
 import { createLogger } from "./lib/logger.js";
 import { resolveVaultRoot, relativeVaultPath } from "./lib/fs-utils.js";
 import { loadWikiDocs, analyzeWikiGraph } from "./lib/wiki-inspect.js";
-import { semanticSearch } from "./lib/semantic-search-fn.js";
+import { loadManifest, loadAllEmbeddingUnits, cosineSimilarity } from "./lib/semantic-index.js";
+import { createLocalTransformersProvider } from "./lib/local-transformers-provider.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { SYSTEM_CONFIG } from "./config.js";
 import type { MutationPlan, MutationResult, WikiDoc } from "./lib/contracts.js";
@@ -107,54 +108,53 @@ async function main(): Promise<void> {
     "enrich-links: target docs selected"
   );
 
+  // ── load semantic index once ───────────────────────────────────────────────
+
+  const manifest = await loadManifest(vaultRoot).catch(() => null);
+  const units = manifest ? await loadAllEmbeddingUnits(vaultRoot, manifest) : [];
+
+  const titleVecs: number[][] = [];
+  if (units.length > 0) {
+    const provider = createLocalTransformersProvider();
+    const vecs = await provider.embed(validTargets.map((d) => d.title));
+    titleVecs.push(...vecs);
+  }
+
   // ── discover candidates ────────────────────────────────────────────────────
 
   const candidateLimit = SYSTEM_CONFIG.enrich.candidateLimit;
+  const minCosine = SYSTEM_CONFIG.enrich.minCosineSimilarity;
   const pageActions: MutationPlan["page_actions"] = [];
 
-  for (const doc of validTargets) {
+  for (let i = 0; i < validTargets.length; i++) {
+    const doc = validTargets[i];
+    const queryVec = titleVecs[i];
+
+    if (!queryVec) continue;
+
     const resolvedPaths = new Set(graph.resolvedLinks.get(doc.relativePath) ?? []);
 
-    let searchResult: Awaited<ReturnType<typeof semanticSearch>>;
-    try {
-      searchResult = await semanticSearch(doc.title, { vault: vaultRoot, limit: candidateLimit });
-    } catch (err) {
-      log.warn(
-        {
-          phase: "discover/search",
-          path: doc.relativePath,
-          err: err instanceof Error ? err.message : String(err)
-        },
-        "enrich-links: search failed — skipping doc"
-      );
-      continue;
-    }
+    const scored = units
+      .filter((u) => u.path !== doc.relativePath && !resolvedPaths.has(u.path))
+      .map((u) => ({ path: u.path, title: u.title, doc_type: u.doc_type, score: cosineSimilarity(queryVec, u.embedding) }))
+      .sort((a, b) => b.score - a.score);
 
-    const minCosine = SYSTEM_CONFIG.enrich.minCosineSimilarity;
-
-    for (const r of searchResult.results) {
-      if (r.path === doc.relativePath) continue;
-      log.info(
+    for (const r of scored) {
+      log.debug(
         {
           phase: "discover/score",
           path: doc.relativePath,
           candidate: r.path,
           score: r.score,
           threshold: minCosine,
-          above_threshold: r.score >= minCosine,
-          already_linked: resolvedPaths.has(r.path)
+          above_threshold: r.score >= minCosine
         },
         "enrich-links: candidate score"
       );
     }
 
-    const candidates = searchResult.results
-      .filter((r) => {
-        if (r.path === doc.relativePath) return false;
-        if (resolvedPaths.has(r.path)) return false;
-        if (r.score < minCosine) return false;
-        return true;
-      })
+    const candidates = scored
+      .filter((r) => r.score >= minCosine)
       .slice(0, candidateLimit);
 
     if (candidates.length === 0) {

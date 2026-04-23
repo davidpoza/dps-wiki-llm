@@ -14,6 +14,7 @@ import {
 import { analyzeWikiGraph, loadWikiDocs, extractWikiLinks } from "./lib/wiki-inspect.js";
 import { parseSections } from "./lib/markdown.js";
 import { loadManifest, loadAllEmbeddingUnits, cosineSimilarity, manifestPath, normalizeTextForEmbedding, extractSummarySection, hashText } from "./lib/semantic-index.js";
+import type { EmbeddingUnit } from "./lib/semantic-index.js";
 import { chatCompletion, chatText } from "./lib/llm.js";
 import { runToolJson } from "./lib/run-tool.js";
 import { hybridSearch } from "./lib/hybrid-search-fn.js";
@@ -315,13 +316,10 @@ async function pruneWeakRelatedLinks(
   docs: WikiDoc[],
   graph: WikiGraph,
   vaultRoot: string,
-  log: ReturnType<typeof createLogger>
+  log: ReturnType<typeof createLogger>,
+  embeddingMap: Map<string, number[]>
 ): Promise<Array<{ path: string; links_to_remove: string[] }>> {
-  const manifest = await loadManifest(vaultRoot).catch(() => null);
-  if (!manifest) return [];
-
-  const units = await loadAllEmbeddingUnits(vaultRoot, manifest);
-  const embeddingMap = new Map<string, number[]>(units.map((u) => [u.path, u.embedding]));
+  if (embeddingMap.size === 0) return [];
 
   const minCosine = SYSTEM_CONFIG.enrich.minCosineSimilarity;
   const typedDocTypes = new Set([...SYSTEM_CONFIG.wiki.typedDocTypes, "source"]);
@@ -357,7 +355,7 @@ async function pruneWeakRelatedLinks(
 
       const similarity = cosineSimilarity(sourceEmbedding, targetEmbedding);
 
-      log.info(
+      log.debug(
         {
           phase: "prune-related/score",
           source: doc.relativePath,
@@ -598,27 +596,23 @@ async function applyDiscoveredLinks(
  * For each typed doc, find wiki notes not yet linked with cosine similarity >= threshold
  * using the stored document embeddings from the semantic index (same cosim values used
  * by pruneWeakRelatedLinks, avoiding the title-query vs full-doc embedding mismatch).
+ *
+ * Topic docs (wiki/topics/) are included as source documents: automation may and should
+ * update their Related sections.  What automation must never do is CREATE new topic files —
+ * that restriction lives in apply-update.ts (hard guard) and guardrail-plan.ts, not here.
  */
 async function discoverNewLinks(
   docs: WikiDoc[],
   graph: WikiGraph,
   vaultRoot: string,
   excludedPaths: Set<string>,
-  log: ReturnType<typeof createLogger>
+  log: ReturnType<typeof createLogger>,
+  units: EmbeddingUnit[],
+  embeddingMap: Map<string, number[]>
 ): Promise<NewLinkCandidate[]> {
-  const manifest = await loadManifest(vaultRoot).catch(() => null);
-  if (!manifest) {
-    log.info(
-      { phase: "discover-new-links/no-index" },
-      "health-check: [discover-new-links] no semantic index — skipping"
-    );
-    return [];
-  }
-
-  const units = await loadAllEmbeddingUnits(vaultRoot, manifest);
   if (units.length === 0) return [];
 
-  const embeddingMap = new Map<string, number[]>(units.map((u) => [u.path, u.embedding]));
+
 
   const typedDocs = docs.filter((doc) => SYSTEM_CONFIG.wiki.typedDocTypes.includes(doc.docType) || doc.docType === "source");
   const minCosine = SYSTEM_CONFIG.enrich.minCosineSimilarity;
@@ -655,7 +649,7 @@ async function discoverNewLinks(
       const candidateSlug = unit.path.split("/").pop()?.replace(/\.md$/, "") ?? "";
       if (existingRelatedSlugs.has(candidateSlug)) continue;
 
-      log.info(
+      log.debug(
         {
           phase: "discover-new-links/score",
           source_path: doc.relativePath,
@@ -1325,7 +1319,11 @@ async function main(): Promise<void> {
 
   log.info({ phase: "prune-related/start" }, "health-check: [prune-related] starting weak link pruning");
 
-  const weakLinks = await pruneWeakRelatedLinks(docs, graph, vaultRoot, log);
+  const sharedManifest = await loadManifest(vaultRoot).catch(() => null);
+  const sharedUnits = sharedManifest ? await loadAllEmbeddingUnits(vaultRoot, sharedManifest) : [];
+  const sharedEmbeddingMap = new Map<string, number[]>(sharedUnits.map((u) => [u.path, u.embedding]));
+
+  const weakLinks = await pruneWeakRelatedLinks(docs, graph, vaultRoot, log, sharedEmbeddingMap);
 
   let appliedPruning: Pick<MutationResult, "created" | "updated" | "skipped"> | null = null;
 
@@ -1444,7 +1442,7 @@ async function main(): Promise<void> {
     "health-check: [discover-new-links] starting new link discovery"
   );
 
-  const discoveredLinks = await discoverNewLinks(docs, graph, vaultRoot, new Set(), log);
+  const discoveredLinks = await discoverNewLinks(docs, graph, vaultRoot, new Set(), log, sharedUnits, sharedEmbeddingMap);
 
   // ── apply discovered links ────────────────────────────────────────────────
 

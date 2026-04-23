@@ -114,7 +114,9 @@ export function ingestPlanRequest(
           "For existing notes: copy the link exactly from allowed_supporting_wiki_links. For new notes you create in this plan: derive the slug from the last segment of their page_actions[].path without .md, and use their payload.title as the display name.",
           "Never construct a wiki link from memory or approximation. If you cannot find an exact match in allowed_supporting_wiki_links or in the page_actions of this plan, omit the link entirely.",
           // ── topics ────────────────────────────────────────────────────────────
-          "NEVER propose action: \"create\" for any path under wiki/topics/. Topics are created exclusively by the user; no automation may generate new topic files.",
+          // Creating new topic files is forbidden — only the user creates them.
+          // Updating existing topic files is allowed and encouraged when grounded evidence is available.
+          "NEVER propose action: \"create\" for any path under wiki/topics/. Topics are created exclusively by the user; the pipeline may never generate new topic files. Any such action will be rejected by the guardrail.",
           "You MAY propose action: \"update\" (never \"create\") for topics that already appear in wiki_context.supporting_notes with doc_type \"topic\", to add references or relevant context grounded in the source.",
           // ── concepts ──────────────────────────────────────────────────────────
           "Concept file names must use the singular English form in kebab-case (e.g., system.md not systems.md, mental-model.md not mental-models.md). Apply this rule to all wiki/concepts/ paths. The payload.title may be in Spanish.",

@@ -189,6 +189,7 @@ The answer artifact is operational output; it does not mutate the semantic wiki.
 - Maintains `state/runtime/idempotency-keys.json` to avoid duplicate application.
 - Uses `renderMarkdown` to merge frontmatter and sections rather than replacing whole files.
 - Applies index updates through the same markdown rendering path.
+- **Hard guard:** any `create` action whose path starts with `wiki/topics/` throws immediately with a descriptive error. Topic files are created exclusively by the user — no pipeline step, LLM output, or maintenance script may ever generate a new file under `wiki/topics/`. `update` actions on existing topic files are allowed.
 
 The important behavior here is idempotent, small-scope mutation with explicit paths.
 
@@ -214,6 +215,8 @@ It focuses on maintainability and structure, not semantic truth.
 - Reuses the wiki graph plus section metadata from `wiki-inspect.ts`.
 - Checks for unsupported factual content, stale low-confidence notes, source-note traceability gaps, and missing-page references.
 - Can persist both a JSON report and a markdown summary under `state/maintenance/`.
+- With `--write`: auto-applies a limited set of safe mutations — discovers semantically similar notes and adds Related links to existing docs (including existing topic files), prunes weak Related links below the cosine threshold, auto-generates `## Summary` sections for long concepts and sources, and repositions misplaced `## Summary` sections.
+- **Never creates new topic files.** Any write to `wiki/topics/` is limited to updating content inside files that the user already created.
 
 It is the semantic complement to `lint.ts`.
 

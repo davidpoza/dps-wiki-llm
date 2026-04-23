@@ -161,7 +161,7 @@ Pipeline:
 raw event
 -> ingest-source.ts
 -> idempotency / duplicate check
--> LLM ingestion prompt   (may produce concept/entity/analysis updates; NEVER creates topics)
+-> LLM ingestion prompt   (may produce concept/entity/analysis updates; may update existing topics; NEVER creates new topic files)
 -> structured JSON plan
 -> guardrail-plan.ts      (validate path constraints, idempotency keys)
 -> resolve-terms.ts       (term resolution: match concepts against existing topics via embedding;
@@ -174,8 +174,10 @@ raw event
 ```
 
 **Topic creation rule:** Topics are created exclusively by the user under `wiki/topics/`.
-No pipeline step may produce a `create` action for a topic path.
+No pipeline step may produce a `create` action for a topic path — `apply-update.ts` enforces this with a hard guard that throws on any such attempt.
+Automation MAY update existing topic files (add Related links, add grounded context sections) but NEVER creates new ones.
 A concept term is redirected to a topic `update` when cosine similarity ≥ `TOPIC_MATCH_THRESHOLD` (default 0.72).
+The auto-created note types are `wiki/sources/` (by the baseline pipeline) and `wiki/concepts/`, `wiki/entities/`, `wiki/analyses/` (by the LLM planner).
 
 Expected plan shape:
 
@@ -293,8 +295,9 @@ Maintenance checks:
 - aggregation page
 - organizes related notes
 - should not become the primary location of raw facts
-- **created exclusively by the user** — no automation may create new topic files
-- automation may update existing topics (add references, context) when embedding similarity indicates relevance
+- **created exclusively by the user** — no automation may ever create new topic files under `wiki/topics/`
+- automation may and should update existing topic files: adding Related links, adding grounded context, pruning weak links
+- any `create` action targeting `wiki/topics/` is rejected at every layer: LLM prompt rules, `guardrail-plan.ts`, `resolve-terms.ts`, and the hard guard in `apply-update.ts`
 
 #### `source`
 
@@ -679,6 +682,8 @@ query
   - update index pages
 - avoid broad rewrites
 - preserve note identity when possible
+- **hard guard**: any `create` action whose path starts with `wiki/topics/` throws immediately — topic files are created exclusively by the user, never by automation
+- `update` actions on existing topic files are allowed (e.g., adding Related links or grounded context)
 
 ### `lint.ts`
 
@@ -695,6 +700,8 @@ query
 - should output structured findings with severity and recommended actions
 - should be suitable for scheduled monthly review runs
 - excludes `wiki/projects/` from all checks
+- with `--write`: auto-applies allowed mutations — adds Related links to existing topic files, prunes weak Related links, adds and repositions `## Summary` sections in concepts and sources
+- **never creates new topic files** — updates to `wiki/topics/` are restricted to modifying content within already-existing user-created files
 
 ### `feedback-record.ts`
 
