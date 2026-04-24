@@ -37,6 +37,37 @@
     },
     {
       "parameters": {
+        "command": "={{ \"node /app/dist/tools/bot-lock.js acquire --vault /data/vault --name telegram-bot --owner \" + JSON.stringify(\"file-watcher-\" + String(Date.now())) + \" --ttl-ms \" + JSON.stringify($env.TELEGRAM_BOT_LOCK_TTL_MS || \"1800000\") }}",
+        "executeOnce": true
+      },
+      "id": "raw-acquire-lock",
+      "name": "Acquire Bot Lock",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -420,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Tries to acquire the shared bot lock. If another ingest (e.g. triggered by the answer workflow) is already running, the lock will not be acquired and execution stops — preventing duplicate parallel ingests."
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout ?? '';\nif (!stdout.trim()) throw new Error('bot-lock acquire returned empty stdout');\nconst lock = JSON.parse(stdout);\nif (!lock.acquired) return [];\nconst input = $input.first().json;\nreturn [{ json: { ...input, telegram_lock_acquired: true, telegram_lock_id: lock.lock_id } }];"
+      },
+      "id": "raw-parse-lock",
+      "name": "Parse File Watcher Lock",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "If lock was not acquired (another ingest is active), returns [] to silently stop this execution. Otherwise passes the lock_id downstream so it can be released at the end."
+    },
+    {
+      "parameters": {
         "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst payload = {\n  ...body,\n  telegram_polled: Boolean(input.telegram_polled),\n  telegram_command: input.telegram_command ?? body.telegram_command ?? null,\n  telegram_lock_acquired: Boolean(input.telegram_lock_acquired),\n  telegram_lock_id: input.telegram_lock_id ?? body.telegram_lock_id ?? null\n};\nreturn [{\n  json: {\n    ...payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
       },
       "id": "ingest-build-payload",
@@ -44,7 +75,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -420,
+        180,
         0
       ]
     },
@@ -58,7 +89,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        -120,
+        480,
         0
       ],
       "notesInFlow": true,
@@ -73,7 +104,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        180,
+        780,
         0
       ]
     },
@@ -93,7 +124,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        480,
+        1080,
         0
       ]
     },
@@ -121,7 +152,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        760,
+        1360,
         -100
       ],
       "notesInFlow": true,
@@ -137,9 +168,25 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1040,
+        1640,
         0
       ]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "executeOnce": true
+      },
+      "id": "raw-release-lock",
+      "name": "Release Bot Lock After Ingest",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1940,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Releases the bot lock acquired at the start of this workflow, allowing subsequent ingests to proceed."
     }
   ],
   "connections": {
@@ -147,7 +194,7 @@
       "main": [
         [
           {
-            "node": "Build Ingest Run Payload",
+            "node": "Acquire Bot Lock",
             "type": "main",
             "index": 0
           }
@@ -155,6 +202,28 @@
       ]
     },
     "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Acquire Bot Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acquire Bot Lock": {
+      "main": [
+        [
+          {
+            "node": "Parse File Watcher Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse File Watcher Lock": {
       "main": [
         [
           {
@@ -221,6 +290,17 @@
         [
           {
             "node": "Finalize Ingest Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Ingest Response": {
+      "main": [
+        [
+          {
+            "node": "Release Bot Lock After Ingest",
             "type": "main",
             "index": 0
           }
