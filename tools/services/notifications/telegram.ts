@@ -1,5 +1,5 @@
-import type { MutationResult } from "../../lib/contracts.js";
-import { truncateText } from "../../lib/text.js";
+import type { MutationResult } from "../../lib/core/contracts.js";
+import { truncateText } from "../../lib/infra/text.js";
 
 export type TelegramMessage = {
   chat_id: string;

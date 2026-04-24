@@ -1,5 +1,5 @@
-import { buildFinding } from "../../lib/maintenance.js";
-import type { MaintenanceResult, MissingPage, MutationResult } from "../../lib/contracts.js";
+import { buildFinding } from "../../lib/core/maintenance.js";
+import type { MaintenanceResult, MissingPage, MutationResult } from "../../lib/core/contracts.js";
 import type { BrokenLinkReport, LinkResolution, NewLinkCandidate } from "./link-ops.js";
 
 export { buildFinding };

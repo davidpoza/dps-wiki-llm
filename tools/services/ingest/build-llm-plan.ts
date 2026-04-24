@@ -3,8 +3,8 @@ import type {
   LlmSourceNote,
   MutationPlan,
   NormalizedSourcePayload
-} from "../../lib/contracts.js";
-import type { ChatCompletionRequest } from "../../lib/llm.js";
+} from "../../lib/core/contracts.js";
+import type { ChatCompletionRequest } from "../../lib/infra/llm.js";
 
 const ALLOWED_PAGE_PREFIXES = [
   "wiki/concepts/",

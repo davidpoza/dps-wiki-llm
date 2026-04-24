@@ -34,7 +34,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/health-check.js --vault /data/vault",
+        "command": "node /app/dist/tools/cmd/health-check.js --vault /data/vault",
         "executeOnce": true
       },
       "id": "e82002d2-ed1f-4b3f-9556-7619caf12f31",

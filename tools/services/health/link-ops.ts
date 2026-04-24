@@ -1,9 +1,9 @@
-import { cosineSimilarity } from "../../lib/semantic-index.js";
-import type { EmbeddingUnit } from "../../lib/semantic-index.js";
-import { runToolJson } from "../../lib/run-tool.js";
-import { extractWikiLinks } from "../../lib/wiki-inspect.js";
+import { cosineSimilarity } from "../../lib/storage/semantic-index.js";
+import type { EmbeddingUnit } from "../../lib/storage/semantic-index.js";
+import { runToolJson } from "../../lib/infra/run-tool.js";
+import { extractWikiLinks } from "../../lib/wiki/wiki-inspect.js";
 import { SYSTEM_CONFIG } from "../../config.js";
-import type { MissingPage, MutationPlan, MutationResult, SearchResult, WikiDoc, WikiGraph } from "../../lib/contracts.js";
+import type { MissingPage, MutationPlan, MutationResult, SearchResult, WikiDoc, WikiGraph } from "../../lib/core/contracts.js";
 import type { Logger } from "pino";
 
 export type BrokenLinkReport = {

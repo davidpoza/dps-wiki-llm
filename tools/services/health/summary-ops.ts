@@ -1,15 +1,15 @@
 import path from "node:path";
 
-import { chatCompletion, chatText } from "../../lib/llm.js";
-import { runToolJson } from "../../lib/run-tool.js";
+import { chatCompletion, chatText } from "../../lib/infra/llm.js";
+import { runToolJson } from "../../lib/infra/run-tool.js";
 import {
   loadManifest,
   normalizeTextForEmbedding,
   extractSummarySection,
   hashText
-} from "../../lib/semantic-index.js";
+} from "../../lib/storage/semantic-index.js";
 import { SYSTEM_CONFIG } from "../../config.js";
-import type { MutationPlan, WikiDoc } from "../../lib/contracts.js";
+import type { MutationPlan, WikiDoc } from "../../lib/core/contracts.js";
 import type { Logger } from "pino";
 
 /**

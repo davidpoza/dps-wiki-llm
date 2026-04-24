@@ -1,7 +1,7 @@
-import type { AnswerContextPacket, AnswerRecord, FeedbackRecord } from "../../lib/contracts.js";
-import type { ChatCompletionRequest, ChatCompletionResponse } from "../../lib/llm.js";
-import { chatText, extractJson } from "../../lib/llm.js";
-import { isRecord } from "../../lib/type-guards.js";
+import type { AnswerContextPacket, AnswerRecord, FeedbackRecord } from "../../lib/core/contracts.js";
+import type { ChatCompletionRequest, ChatCompletionResponse } from "../../lib/infra/llm.js";
+import { chatText, extractJson } from "../../lib/infra/llm.js";
+import { isRecord } from "../../lib/core/type-guards.js";
 
 /**
  * Build the ChatCompletionRequest that asks the LLM to propose a FeedbackRecord

@@ -45,7 +45,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/embed-index.js --vault /data/vault",
+        "command": "node /app/dist/tools/cmd/embed-index.js --vault /data/vault",
         "executeOnce": true
       },
       "id": "d4e5f6a7-b8c9-0123-defa-234567890123",
@@ -58,7 +58,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/embed-index.js --vault /data/vault --rebuild",
+        "command": "node /app/dist/tools/cmd/embed-index.js --vault /data/vault --rebuild",
         "executeOnce": true
       },
       "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",

@@ -3,10 +3,10 @@ import type { Logger } from "pino";
 import type {
   AnswerContextDoc,
   MutationPlan
-} from "../../lib/contracts.js";
-import type { ChatCompletionResponse } from "../../lib/llm.js";
-import { chatText, extractJson } from "../../lib/llm.js";
-import { isRecord } from "../../lib/type-guards.js";
+} from "../../lib/core/contracts.js";
+import type { ChatCompletionResponse } from "../../lib/infra/llm.js";
+import { chatText, extractJson } from "../../lib/infra/llm.js";
+import { isRecord } from "../../lib/core/type-guards.js";
 
 import { ALLOWED_PAGE_PREFIXES } from "./build-llm-plan.js";
 

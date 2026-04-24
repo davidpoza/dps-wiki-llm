@@ -1,8 +1,8 @@
-import { parseSections } from "../../lib/markdown.js";
-import { normalizeTextForEmbedding } from "../../lib/semantic-index.js";
-import { buildFinding } from "../../lib/maintenance.js";
+import { parseSections } from "../../lib/wiki/markdown.js";
+import { normalizeTextForEmbedding } from "../../lib/storage/semantic-index.js";
+import { buildFinding } from "../../lib/core/maintenance.js";
 import { SYSTEM_CONFIG, resolvedConceptTopicCandidateThreshold } from "../../config.js";
-import type { MaintenanceFinding, WikiDoc, WikiGraph } from "../../lib/contracts.js";
+import type { MaintenanceFinding, WikiDoc, WikiGraph } from "../../lib/core/contracts.js";
 
 function ageInDays(updatedAt: string): number | null {
   const date = new Date(updatedAt);

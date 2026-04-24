@@ -1,4 +1,4 @@
-import type { FeedbackDecision, FeedbackOutcome, PageActionKind, Severity } from "./lib/contracts.js";
+import type { FeedbackDecision, FeedbackOutcome, PageActionKind, Severity } from "./lib/core/contracts.js";
 
 export const SYSTEM_CONFIG = {
   paths: {

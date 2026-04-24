@@ -26,14 +26,14 @@
 import path from "node:path";
 import type { Logger } from "pino";
 
-import { pathExists } from "../../lib/fs-utils.js";
+import { pathExists } from "../../lib/storage/fs-utils.js";
 import {
   loadManifest,
   loadAllEmbeddingUnits,
   cosineSimilarity
-} from "../../lib/semantic-index.js";
-import { createLocalTransformersProvider } from "../../lib/local-transformers-provider.js";
-import type { MutationPlan, MutationPageAction } from "../../lib/contracts.js";
+} from "../../lib/storage/semantic-index.js";
+import { createLocalTransformersProvider } from "../../lib/search/local-transformers-provider.js";
+import type { MutationPlan, MutationPageAction } from "../../lib/core/contracts.js";
 import { resolvedTopicMatchThreshold, resolvedConceptMatchThreshold } from "../../config.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────

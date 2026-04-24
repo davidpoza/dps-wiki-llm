@@ -1,7 +1,7 @@
 import type { Logger } from "pino";
 
-import { runToolJson } from "../../lib/run-tool.js";
-import { isRecord, stringValue } from "../../lib/type-guards.js";
+import { runToolJson } from "../../lib/infra/run-tool.js";
+import { isRecord, stringValue } from "../../lib/core/type-guards.js";
 
 export type IngestRawEvent = Record<string, unknown>;
 

@@ -1,4 +1,4 @@
-import type { MutationPlan } from "../../lib/contracts.js";
+import type { MutationPlan } from "../../lib/core/contracts.js";
 
 /**
  * Appends a tag_update page action for the source note so that
