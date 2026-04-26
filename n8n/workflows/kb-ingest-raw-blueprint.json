@@ -37,7 +37,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node /app/dist/tools/bot-lock.js acquire --vault /data/vault --name telegram-bot --owner \" + JSON.stringify(\"file-watcher-\" + String(Date.now())) + \" --ttl-ms \" + JSON.stringify($env.TELEGRAM_BOT_LOCK_TTL_MS || \"1800000\") }}",
+        "command": "={{ \"node /app/dist/tools/cmd/bot-lock.js acquire --vault /data/vault --name telegram-bot --owner \" + JSON.stringify(\"file-watcher-\" + String(Date.now())) + \" --ttl-ms \" + JSON.stringify($env.TELEGRAM_BOT_LOCK_TTL_MS || \"1800000\") }}",
         "executeOnce": true
       },
       "id": "raw-acquire-lock",
@@ -174,7 +174,7 @@
     },
     {
       "parameters": {
-        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/cmd/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
       "id": "raw-release-lock",
