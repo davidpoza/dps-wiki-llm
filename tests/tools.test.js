@@ -229,7 +229,7 @@ test("ingest workflow delegates the full ingest pipeline to ingest-run", async (
   const workflow = JSON.parse(await fs.readFile(repoPath("n8n/workflows/kb-ingest-raw-blueprint.json"), "utf8"));
   const nodes = new Map(workflow.nodes.map((node) => [node.name, node]));
 
-  assert.equal(workflow.nodes.length, 8);
+  assert.equal(workflow.nodes.length, 11);
   assert.ok(nodes.has("Build Ingest Run Payload"));
   assert.ok(nodes.has("Run ingest-run.ts"));
   assert.ok(nodes.has("Parse Ingest Run Result"));
@@ -240,13 +240,16 @@ test("ingest workflow delegates the full ingest pipeline to ingest-run", async (
   assert.match(nodes.get("Build Ingest Run Payload").parameters.jsCode, /payload_b64/);
   assert.match(nodes.get("Finalize Ingest Response").parameters.jsCode, /telegram_last_update_id/);
 
-  assert.equal(workflow.connections["Local File Trigger"].main[0][0].node, "Build Ingest Run Payload");
-  assert.equal(workflow.connections["Manual Trigger"].main[0][0].node, "Build Ingest Run Payload");
+  assert.equal(workflow.connections["Local File Trigger"].main[0][0].node, "Acquire Bot Lock");
+  assert.equal(workflow.connections["Manual Trigger"].main[0][0].node, "Acquire Bot Lock");
+  assert.equal(workflow.connections["Acquire Bot Lock"].main[0][0].node, "Parse File Watcher Lock");
+  assert.equal(workflow.connections["Parse File Watcher Lock"].main[0][0].node, "Build Ingest Run Payload");
   assert.equal(workflow.connections["Build Ingest Run Payload"].main[0][0].node, "Run ingest-run.ts");
   assert.equal(workflow.connections["Run ingest-run.ts"].main[0][0].node, "Parse Ingest Run Result");
   assert.equal(workflow.connections["Parse Ingest Run Result"].main[0][0].node, "Should Send Telegram Ingest Log?");
   assert.equal(workflow.connections["Should Send Telegram Ingest Log?"].main[0][0].node, "Send Telegram Ingest Log");
   assert.equal(workflow.connections["Should Send Telegram Ingest Log?"].main[1][0].node, "Finalize Ingest Response");
+  assert.equal(workflow.connections["Finalize Ingest Response"].main[0][0].node, "Release Bot Lock After Ingest");
 });
 
 test("telegram bot workflow delegates answer and ingest work to macro scripts", async () => {
@@ -1443,7 +1446,7 @@ test("n8n workflow files remain valid JSON", async () => {
 
   const ingest = workflows.get("kb-ingest-raw-blueprint.json");
   assert.equal(ingest.name, "KB - Ingest Raw LLM Manual");
-  assert.equal(ingest.nodes.length, 8);
+  assert.equal(ingest.nodes.length, 11);
   assert.ok(ingest.nodes.some((node) => node.name === "Run ingest-run.ts"));
   assert.ok(ingest.nodes.some((node) => node.name === "Send Telegram Ingest Log"));
   assert.ok(!ingest.nodes.some((node) => node.name.includes("LLM")));
