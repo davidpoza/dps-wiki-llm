@@ -112,7 +112,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node /app/dist/tools/bot-lock.js acquire --vault /data/vault --name telegram-bot --owner \" + JSON.stringify(\"telegram-update-\" + $json.body.update_id) + \" --ttl-ms \" + JSON.stringify($env.TELEGRAM_BOT_LOCK_TTL_MS || \"1800000\") }}",
+        "command": "={{ \"node /app/dist/tools/cmd/bot-lock.js acquire --vault /data/vault --name telegram-bot --owner \" + JSON.stringify(\"telegram-update-\" + $json.body.update_id) + \" --ttl-ms \" + JSON.stringify($env.TELEGRAM_BOT_LOCK_TTL_MS || \"1800000\") }}",
         "executeOnce": true
       },
       "id": "telegram-acquire-lock",
@@ -172,7 +172,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/answer-run.js --vault /data/vault --compact\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/cmd/answer-run.js --vault /data/vault --compact\" }}",
         "executeOnce": true
       },
       "id": "answer-run",
@@ -265,7 +265,7 @@
     },
     {
       "parameters": {
-        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/cmd/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
       "id": "answer-release-lock",
@@ -292,7 +292,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/ingest-run.js --vault /data/vault --compact\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/cmd/ingest-run.js --vault /data/vault --compact\" }}",
         "executeOnce": true
       },
       "id": "ingest-run",
@@ -385,7 +385,7 @@
     },
     {
       "parameters": {
-        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/cmd/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
       "id": "ingest-release-lock",
@@ -432,7 +432,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/search-run.js --vault /data/vault --compact\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/cmd/search-run.js --vault /data/vault --compact\" }}",
         "executeOnce": true
       },
       "id": "search-run",
@@ -525,7 +525,7 @@
     },
     {
       "parameters": {
-        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/cmd/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
       "id": "search-release-lock",
@@ -559,7 +559,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/reindex.js --vault /data/vault --compact",
+        "command": "node /app/dist/tools/cmd/reindex.js --vault /data/vault --compact",
         "executeOnce": true
       },
       "id": "reindex-run",
@@ -650,7 +650,7 @@
     },
     {
       "parameters": {
-        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/cmd/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
       "id": "reindex-release-lock",
@@ -684,7 +684,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/health-check.js --vault /data/vault --compact",
+        "command": "node /app/dist/tools/cmd/health-check.js --vault /data/vault --compact",
         "executeOnce": true
       },
       "id": "healthcheck-run",
@@ -775,7 +775,7 @@
     },
     {
       "parameters": {
-        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/cmd/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
       "id": "healthcheck-release-lock",
@@ -809,7 +809,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/enrich-batch.js --vault /data/vault --compact",
+        "command": "node /app/dist/tools/cmd/enrich-batch.js --vault /data/vault --compact",
         "executeOnce": true
       },
       "id": "enrich-run",
@@ -900,7 +900,7 @@
     },
     {
       "parameters": {
-        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/cmd/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
       "id": "enrich-release-lock",
@@ -934,7 +934,7 @@
     },
     {
       "parameters": {
-        "command": "={{ 'NODE_OPTIONS=--max-old-space-size=' + ($env.EMBED_MAX_OLD_SPACE_MB ?? '3072') + ' node /app/dist/tools/embed-index.js --vault /data/vault --rebuild' }}",
+        "command": "={{ 'NODE_OPTIONS=--max-old-space-size=' + ($env.EMBED_MAX_OLD_SPACE_MB ?? '3072') + ' node /app/dist/tools/cmd/embed-index.js --vault /data/vault --rebuild' }}",
         "executeOnce": true
       },
       "id": "embedindex-run",
@@ -1025,7 +1025,7 @@
     },
     {
       "parameters": {
-        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/cmd/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
       "id": "embedindex-release-lock",
@@ -1059,7 +1059,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/rename-plan.js --vault /data/vault",
+        "command": "node /app/dist/tools/cmd/rename-plan.js --vault /data/vault",
         "executeOnce": true
       },
       "id": "renameplan-run",
@@ -1148,7 +1148,7 @@
     },
     {
       "parameters": {
-        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/cmd/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
       "id": "renameplan-release-lock",
@@ -1182,7 +1182,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/apply-rename.js --vault /data/vault",
+        "command": "node /app/dist/tools/cmd/apply-rename.js --vault /data/vault",
         "executeOnce": true
       },
       "id": "applyrename-run",
@@ -1271,7 +1271,7 @@
     },
     {
       "parameters": {
-        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/cmd/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
       "id": "applyrename-release-lock",
@@ -1305,7 +1305,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/lint.js --vault /data/vault --compact",
+        "command": "node /app/dist/tools/cmd/lint.js --vault /data/vault --compact",
         "executeOnce": true
       },
       "id": "lint-run",
@@ -1398,7 +1398,7 @@
     },
     {
       "parameters": {
-        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/cmd/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
       "id": "lint-release-lock",
@@ -1445,7 +1445,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/cosim.js --vault /data/vault --compact\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/cmd/cosim.js --vault /data/vault --compact\" }}",
         "executeOnce": true
       },
       "id": "cosim-run",
@@ -1536,7 +1536,7 @@
     },
     {
       "parameters": {
-        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
+        "command": "={{ $json.telegram_lock_id ? \"node /app/dist/tools/cmd/bot-lock.js release --vault /data/vault --name telegram-bot --lock-id \" + JSON.stringify($json.telegram_lock_id) : \"node -e \" + JSON.stringify(\"process.stdout.write(JSON.stringify({ status: 'skipped', released: false }) + '\\n')\") }}",
         "executeOnce": true
       },
       "id": "cosim-release-lock",

@@ -1,6 +1,6 @@
-import type { AnswerContextPacket } from "../../lib/contracts.js";
-import type { ChatCompletionRequest } from "../../lib/llm.js";
-import { answerTemperature } from "../../lib/llm.js";
+import type { AnswerContextPacket } from "../../lib/core/contracts.js";
+import type { ChatCompletionRequest } from "../../lib/infra/llm.js";
+import { answerTemperature } from "../../lib/infra/llm.js";
 
 /**
  * Build the ChatCompletionRequest that asks the LLM to answer a question using

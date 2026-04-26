@@ -1,13 +1,10 @@
-import type { LlmSourceNote, NormalizedSourcePayload } from "../../lib/contracts.js";
+import type { LlmSourceNote, NormalizedSourcePayload } from "../../lib/core/contracts.js";
 import type {
   ChatCompletionRequest,
   ChatCompletionResponse
-} from "../../lib/llm.js";
-import { chatText, extractJson } from "../../lib/llm.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+} from "../../lib/infra/llm.js";
+import { chatText, extractJson } from "../../lib/infra/llm.js";
+import { isRecord } from "../../lib/core/type-guards.js";
 
 function stringField(record: Record<string, unknown>, field: string): string {
   const value = record[field];

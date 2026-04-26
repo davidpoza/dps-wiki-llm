@@ -46,7 +46,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/feedback-record.js --vault /data/vault\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/cmd/feedback-record.js --vault /data/vault\" }}",
         "executeOnce": true
       },
       "id": "26d3e5da-76bd-48d8-b131-b0a205ad7ca0",
@@ -93,7 +93,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node /app/dist/tools/apply-update.js --vault /data/vault --input /data/vault/\" + $node[\"Parse Feedback Result\"].json[\"mutation_plan_path\"] }}",
+        "command": "={{ \"node /app/dist/tools/cmd/apply-update.js --vault /data/vault --input /data/vault/\" + $node[\"Parse Feedback Result\"].json[\"mutation_plan_path\"] }}",
         "executeOnce": true
       },
       "id": "6f0eb6f6-07d2-4f3e-9314-f25c72689685",
@@ -120,7 +120,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/reindex.js --vault /data/vault",
+        "command": "node /app/dist/tools/cmd/reindex.js --vault /data/vault",
         "executeOnce": true
       },
       "id": "4f764871-487a-431f-b99f-6c30bca5250e",
@@ -160,7 +160,7 @@
     },
     {
       "parameters": {
-        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/commit.js --vault /data/vault\" }}",
+        "command": "={{ \"node -e \" + JSON.stringify(\"process.stdout.write(Buffer.from(process.argv[1], 'base64').toString('utf8'))\") + \" \" + JSON.stringify($json.payload_b64) + \" | node /app/dist/tools/cmd/commit.js --vault /data/vault\" }}",
         "executeOnce": true
       },
       "id": "1aa7ee27-d4db-49f5-b0f6-85b0aee8e235",

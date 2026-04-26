@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/init-db.js --vault /data/vault",
+        "command": "node /app/dist/tools/cmd/init-db.js --vault /data/vault",
         "executeOnce": true
       },
       "id": "7e906d18-cd31-4ab3-bf55-89d6ca01e078",
@@ -30,7 +30,7 @@
     },
     {
       "parameters": {
-        "command": "node /app/dist/tools/reindex.js --vault /data/vault",
+        "command": "node /app/dist/tools/cmd/reindex.js --vault /data/vault",
         "executeOnce": true
       },
       "id": "4d39400c-c46f-4f69-8b0e-eebf68be0f02",
