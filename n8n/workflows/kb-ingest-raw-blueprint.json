@@ -68,7 +68,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst payload = {\n  ...body,\n  telegram_polled: Boolean(input.telegram_polled),\n  telegram_command: input.telegram_command ?? body.telegram_command ?? null,\n  telegram_lock_acquired: Boolean(input.telegram_lock_acquired),\n  telegram_lock_id: input.telegram_lock_id ?? body.telegram_lock_id ?? null\n};\nreturn [{\n  json: {\n    ...payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\n\n// Recover file path lost through executeCommand (Acquire Bot Lock replaces item data)\nlet rawPath = body.raw_path ?? body.path ?? body.filePath ?? body.filename ?? null;\nif (!rawPath) {\n  try {\n    const triggerData = $('Local File Trigger').first().json;\n    rawPath = triggerData?.path ?? triggerData?.filename ?? null;\n  } catch(e) {}\n}\n\nconst payload = {\n  ...body,\n  ...(rawPath ? { raw_path: rawPath } : {}),\n  telegram_polled: Boolean(input.telegram_polled),\n  telegram_command: input.telegram_command ?? body.telegram_command ?? null,\n  telegram_lock_acquired: Boolean(input.telegram_lock_acquired),\n  telegram_lock_id: input.telegram_lock_id ?? body.telegram_lock_id ?? null\n};\nreturn [{\n  json: {\n    ...payload,\n    payload_b64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64')\n  }\n}];"
       },
       "id": "ingest-build-payload",
       "name": "Build Ingest Run Payload",
