@@ -4,7 +4,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "kb-feedback",
+        "path": "kb-apply-feedback",
         "responseMode": "lastNode",
         "options": {}
       },
@@ -16,7 +16,7 @@
       ],
       "id": "c8805200-0d64-43c9-a86d-f4a19af1b7e2",
       "name": "Webhook",
-      "webhookId": "kb-feedback"
+      "webhookId": "kb-apply-feedback"
     },
     {
       "parameters": {},
