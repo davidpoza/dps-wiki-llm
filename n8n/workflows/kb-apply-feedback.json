@@ -31,8 +31,12 @@
     },
     {
       "parameters": {
-        "triggerOn": "change",
-        "path": "/data/vault/outputs"
+        "triggerOn": "folder",
+        "path": "/data/vault/outputs",
+        "events": [
+          "change"
+        ],
+        "options": {}
       },
       "id": "f3a1b2c4-d5e6-7890-abcd-ef1234567890",
       "name": "Watch Output Files",
@@ -45,7 +49,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const fs = require('fs');\nconst input = $input.first().json;\nconst filePath = input.path;\n\nif (!filePath || !filePath.endsWith('.md')) {\n  return [];\n}\n\nlet content;\ntry {\n  content = fs.readFileSync(filePath, 'utf8');\n} catch (e) {\n  return [];\n}\n\n// Parse YAML frontmatter\nconst parts = content.split(/(?:^|\\n)---\\n/);\nif (parts.length < 3) return [];\n\nconst meta = {};\nfor (const line of parts[1].trim().split('\\n')) {\n  const match = line.match(/^([\\w_]+):\\s*(.+)$/);\n  if (match) {\n    let val = match[2].trim().replace(/^\"|\"$/g, '');\n    if (val === 'true') val = true;\n    else if (val === 'false') val = false;\n    meta[match[1]] = val;\n  }\n}\n\nif (meta.approved !== true) return [];\n\nconst feedbackRef = meta.feedback_ref;\nif (!feedbackRef) throw new Error('approved output file missing feedback_ref: ' + filePath);\n\nconst feedbackPath = '/data/vault/' + feedbackRef;\nconst feedback = JSON.parse(fs.readFileSync(feedbackPath, 'utf8'));\n\nreturn [{ json: { approved: true, feedback } }];"
+        "jsCode": "const fs = require('fs');\n\n// Recover file path from trigger (same pattern as ingest workflow)\nlet filePath = null;\ntry {\n  const triggerData = $('Watch Output Files').first().json;\n  filePath = triggerData?.path ?? triggerData?.filename ?? null;\n} catch(e) {}\n\nif (!filePath || !filePath.endsWith('.md')) return [];\n\nlet content;\ntry {\n  content = fs.readFileSync(filePath, 'utf8');\n} catch (e) {\n  return [];\n}\n\n// Parse YAML frontmatter\nconst parts = content.split(/(?:^|\\n)---\\n/);\nif (parts.length < 3) return [];\n\nconst meta = {};\nfor (const line of parts[1].trim().split('\\n')) {\n  const match = line.match(/^([\\w_]+):\\s*(.+)$/);\n  if (match) {\n    let val = match[2].trim().replace(/^\"|\"$/g, '');\n    if (val === 'true') val = true;\n    else if (val === 'false') val = false;\n    meta[match[1]] = val;\n  }\n}\n\nif (meta.approved !== true) return [];\nif (meta.applied_at) return [];\n\nconst feedbackRef = meta.feedback_ref;\nif (!feedbackRef) throw new Error('approved output file missing feedback_ref: ' + filePath);\n\nconst feedback = JSON.parse(fs.readFileSync('/data/vault/' + feedbackRef, 'utf8'));\n\nreturn [{ json: { approved: true, feedback, output_file_path: filePath } }];"
       },
       "id": "a1b2c3d4-e5f6-7890-abcd-123456789abc",
       "name": "Extract Approved Feedback",
@@ -60,7 +64,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst feedback = body.feedback ?? body;\nif (!feedback.output_id) {\n  feedback.output_id = 'out-' + new Date().toISOString().slice(0, 10) + '-manual-feedback';\n}\nif (!feedback.decision) {\n  feedback.decision = 'output_only';\n}\nif (!Array.isArray(feedback.candidate_items)) {\n  feedback.candidate_items = [];\n}\nconst approved = body.approved === true || feedback.approved === true || body.approved === 'true' || feedback.approved === 'true';\nif (feedback.decision === 'propagate' && !approved) {\n  throw new Error('Human approval required: send approved=true with propagate feedback before applying wiki changes.');\n}\ndelete feedback.approved;\nreturn [{\n  json: {\n    approved,\n    feedback,\n    payload_b64: Buffer.from(JSON.stringify(feedback), 'utf8').toString('base64')\n  }\n}];"
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst feedback = body.feedback ?? body;\nif (!feedback.output_id) {\n  feedback.output_id = 'out-' + new Date().toISOString().slice(0, 10) + '-manual-feedback';\n}\nif (!feedback.decision) {\n  feedback.decision = 'output_only';\n}\nif (!Array.isArray(feedback.candidate_items)) {\n  feedback.candidate_items = [];\n}\nconst approved = body.approved === true || feedback.approved === true || body.approved === 'true' || feedback.approved === 'true';\nif (feedback.decision === 'propagate' && !approved) {\n  throw new Error('Human approval required: send approved=true with propagate feedback before applying wiki changes.');\n}\ndelete feedback.approved;\nreturn [{\n  json: {\n    approved,\n    feedback,\n    output_file_path: body.output_file_path ?? null,\n    payload_b64: Buffer.from(JSON.stringify(feedback), 'utf8').toString('base64')\n  }\n}];"
       },
       "id": "b448c3d3-9d3d-4636-8b77-2fb8856db7de",
       "name": "Prepare Feedback Payload",
@@ -239,6 +243,21 @@
         2460,
         -112
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nlet outputFilePath = null;\ntry {\n  outputFilePath = $node['Prepare Feedback Payload'].json.output_file_path;\n} catch(e) {}\n\nif (outputFilePath) {\n  try {\n    let content = fs.readFileSync(outputFilePath, 'utf8');\n    const ts = new Date().toISOString();\n    content = content.replace(/^approved: (true|false)$/m, `applied_at: \"${ts}\"`);\n    fs.writeFileSync(outputFilePath, content, 'utf8');\n  } catch(e) {\n    // Non-fatal: log but don't fail the workflow\n    console.warn('Mark Applied: could not update output file', outputFilePath, e.message);\n  }\n}\n\nreturn [$input.first()];"
+      },
+      "id": "cc112233-4455-6677-8899-aabbccddeeff",
+      "name": "Mark Applied",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2720,
+        -112
+      ],
+      "notesInFlow": true,
+      "notes": "Updates approved: true -> applied_at in the output file frontmatter to prevent re-processing."
     }
   ],
   "connections": {
@@ -408,6 +427,17 @@
         [
           {
             "node": "Build Propagation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Propagation Response": {
+      "main": [
+        [
+          {
+            "node": "Mark Applied",
             "type": "main",
             "index": 0
           }
