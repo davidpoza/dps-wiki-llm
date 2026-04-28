@@ -31,6 +31,35 @@
     },
     {
       "parameters": {
+        "path": "/data/vault/outputs",
+        "events": ["change"]
+      },
+      "id": "f3a1b2c4-d5e6-7890-abcd-ef1234567890",
+      "name": "Watch Output Files",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst input = $input.first().json;\nconst filePath = input.path;\n\nif (!filePath || !filePath.endsWith('.md')) {\n  return [];\n}\n\nlet content;\ntry {\n  content = fs.readFileSync(filePath, 'utf8');\n} catch (e) {\n  return [];\n}\n\n// Parse YAML frontmatter\nconst parts = content.split(/(?:^|\\n)---\\n/);\nif (parts.length < 3) return [];\n\nconst meta = {};\nfor (const line of parts[1].trim().split('\\n')) {\n  const match = line.match(/^([\\w_]+):\\s*(.+)$/);\n  if (match) {\n    let val = match[2].trim().replace(/^\"|\"$/g, '');\n    if (val === 'true') val = true;\n    else if (val === 'false') val = false;\n    meta[match[1]] = val;\n  }\n}\n\nif (meta.approved !== true) return [];\n\nconst feedbackRef = meta.feedback_ref;\nif (!feedbackRef) throw new Error('approved output file missing feedback_ref: ' + filePath);\n\nconst feedbackPath = '/data/vault/' + feedbackRef;\nconst feedback = JSON.parse(fs.readFileSync(feedbackPath, 'utf8'));\n\nreturn [{ json: { approved: true, feedback } }];"
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-123456789abc",
+      "name": "Extract Approved Feedback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        -288
+      ],
+      "notesInFlow": true,
+      "notes": "Reads the changed output file, checks approved: true in frontmatter, loads the feedback JSON from feedback_ref."
+    },
+    {
+      "parameters": {
         "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\nconst feedback = body.feedback ?? body;\nif (!feedback.output_id) {\n  feedback.output_id = 'out-' + new Date().toISOString().slice(0, 10) + '-manual-feedback';\n}\nif (!feedback.decision) {\n  feedback.decision = 'output_only';\n}\nif (!Array.isArray(feedback.candidate_items)) {\n  feedback.candidate_items = [];\n}\nconst approved = body.approved === true || feedback.approved === true || body.approved === 'true' || feedback.approved === 'true';\nif (feedback.decision === 'propagate' && !approved) {\n  throw new Error('Human approval required: send approved=true with propagate feedback before applying wiki changes.');\n}\ndelete feedback.approved;\nreturn [{\n  json: {\n    approved,\n    feedback,\n    payload_b64: Buffer.from(JSON.stringify(feedback), 'utf8').toString('base64')\n  }\n}];"
       },
       "id": "b448c3d3-9d3d-4636-8b77-2fb8856db7de",
@@ -225,6 +254,28 @@
       ]
     },
     "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Feedback Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch Output Files": {
+      "main": [
+        [
+          {
+            "node": "Extract Approved Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Approved Feedback": {
       "main": [
         [
           {

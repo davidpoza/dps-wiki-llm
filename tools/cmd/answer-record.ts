@@ -73,7 +73,8 @@ function normalizeInput(input: unknown): AnswerRecordInput {
         ? input.should_review_for_feedback
         : typeof nestedRecord.should_review_for_feedback === "boolean"
           ? nestedRecord.should_review_for_feedback
-          : true
+          : true,
+    feedback_ref: stringValue(input.feedback_ref) || stringValue(nestedRecord.feedback_ref)
   };
 }
 
@@ -87,13 +88,23 @@ function assertOutputPath(outputPath: string): void {
 }
 
 function renderAnswerArtifact(record: AnswerRecord, answer: string): string {
-  const lines = [
+  const frontmatterLines = [
     "---",
     'type: "answer_record"',
     `output_id: "${record.output_id}"`,
     `created_at: "${new Date().toISOString()}"`,
-    `should_review_for_feedback: ${record.should_review_for_feedback}`,
-    "---",
+    `should_review_for_feedback: ${record.should_review_for_feedback}`
+  ];
+
+  if (record.feedback_ref) {
+    frontmatterLines.push(`approved: false`);
+    frontmatterLines.push(`feedback_ref: "${record.feedback_ref}"`);
+  }
+
+  frontmatterLines.push("---");
+
+  const lines = [
+    ...frontmatterLines,
     "",
     `# Answer: ${record.question}`,
     "",
@@ -129,7 +140,8 @@ async function main(): Promise<void> {
     question: input.question,
     output_path: input.output_path || defaultOutputPath(input.question),
     evidence_used: input.evidence_used || [],
-    should_review_for_feedback: input.should_review_for_feedback ?? true
+    should_review_for_feedback: input.should_review_for_feedback ?? true,
+    feedback_ref: input.feedback_ref
   };
 
   assertOutputPath(record.output_path);

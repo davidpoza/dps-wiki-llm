@@ -272,7 +272,7 @@ async function main(): Promise<void> {
       "answer-run: [generate-answer/llm] answer received"
     );
 
-    // ── 5. record answer ──────────────────────────────────────────────────────
+    // ── 5. resolve answer record metadata (no write yet) ─────────────────────
 
     log.info(
       {
@@ -280,27 +280,23 @@ async function main(): Promise<void> {
         output_id: context.answer_record?.output_id,
         question_length: normalized.question.length
       },
-      "answer-run: [answer-record] persisting answer artifact"
+      "answer-run: [answer-record] resolving answer record metadata"
     );
 
-    const answerRecordResult = await runToolJson<AnswerRecordResult>("answer-record", {
+    const answerRecordDry = await runToolJson<AnswerRecordResult>("answer-record", {
       vault: args.vault,
-      input: { answer_record: context.answer_record, answer }
+      input: { answer_record: context.answer_record, answer },
+      write: false
     });
-    const answerRecord = answerRecordResult.record;
-
-    if (answerRecordResult.wrote && answerRecordResult.output_path) {
-      answerArtifactAbsPath = path.join(resolveVaultRoot(args.vault), answerRecordResult.output_path);
-    }
+    const answerRecord = answerRecordDry.record;
 
     log.info(
       {
         phase: "answer-record",
         output_id: answerRecord.output_id,
-        output_path: answerRecordResult.output_path,
-        wrote: answerRecordResult.wrote
+        output_path: answerRecordDry.output_path
       },
-      "answer-run: [answer-record] answer artifact written"
+      "answer-run: [answer-record] answer record metadata resolved"
     );
 
     // ── 6. LLM: propose feedback ──────────────────────────────────────────────
@@ -333,7 +329,7 @@ async function main(): Promise<void> {
       "answer-run: [propose-feedback/llm] feedback proposal received"
     );
 
-    // ── 7. validate and record feedback ──────────────────────────────────────
+    // ── 7. persist feedback record ────────────────────────────────────────────
 
     log.info(
       {
@@ -341,12 +337,12 @@ async function main(): Promise<void> {
         output_id: answerRecord.output_id,
         decision: proposedFeedback.decision
       },
-      "answer-run: [feedback-record] validating feedback record (dry-run)"
+      "answer-run: [feedback-record] persisting feedback record"
     );
 
     const feedbackValidation = await runToolJson<FeedbackValidation>(
       "feedback-record",
-      { vault: args.vault, input: proposedFeedback, write: false }
+      { vault: args.vault, input: proposedFeedback }
     );
     const feedback = feedbackValidation.record;
 
@@ -356,7 +352,45 @@ async function main(): Promise<void> {
         decision: feedback.decision,
         record_path: feedbackValidation.record_path
       },
-      "answer-run: [feedback-record] feedback record validated"
+      "answer-run: [feedback-record] feedback record persisted"
+    );
+
+    // ── 5b. write answer artifact with feedback_ref ───────────────────────────
+
+    log.info(
+      {
+        phase: "answer-record/write",
+        output_id: answerRecord.output_id,
+        feedback_ref: feedbackValidation.record_path ?? null
+      },
+      "answer-run: [answer-record] writing answer artifact"
+    );
+
+    const answerRecordResult = await runToolJson<AnswerRecordResult>("answer-record", {
+      vault: args.vault,
+      input: {
+        answer_record: {
+          ...context.answer_record,
+          output_id: answerRecord.output_id,
+          output_path: answerRecord.output_path,
+          feedback_ref: feedbackValidation.record_path ?? undefined
+        },
+        answer
+      }
+    });
+
+    if (answerRecordResult.wrote && answerRecordResult.output_path) {
+      answerArtifactAbsPath = path.join(resolveVaultRoot(args.vault), answerRecordResult.output_path);
+    }
+
+    log.info(
+      {
+        phase: "answer-record/write",
+        output_id: answerRecord.output_id,
+        output_path: answerRecordResult.output_path,
+        wrote: answerRecordResult.wrote
+      },
+      "answer-run: [answer-record] answer artifact written"
     );
 
     // ── 8. build output ───────────────────────────────────────────────────────

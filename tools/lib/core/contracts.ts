@@ -106,6 +106,7 @@ export interface AnswerRecord {
   output_path: string;
   evidence_used: string[];
   should_review_for_feedback: boolean;
+  feedback_ref?: string;
 }
 
 export interface AnswerContextDoc extends SearchResultItem {
@@ -126,6 +127,7 @@ export interface AnswerRecordInput {
   output_path?: string;
   evidence_used?: string[];
   should_review_for_feedback?: boolean;
+  feedback_ref?: string;
 }
 
 export interface FeedbackCandidateItem {
