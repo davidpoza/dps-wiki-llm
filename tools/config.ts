@@ -167,8 +167,9 @@ export const SYSTEM_CONFIG = {
   logging: {
     dir: (vaultRoot: string) => `${vaultRoot}/state/logs`,
     level: process.env.LOG_LEVEL?.trim() || "info",
-    maxSize: "10m",
-    frequency: "daily"
+    maxSize: "10M",
+    frequency: "1d",
+    maxFiles: 7
   },
   semantic: {
     dir: "state/semantic",

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import pino from "pino";
+import { createStream } from "rotating-file-stream";
 
 import { SYSTEM_CONFIG } from "../../config.js";
 
@@ -21,6 +22,9 @@ function resolveVaultFromArgv(): string {
  * Create a named pino child logger that writes structured JSON to the rotating
  * log file at `{vault}/state/logs/app.log`.
  *
+ * app.log is always the current file. On rotation, older files shift:
+ * app.log → app.1.log → app.2.log → ...
+ *
  * Usage: `const log = createLogger('my-script')`
  *
  * Every log line includes `time`, `level`, `script`, and `msg`.
@@ -31,19 +35,18 @@ function resolveVaultFromArgv(): string {
 export function createLogger(name: string): pino.Logger {
   const vaultRoot = resolveVaultFromArgv();
   const logDir = SYSTEM_CONFIG.logging.dir(vaultRoot);
-  const logFile = path.join(logDir, "app.log");
 
   fs.mkdirSync(logDir, { recursive: true });
 
-  const transport = pino.transport({
-    target: "pino-roll",
-    options: {
-      file: logFile,
-      frequency: SYSTEM_CONFIG.logging.frequency,
+  const stream = createStream(
+    (time: number | Date, index?: number) => (time ? `app.${index ?? 1}.log` : "app.log"),
+    {
+      path: logDir,
       size: SYSTEM_CONFIG.logging.maxSize,
-      mkdir: true
+      interval: SYSTEM_CONFIG.logging.frequency,
+      maxFiles: SYSTEM_CONFIG.logging.maxFiles
     }
-  });
+  );
 
   const logger = pino(
     {
@@ -51,7 +54,7 @@ export function createLogger(name: string): pino.Logger {
       timestamp: pino.stdTimeFunctions.isoTime,
       base: undefined
     },
-    transport
+    stream
   );
 
   return logger.child({ script: name });
