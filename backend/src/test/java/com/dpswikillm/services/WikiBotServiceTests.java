@@ -49,7 +49,7 @@ class WikiBotServiceTests {
         AppProperties props = new AppProperties(null, List.of(),
                 new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1)),
                 new AppProperties.Llm("http://localhost", "model", ""),
-                new AppProperties.Telegram("bot-token", String.valueOf(ALLOWED_CHAT_ID)));
+                new AppProperties.Telegram("bot-token", String.valueOf(ALLOWED_CHAT_ID)), null, null);
 
         bot = new WikiBotService(props, queueService, eventService, rawIntakeService, restTemplate);
     }

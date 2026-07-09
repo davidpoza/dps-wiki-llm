@@ -1,13 +1,22 @@
 import { bootstrapApplication } from '@angular/platform-browser';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { providePrimeNG } from 'primeng/config';
 import Aura from '@primeuix/themes/aura';
 import { AppComponent } from './app/app.component';
+import { HomeComponent } from './app/components/home.component';
+import { LoginComponent } from './app/components/login.component';
+import { authInterceptor } from './app/services/auth.interceptor';
+import { authGuard } from './app/auth.guard';
 
 bootstrapApplication(AppComponent, {
   providers: [
-    provideHttpClient(),
+    provideHttpClient(withInterceptors([authInterceptor])),
+    provideRouter([
+      { path: 'login', component: LoginComponent },
+      { path: '', component: HomeComponent, canActivate: [authGuard] },
+    ]),
     provideAnimationsAsync(),
     providePrimeNG({
       theme: {

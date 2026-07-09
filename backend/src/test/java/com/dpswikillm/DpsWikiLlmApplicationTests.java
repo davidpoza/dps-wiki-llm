@@ -4,6 +4,7 @@ import com.dpswikillm.repositories.DocumentIndexRepository;
 import com.dpswikillm.repositories.JobConnectionCandidateRepository;
 import com.dpswikillm.repositories.JobRepository;
 import com.dpswikillm.repositories.OperationRepository;
+import com.dpswikillm.repositories.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,6 +28,9 @@ class DpsWikiLlmApplicationTests {
 
     @MockBean
     OperationRepository operationRepository;
+
+    @MockBean
+    UserRepository userRepository;
 
     @MockBean
     RabbitTemplate rabbitTemplate;

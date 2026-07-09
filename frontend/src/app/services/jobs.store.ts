@@ -1,12 +1,14 @@
 import { inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { JobState, JobStatus, SseJobEvent } from '../types';
 import { ApiService } from './api.service';
+import { AuthService } from './auth.service';
 
 @Injectable({ providedIn: 'root' })
 export class JobsStore implements OnDestroy {
   readonly jobs = signal<Map<string, JobState>>(new Map());
 
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
   private eventSource?: EventSource;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   private readonly RECONNECT_DELAY = 3000;
@@ -31,7 +33,9 @@ export class JobsStore implements OnDestroy {
   }
 
   private openEventSource(): void {
-    const es = new EventSource('/api/jobs/events');
+    const token = this.auth.token();
+    const url = token ? `/api/jobs/events?token=${encodeURIComponent(token)}` : '/api/jobs/events';
+    const es = new EventSource(url);
     this.eventSource = es;
 
     const statuses: JobStatus[] = [

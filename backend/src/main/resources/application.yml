@@ -68,6 +68,12 @@ app:
   telegram:
     token: ${TELEGRAM_BOT_TOKEN:}
     allowed-chat-id: ${TELEGRAM_ALLOWED_CHAT_ID:}
+  jwt:
+    secret: ${JWT_SECRET:}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  admin:
+    username: ${ADMIN_USERNAME:}
+    password: ${ADMIN_PASSWORD:}
 
 logging:
   level:

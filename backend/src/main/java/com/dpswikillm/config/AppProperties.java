@@ -11,7 +11,9 @@ public record AppProperties(
         List<String> corsAllowedOrigins,
         Embeddings embeddings,
         Llm llm,
-        Telegram telegram
+        Telegram telegram,
+        Jwt jwt,
+        Admin admin
 ) {
     public AppProperties {
         if (vaultPath == null) {
@@ -29,6 +31,12 @@ public record AppProperties(
         if (telegram == null) {
             telegram = new Telegram("", "");
         }
+        if (jwt == null) {
+            jwt = new Jwt("", 86400000L);
+        }
+        if (admin == null) {
+            admin = new Admin("", "");
+        }
     }
 
     public record Embeddings(String baseUrl, String model, String apiKey, int dimension, Duration healthTimeout) {}
@@ -36,4 +44,8 @@ public record AppProperties(
     public record Llm(String baseUrl, String model, String apiKey) {}
 
     public record Telegram(String token, String allowedChatId) {}
+
+    public record Jwt(String secret, long expirationMs) {}
+
+    public record Admin(String username, String password) {}
 }

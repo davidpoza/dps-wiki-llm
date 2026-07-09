@@ -2,3 +2,10 @@ node_modules/
 dist/
 state/semantic/
 backend/target/**
+
+# Angular build cache & output
+frontend/.angular/
+frontend/dist/
+
+# Runtime logs
+*.log
