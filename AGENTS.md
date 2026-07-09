@@ -73,27 +73,24 @@ vault/
 raw/ -> event layer
 
 [PROCESSING]
-n8n + LLM + Node scripts
+Spring Boot backend + RabbitMQ job queues + LLM API (OpenAI-compatible)
 
 [STATE]
 wiki/ -> durable knowledge graph in markdown form
 
 [INDEX — lexical]
-SQLite FTS5 in state/kb.db
-  reindex.ts   → build
-  search.ts    → query (BM25)
+PostgreSQL pg_trgm / ILIKE over documents table (path/title/body)
 
 [INDEX — semantic]
-ONNX vector index in state/semantic/  (gitignored, local only)
-  embed-index.ts     → build / incremental update
-  semantic-search.ts → query (cosine similarity)
+pgvector HNSW index in document_embeddings table
+  EmbeddingIndexService  → build / incremental update
+  SemanticSearchService  → query (cosine similarity)
 
-[QUERY — hybrid]
-hybrid-search.ts
-  → FTS leg + semantic leg in parallel
-  → min-max normalise each leg
-  → finalScore = 0.6 × semantic + 0.4 × lexical
-  → answer-run.ts / ingest-run.ts
+[QUERY — semantic]
+SemanticSearchService
+  → embed query via TEI sidecar (multilingual-e5-small)
+  → top-k cosine distance over HNSW index
+  → AnswerPipelineService / ConnectionDiscoveryService
 ```
 
 ---
@@ -102,23 +99,24 @@ hybrid-search.ts
 
 This system is designed to run with:
 
-- self-hosted `n8n` as the orchestrator
-- Node.js scripts for deterministic local operations
-- SQLite FTS5 for lexical retrieval
-- a local ONNX vector index for semantic retrieval (built by `embed-index.ts`, never committed to git)
-- a vault mounted locally, even if the canonical storage is WebDAV-backed
+- Spring Boot 3.3 (Java 21) backend as the orchestrator
+- RabbitMQ job queues: `wiki-write-jobs` (single consumer) and `answer-jobs`
+- PostgreSQL 17 + pgvector for semantic retrieval and document indexing
+- TEI sidecar serving `multilingual-e5-small` (384 dims) for embeddings
+- Telegram long-polling bot for remote interaction (optional)
+- A vault directory mounted into the backend container
 
 The intended execution model is:
 
 ```text
-n8n trigger/workflow
--> Node.js script
--> local vault mutation or index query
--> structured result back to n8n
+REST API or Telegram bot
+-> enqueue job (RabbitMQ)
+-> Spring service (IngestPipelineService / AnswerPipelineService)
+-> vault mutation or semantic query
+-> SSE progress events → frontend / Telegram reply
 ```
 
-Do not treat `n8n` as the place where all business logic should live.
-Use `n8n` for orchestration and scheduling, and keep fragile or stateful operations inside explicit scripts.
+Keep business logic inside Spring services, not in controllers. Controllers are thin routing layers.
 
 ---
 
@@ -584,7 +582,7 @@ The system is failing when:
 When operating on this repository, agents should:
 
 - preserve the `raw/` versus `wiki/` separation
-- preserve the `n8n -> script -> vault/index` execution model
+- preserve the `REST/Telegram → RabbitMQ → Spring service → vault/pgvector` execution model
 - favor small, explicit changes over sweeping rewrites
 - use the templates above when creating new notes
 - keep source traceability intact
