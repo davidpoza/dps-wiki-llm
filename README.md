@@ -50,6 +50,7 @@ docker compose up --build
 | `postgres` | 5432 | PostgreSQL 17 with pgvector + pg_trgm |
 | `rabbitmq` | 5672 / 15672 | RabbitMQ 3.13 with management UI |
 | `embeddings` | 8080 (internal) | TEI sidecar serving `multilingual-e5-small` (384 dims) |
+| `web-extractor` | 3000 (internal) | Node + Playwright microservice: renders URLs in a real browser and returns structured markdown + metadata |
 | `backend` | 8081 (internal) | Spring Boot API |
 | `frontend` | 4200 (internal) | Angular dev server |
 | `proxy` | 8080 | nginx: `/` → frontend, `/api/**` → backend |
@@ -59,6 +60,36 @@ docker compose up --build
 Two RabbitMQ queues with dead-letter routing:
 - **`wiki-write-jobs`** — single consumer (`prefetch=1`), serializes all vault mutations: INGEST and REVERT jobs
 - **`answer-jobs`** — handles ANSWER jobs (read-only, parallel-safe)
+
+### Web Extraction
+
+Submitting a URL routes through the `web-extractor` microservice (`POST /extract`),
+which **always loads the page in a real Chromium browser** (realistic user-agent,
+JS-rendered DOM) so it handles SPAs and sites that block non-browser clients. It
+isolates the main article (Readability), converts it to Markdown (Turndown + GFM),
+absolutizes links/images, and returns metadata. The backend writes the result to
+`raw/web/**` with YAML frontmatter:
+
+```markdown
+---
+source_url: "https://example.com/final"
+canonical_url: "https://example.com/canonical"
+title: "Article title"
+author: "…"
+published: "2026-01-15"
+site: "Example"
+lang: "es"
+extraction_confidence: "high"   # "low" when it falls back to whole-body
+---
+
+# Article title
+
+…structured markdown…
+```
+
+`SourceNormalizer` reads this frontmatter (canonical URL, title, metadata), with a
+legacy `Source URL:` line fallback for pre-migration files. A `POST /render` debug
+endpoint returns the raw rendered HTML for troubleshooting.
 
 ### Ingestion Flow
 

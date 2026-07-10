@@ -24,7 +24,7 @@ class JwtUtilTests {
                 List.of(),
                 null, null, null,
                 new AppProperties.Jwt(secret, 3600000L),
-                new AppProperties.Admin("", "")
+                new AppProperties.Admin("", ""), null
         );
         jwtUtil = new JwtUtil(props);
     }
@@ -70,7 +70,7 @@ class JwtUtilTests {
                 List.of(),
                 null, null, null,
                 new AppProperties.Jwt(secret, -1L),
-                new AppProperties.Admin("", "")
+                new AppProperties.Admin("", ""), null
         );
         JwtUtil expiredJwtUtil = new JwtUtil(propsExpired);
         String token = expiredJwtUtil.generateToken(user("alice"));

@@ -1,0 +1,77 @@
+package com.dpswikillm.services;
+
+import com.dpswikillm.config.AppProperties;
+import java.time.Duration;
+import java.util.Map;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClient;
+
+/**
+ * Thin HTTP client for the {@code web-extractor} microservice. Calls
+ * {@code POST /extract} and maps typed service errors / transport failures to
+ * {@link WebExtractionException}.
+ */
+@Service
+public class WebExtractorClient {
+
+    /** Structured metadata returned alongside the markdown body. */
+    public record ExtractionMetadata(
+            String finalUrl,
+            String canonicalUrl,
+            String title,
+            String author,
+            String published,
+            String siteName,
+            String lang,
+            String extractionConfidence) {}
+
+    public record ExtractionResult(String markdown, ExtractionMetadata metadata) {}
+
+    private record ExtractRequest(String url) {}
+
+    private final RestClient restClient;
+
+    public WebExtractorClient(RestClient.Builder builder, AppProperties properties) {
+        AppProperties.Extractor cfg = properties.extractor();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        Duration timeout = cfg.timeout() == null ? Duration.ofSeconds(45) : cfg.timeout();
+        factory.setConnectTimeout((int) Duration.ofSeconds(5).toMillis());
+        factory.setReadTimeout((int) timeout.toMillis());
+        this.restClient = builder
+                .baseUrl(cfg.baseUrl())
+                .requestFactory(factory)
+                .build();
+    }
+
+    public ExtractionResult extract(String url) {
+        try {
+            return restClient.post()
+                    .uri("/extract")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(new ExtractRequest(url))
+                    .retrieve()
+                    .onStatus(HttpStatusCode::isError, (request, response) -> {
+                        String code = "extraction_failed";
+                        String message = "Web extraction failed";
+                        try {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> body = new com.fasterxml.jackson.databind.ObjectMapper()
+                                    .readValue(response.getBody(), Map.class);
+                            if (body.get("error") != null) code = String.valueOf(body.get("error"));
+                            if (body.get("message") != null) message = String.valueOf(body.get("message"));
+                        } catch (Exception ignored) {
+                            // fall back to defaults
+                        }
+                        throw new WebExtractionException(code, message);
+                    })
+                    .body(ExtractionResult.class);
+        } catch (ResourceAccessException ex) {
+            throw new WebExtractionException("service_unavailable",
+                    "Web extractor service is unreachable: " + ex.getMessage(), ex);
+        }
+    }
+}

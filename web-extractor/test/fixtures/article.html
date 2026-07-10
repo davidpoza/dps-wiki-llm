@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <title>Guía de extracción — Ejemplo</title>
+  <link rel="canonical" href="https://example.com/articulo-canonico">
+  <meta property="og:site_name" content="Example Docs">
+  <meta name="author" content="Ada Lovelace">
+  <meta property="article:published_time" content="2026-01-15T10:00:00Z">
+  <script type="application/ld+json">
+    {"@type":"Article","headline":"Guía de extracción","author":{"name":"Ada Lovelace"},"datePublished":"2026-01-15"}
+  </script>
+</head>
+<body>
+  <header id="site-header"><nav>Inicio · Blog · Contacto</nav></header>
+  <aside class="sidebar">Publicidad y enlaces relacionados que no deberían aparecer.</aside>
+  <article>
+    <h1>Guía de extracción de contenido</h1>
+    <p>Este es el primer párrafo del artículo, con suficiente texto para que el
+    algoritmo de legibilidad lo identifique como contenido principal y descarte
+    la navegación y las barras laterales del sitio.</p>
+    <h2>Pasos principales</h2>
+    <p>A continuación describimos los pasos a seguir para lograr una extracción
+    fiel y estructurada del contenido de una página web cualquiera.</p>
+    <ul>
+      <li>Primer elemento de una lista no ordenada</li>
+      <li>Segundo elemento con un <a href="/enlace-relativo">enlace relativo</a></li>
+    </ul>
+    <ol>
+      <li>Paso uno del procedimiento</li>
+      <li>Paso dos del procedimiento</li>
+    </ol>
+    <blockquote>Una cita en bloque que aporta contexto adicional al lector.</blockquote>
+    <pre><code>const x = 42;
+console.log(x);</code></pre>
+    <table>
+      <thead><tr><th>Clave</th><th>Valor</th></tr></thead>
+      <tbody><tr><td>uno</td><td>1</td></tr><tr><td>dos</td><td>2</td></tr></tbody>
+    </table>
+    <p>Un párrafo final con una <img src="/imagenes/diagrama.png" alt="diagrama">
+    imagen relativa que debe convertirse en URL absoluta durante la extracción.</p>
+  </article>
+  <footer id="site-footer">© 2026 Example — todos los derechos reservados</footer>
+</body>
+</html>

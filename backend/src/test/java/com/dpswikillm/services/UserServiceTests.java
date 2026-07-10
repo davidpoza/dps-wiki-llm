@@ -39,7 +39,7 @@ class UserServiceTests {
                 List.of(),
                 null, null, null,
                 new AppProperties.Jwt("", 86400000L),
-                new AppProperties.Admin("admin", "secret")
+                new AppProperties.Admin("admin", "secret"), null
         );
         userService = new UserService(userRepository, passwordEncoder, props);
     }

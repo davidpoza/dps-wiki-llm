@@ -74,6 +74,9 @@ app:
   admin:
     username: ${ADMIN_USERNAME:admin}
     password: ${ADMIN_PASSWORD:admin}
+  extractor:
+    base-url: ${EXTRACTOR_BASE_URL:http://web-extractor:3000}
+    timeout: ${EXTRACTOR_TIMEOUT:45s}
 
 logging:
   level:

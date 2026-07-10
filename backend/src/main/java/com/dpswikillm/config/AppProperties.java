@@ -13,7 +13,8 @@ public record AppProperties(
         Llm llm,
         Telegram telegram,
         Jwt jwt,
-        Admin admin
+        Admin admin,
+        Extractor extractor
 ) {
     public AppProperties {
         if (vaultPath == null) {
@@ -37,6 +38,9 @@ public record AppProperties(
         if (admin == null) {
             admin = new Admin("", "");
         }
+        if (extractor == null) {
+            extractor = new Extractor("http://web-extractor:3000", Duration.ofSeconds(45));
+        }
     }
 
     public record Embeddings(String baseUrl, String model, String apiKey, int dimension, Duration healthTimeout) {}
@@ -48,4 +52,6 @@ public record AppProperties(
     public record Jwt(String secret, long expirationMs) {}
 
     public record Admin(String username, String password) {}
+
+    public record Extractor(String baseUrl, Duration timeout) {}
 }

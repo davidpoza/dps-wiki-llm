@@ -103,6 +103,7 @@ This system is designed to run with:
 - RabbitMQ job queues: `wiki-write-jobs` (single consumer) and `answer-jobs`
 - PostgreSQL 17 + pgvector for semantic retrieval and document indexing
 - TEI sidecar serving `multilingual-e5-small` (384 dims) for embeddings
+- `web-extractor` microservice (Node + Playwright, embedded Chromium): renders URLs in a real browser and returns structured markdown + metadata for `POST /extract`. `RawIntakeService.ingestUrl` calls it and writes YAML frontmatter to `raw/web/**`
 - Telegram long-polling bot for remote interaction (optional)
 - A vault directory mounted into the backend container
 

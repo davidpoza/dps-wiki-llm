@@ -63,7 +63,7 @@ class IngestPipelineServicesTests {
 
     @Test
     void markdownUploadWritesRawInboxAndNormalizerRejectsNonRaw() throws Exception {
-        RawIntakeService intake = new RawIntakeService(resolver());
+        RawIntakeService intake = new RawIntakeService(resolver(), mock(WebExtractorClient.class));
         String rawPath = intake.ingestMarkdown(new MockMultipartFile(
                 "file", "note.md", "text/markdown", "# Uploaded\n\nBody".getBytes(StandardCharsets.UTF_8)));
 
@@ -364,7 +364,7 @@ class IngestPipelineServicesTests {
         return new AppProperties(vault, List.of("http://localhost:4200"),
                 new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1)),
                 new AppProperties.Llm("http://localhost:11434/v1", "gpt-oss", "test"),
-                new AppProperties.Telegram("", ""), null, null);
+                new AppProperties.Telegram("", ""), null, null, null);
     }
 
     private String git(String... args) throws Exception {
