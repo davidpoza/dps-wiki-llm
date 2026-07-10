@@ -1,0 +1,5 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/dps_wiki
+  rabbitmq:
+    host: localhost

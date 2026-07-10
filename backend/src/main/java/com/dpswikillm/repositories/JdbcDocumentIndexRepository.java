@@ -7,13 +7,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 @Repository
-@ConditionalOnBean(JdbcTemplate.class)
 public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
     private final JdbcTemplate jdbcTemplate;
 
