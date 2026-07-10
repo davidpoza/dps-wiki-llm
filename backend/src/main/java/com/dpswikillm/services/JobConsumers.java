@@ -27,18 +27,22 @@ public class JobConsumers {
     }
 
     @RabbitListener(queues = RabbitConfig.WRITE_QUEUE)
-    public void consumeWriteJob(JobMessage message) throws Exception {
+    public void consumeWriteJob(JobMessage message) {
         lifecycleService.transition(message.jobId(), JobStatus.STARTED, "started", "Write job started");
-        if (message.jobType() == JobType.INGEST) {
-            ingestPipelineService.run(jobRepository.findById(message.jobId()).orElseThrow());
-            return;
+        try {
+            if (message.jobType() == JobType.INGEST) {
+                ingestPipelineService.run(jobRepository.findById(message.jobId()).orElseThrow());
+                return;
+            }
+            if (message.jobType() == JobType.REVERT) {
+                jobRevertService.revert(jobRepository.findById(message.jobId()).orElseThrow());
+                return;
+            }
+            lifecycleService.transition(message.jobId(), JobStatus.PROGRESS, "dispatch", "Write pipeline dispatch placeholder");
+            lifecycleService.transition(message.jobId(), JobStatus.COMPLETED, "completed", "Write job completed");
+        } catch (Exception ex) {
+            lifecycleService.transition(message.jobId(), JobStatus.FAILED, "failed", ex.getMessage());
         }
-        if (message.jobType() == JobType.REVERT) {
-            jobRevertService.revert(jobRepository.findById(message.jobId()).orElseThrow());
-            return;
-        }
-        lifecycleService.transition(message.jobId(), JobStatus.PROGRESS, "dispatch", "Write pipeline dispatch placeholder");
-        lifecycleService.transition(message.jobId(), JobStatus.COMPLETED, "completed", "Write job completed");
     }
 
     @RabbitListener(queues = RabbitConfig.ANSWER_QUEUE)

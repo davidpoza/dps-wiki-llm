@@ -69,7 +69,7 @@ app:
     token: ${TELEGRAM_BOT_TOKEN:}
     allowed-chat-id: ${TELEGRAM_ALLOWED_CHAT_ID:}
   jwt:
-    secret: ${JWT_SECRET:}
+    secret: ${JWT_SECRET:dGVzdC1kZXYtand0LXNlY3JldC1kby1ub3QtdXNlLWluLXByb2R1Y3Rpb24=}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
   admin:
     username: ${ADMIN_USERNAME:admin}

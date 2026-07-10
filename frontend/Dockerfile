@@ -9,6 +9,6 @@ COPY src ./src
 RUN pnpm build
 
 FROM nginx:1.27-alpine
-COPY frontend/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /workspace/dist/dps-wiki-llm-frontend/browser /usr/share/nginx/html
 EXPOSE 80

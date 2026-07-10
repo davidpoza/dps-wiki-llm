@@ -49,6 +49,7 @@ public class RawIntakeService {
             throw new IllegalArgumentException("Only http(s) URLs are supported");
         }
         org.jsoup.nodes.Document document = Jsoup.connect(url)
+                .userAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
                 .timeout(10_000)
                 .maxBodySize(MAX_FETCHED_CHARS)
                 .get();
