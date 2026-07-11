@@ -1,5 +1,10 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/dps_wiki
+    url: jdbc:postgresql://172.17.0.1:5432/dps_wiki
   rabbitmq:
-    host: localhost
+    host: 172.17.0.1
+
+app:
+  vault-path: /home/coder/vault
+  extractor:
+    base-url: http://172.25.0.5:3000
