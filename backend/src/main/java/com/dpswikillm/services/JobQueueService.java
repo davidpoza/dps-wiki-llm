@@ -12,6 +12,8 @@ import com.dpswikillm.repositories.JobRepository;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class JobQueueService {
@@ -36,9 +38,16 @@ public class JobQueueService {
         job.transitionTo(JobStatus.QUEUED);
         Job saved = jobRepository.save(job);
         String routingKey = type == JobType.ANSWER ? RabbitConfig.ANSWER_QUEUE : RabbitConfig.WRITE_QUEUE;
-        rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE, routingKey, new JobMessage(saved.getId(), saved.getType()));
-        eventService.broadcast(new JobEvent(JobStatus.QUEUED, saved.getId(), saved.getType(), position,
-                "queued", null, null, null, null));
+        JobMessage message = new JobMessage(saved.getId(), saved.getType());
+        JobEvent event = new JobEvent(JobStatus.QUEUED, saved.getId(), saved.getType(), position,
+                "queued", null, null, null, null);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE, routingKey, message);
+                eventService.broadcast(event);
+            }
+        });
         return new EnqueueJobResponse(saved.getId(), position);
     }
 }

@@ -20,30 +20,36 @@ public class OpenAiCompatibleEmbeddingClient implements EmbeddingClient {
         this.retrying = retrying;
     }
 
+    // multilingual-e5-small max sequence ~512 tokens ≈ 2000 chars; truncate to stay safe
+    private static final int MAX_CHARS = 2000;
+
     @Override
     public List<float[]> embedPassages(List<String> texts) {
-        return embed(texts.stream().map(text -> "passage: " + text).toList());
+        return embed(texts.stream().map(text -> truncate("passage: " + text)).toList());
     }
 
     @Override
     public float[] embedQuery(String text) {
-        return embed(List.of("query: " + text)).getFirst();
+        return embed(List.of(truncate("query: " + text))).getFirst();
+    }
+
+    private static String truncate(String text) {
+        return text.length() > MAX_CHARS ? text.substring(0, MAX_CHARS) : text;
     }
 
     @SuppressWarnings("unchecked")
     private List<float[]> embed(List<String> inputs) {
         return retrying.execute(() -> {
             try {
-                Map<String, Object> response = restClient.post()
-                        .uri("/embeddings")
+                // Use TEI native /embed endpoint — supports truncate:true unlike /embeddings (OpenAI-compat)
+                List<List<Number>> response = restClient.post()
+                        .uri("/embed")
                         .header("Authorization", "Bearer " + properties.embeddings().apiKey())
-                        .body(Map.of("model", properties.embeddings().model(), "input", inputs))
+                        .body(Map.of("inputs", inputs, "truncate", true, "normalize", true))
                         .retrieve()
-                        .body(Map.class);
-                List<Map<String, Object>> data = (List<Map<String, Object>>) response.get("data");
+                        .body(List.class);
                 List<float[]> vectors = new ArrayList<>();
-                for (Map<String, Object> row : data) {
-                    List<Number> values = (List<Number>) row.get("embedding");
+                for (List<Number> values : response) {
                     float[] vector = new float[values.size()];
                     for (int i = 0; i < values.size(); i += 1) {
                         vector[i] = values.get(i).floatValue();
