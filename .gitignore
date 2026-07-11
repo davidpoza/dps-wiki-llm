@@ -9,3 +9,6 @@ frontend/dist/
 
 # Runtime logs
 *.log
+
+# Local secrets — never commit
+backend/secrets.yml

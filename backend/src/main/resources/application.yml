@@ -4,6 +4,8 @@ server:
 spring:
   profiles:
     default: local
+  config:
+    import: optional:file:./secrets.yml
   application:
     name: dps-wiki-llm
   datasource:
