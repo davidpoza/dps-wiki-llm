@@ -11,6 +11,8 @@ export const config = {
   networkIdleMs: Number(process.env.NETWORKIDLE_MS ?? 4000),
   // Minimum article text length below which extraction is treated as low confidence.
   minContentChars: Number(process.env.MIN_CONTENT_CHARS ?? 200),
+  // Maximum PDF size (bytes) for both URL download and file upload.
+  pdfMaxBytes: Number(process.env.PDF_MAX_BYTES ?? 20_971_520),
   userAgent:
     process.env.USER_AGENT ??
     'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',

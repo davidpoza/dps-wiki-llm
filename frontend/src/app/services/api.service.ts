@@ -59,7 +59,7 @@ export class ApiService {
     return this.http.post<EnqueueResponse>('/api/ingest', { url, mode });
   }
 
-  uploadMarkdown(file: File, mode: JobMode = 'unattended'): Observable<EnqueueResponse> {
+  uploadFile(file: File, mode: JobMode = 'unattended'): Observable<EnqueueResponse> {
     const form = new FormData();
     form.append('file', file);
     form.append('mode', mode);

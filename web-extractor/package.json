@@ -13,9 +13,12 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@fastify/multipart": "^8.3.1",
     "@mozilla/readability": "0.5.0",
     "fastify": "4.28.1",
     "jsdom": "24.1.1",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.296",
     "playwright": "1.47.2",
     "turndown": "7.2.0",
     "turndown-plugin-gfm": "1.0.2"

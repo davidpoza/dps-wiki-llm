@@ -52,6 +52,7 @@ services:
       EXTRACTOR_CONCURRENCY: ${EXTRACTOR_CONCURRENCY:-3}
       NAV_TIMEOUT_MS: ${EXTRACTOR_NAV_TIMEOUT_MS:-30000}
       NETWORKIDLE_MS: ${EXTRACTOR_NETWORKIDLE_MS:-4000}
+      PDF_MAX_BYTES: ${PDF_MAX_BYTES:-20971520}
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 15s

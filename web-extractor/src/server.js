@@ -1,9 +1,11 @@
 import Fastify from 'fastify';
+import multipart from '@fastify/multipart';
 import { config } from './config.js';
 import { browserManager } from './browser.js';
 import { render } from './renderer.js';
-import { extractFromHtml } from './extract.js';
-import { ExtractionError, invalidUrl } from './errors.js';
+import { extractFromHtml, extractFromPdf } from './extract.js';
+import { fetchPdf, isPdfUrl } from './pdf-fetcher.js';
+import { ExtractionError, invalidUrl, invalidInput, payloadTooLarge, emptyContent } from './errors.js';
 
 export function validateUrl(body) {
   const url = body?.url;
@@ -33,19 +35,83 @@ function sendError(app, reply, err) {
 export function buildApp(opts = {}) {
   const app = Fastify({ logger: opts.logger ?? true, bodyLimit: 1_048_576 });
 
+  app.register(multipart, { limits: { fileSize: config.pdfMaxBytes } });
+
   // Readiness including browser availability.
   app.get('/health', async (_req, reply) => {
     const ready = browserManager.ready();
     return reply.status(ready ? 200 : 503).send({ status: ready ? 'up' : 'starting' });
   });
 
-  // Main extraction contract.
+  // Main extraction contract. Automatically handles PDF URLs.
   app.post('/extract', async (req, reply) => {
     try {
       const url = validateUrl(req.body);
+
+      if (await isPdfUrl(url)) {
+        const buffer = await fetchPdf(url);
+        const { markdown, metadata } = await extractFromPdf(buffer, { source: url });
+        return reply.send({ markdown, metadata });
+      }
+
       const { html, finalUrl } = await render(url);
       const { markdown, metadata } = extractFromHtml(html, finalUrl);
       return reply.send({ markdown, metadata });
+    } catch (err) {
+      return sendError(app, reply, err);
+    }
+  });
+
+  // File upload endpoint — accepts PDF or Markdown (.md).
+  app.post('/extract/file', async (req, reply) => {
+    try {
+      let data;
+      try {
+        data = await req.file();
+      } catch {
+        throw invalidInput('Request must be multipart/form-data with a "file" field');
+      }
+
+      if (!data) throw invalidInput('Missing "file" field in multipart body');
+
+      const mime = (data.mimetype ?? '').toLowerCase();
+      const filename = data.filename ?? '';
+      const isPdf = mime.includes('application/pdf');
+      const isMd =
+        mime.includes('text/markdown') ||
+        mime.includes('text/x-markdown') ||
+        ((mime.includes('text/plain') || mime === '') && filename.endsWith('.md'));
+
+      if (!isPdf && !isMd) {
+        throw invalidInput(`Unsupported file type: ${mime || 'unknown'}. Send application/pdf or a .md file`);
+      }
+
+      // Consume stream. @fastify/multipart truncates when fileSize limit is
+      // exceeded and sets file.truncated = true; check after drain.
+      const chunks = [];
+      for await (const chunk of data.file) {
+        chunks.push(chunk);
+      }
+      if (data.file.truncated) {
+        throw payloadTooLarge(`File exceeds the ${config.pdfMaxBytes} byte limit`);
+      }
+      const buffer = Buffer.concat(chunks);
+
+      if (isPdf) {
+        const { markdown, metadata } = await extractFromPdf(buffer, {
+          source: 'upload',
+          filename,
+        });
+        return reply.send({ markdown, metadata });
+      }
+
+      // Markdown: return content as-is.
+      const markdown = buffer.toString('utf8');
+      if (!markdown.trim()) throw emptyContent();
+      return reply.send({
+        markdown,
+        metadata: { source: 'upload', filename, extractionConfidence: 'high' },
+      });
     } catch (err) {
       return sendError(app, reply, err);
     }

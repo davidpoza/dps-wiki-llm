@@ -7,6 +7,6 @@ spring:
 app:
   vault-path: /home/coder/vault
   extractor:
-    base-url: http://172.25.0.5:3000
+    base-url: http://172.17.0.1:3000
   embeddings:
-    base-url: http://172.25.0.6:8080
+    base-url: http://172.17.0.1:8080

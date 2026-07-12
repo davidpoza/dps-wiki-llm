@@ -27,9 +27,9 @@ import { JobMode } from '../types';
       </div>
 
       <div class="section">
-        <div class="section-title">Upload Markdown</div>
+        <div class="section-title">Upload File <span class="section-hint">PDF or Markdown</span></div>
         <div class="upload-row">
-          <input type="file" accept=".md,.markdown" (change)="onFileChange($event)" class="file-input" #fileInput />
+          <input type="file" accept=".pdf,.md,.markdown" (change)="onFileChange($event)" class="file-input" #fileInput />
           <button pButton type="button" label="Ingest File" icon="pi pi-upload"
                   [disabled]="!selectedFile() || busy()" (click)="ingestFile(fileInput)"></button>
         </div>
@@ -63,6 +63,7 @@ import { JobMode } from '../types';
     .mode-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
     .label { font-weight: 600; color: #5d6878; }
     .mode-hint { font-size: 0.82rem; color: #5d6878; }
+    .section-hint { font-size: 0.78rem; font-weight: 400; color: #8a93a2; margin-left: 6px; }
     .section { display: grid; gap: 10px; }
     .section-title { font-weight: 600; }
     .upload-row, .url-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -105,7 +106,7 @@ export class IngestComponent {
     if (!file) return;
     this.busy.set(true);
     this.errorMessage.set(null);
-    this.api.uploadMarkdown(file, this.mode()).subscribe({
+    this.api.uploadFile(file, this.mode()).subscribe({
       next: res => {
         this.lastJobId.set(res.jobId);
         this.selectedFile.set(null);

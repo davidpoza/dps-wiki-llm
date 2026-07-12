@@ -26,11 +26,30 @@ public class RawIntakeService {
         this.extractorClient = extractorClient;
     }
 
-    public String ingestMarkdown(MultipartFile file) throws IOException {
-        String filename = file.getOriginalFilename() == null ? "upload.md" : file.getOriginalFilename();
-        if (!filename.endsWith(".md") && !filename.endsWith(".markdown")) {
-            throw new IllegalArgumentException("Only markdown uploads are supported");
+    public String ingestFile(MultipartFile file) throws IOException {
+        String filename = file.getOriginalFilename() == null ? "upload" : file.getOriginalFilename();
+        if (filename.endsWith(".pdf")) {
+            return ingestPdf(file, filename);
         }
+        if (filename.endsWith(".md") || filename.endsWith(".markdown")) {
+            return ingestMarkdown(file, filename);
+        }
+        throw new IllegalArgumentException("Unsupported file type. Send a .pdf or .md file");
+    }
+
+    private String ingestPdf(MultipartFile file, String filename) throws IOException {
+        ExtractionResult result = extractorClient.extractFile(file);
+        ExtractionMetadata meta = result.metadata();
+        String title = meta != null && meta.title() != null && !meta.title().isBlank()
+                ? meta.title() : filename.replaceFirst("\\.[^.]+$", "");
+        String content = renderFileFrontmatter(filename, meta) + "\n# " + title + "\n\n" + result.markdown().strip() + "\n";
+        String slug = TextUtil.slugify(title, "pdf-upload");
+        String rawPath = "raw/inbox/" + Instant.now().toString().replace(":", "-") + "-" + slug + ".md";
+        writeRaw(rawPath, content);
+        return rawPath;
+    }
+
+    private String ingestMarkdown(MultipartFile file, String filename) throws IOException {
         if (file.getSize() > MAX_MARKDOWN_BYTES) {
             throw new IllegalArgumentException("Markdown upload exceeds size limit");
         }
@@ -66,6 +85,20 @@ public class RawIntakeService {
         String rawPath = "raw/web/" + Instant.now().toString().replace(":", "-") + "-" + slug + ".md";
         writeRaw(rawPath, content);
         return rawPath;
+    }
+
+    private String renderFileFrontmatter(String filename, ExtractionMetadata meta) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("source", "upload");
+        fields.put("filename", filename);
+        if (meta != null) {
+            putIfPresent(fields, "title", meta.title());
+            putIfPresent(fields, "extraction_confidence", meta.extractionConfidence());
+        }
+        StringBuilder sb = new StringBuilder("---\n");
+        fields.forEach((k, v) -> sb.append(k).append(": ").append(yamlValue(v)).append('\n'));
+        sb.append("---\n");
+        return sb.toString();
     }
 
     private String renderFrontmatter(String requestedUrl, ExtractionMetadata meta) {

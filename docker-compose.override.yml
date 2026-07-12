@@ -5,3 +5,9 @@ services:
   rabbitmq:
     ports:
       - "5672:5672"
+  web-extractor:
+    ports:
+      - "3000:3000"
+  embeddings:
+    ports:
+      - "8080:8080"

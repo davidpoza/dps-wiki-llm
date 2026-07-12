@@ -73,7 +73,7 @@ public class JobController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     public EnqueueJobResponse enqueueMarkdownUpload(@RequestParam("file") MultipartFile file,
                                                     @RequestParam(value = "mode", required = false) JobMode mode) throws IOException {
-        return queueService.enqueue(JobType.INGEST, mode == null ? JobMode.unattended : mode, rawIntakeService.ingestMarkdown(file));
+        return queueService.enqueue(JobType.INGEST, mode == null ? JobMode.unattended : mode, rawIntakeService.ingestFile(file));
     }
 
     @PostMapping("/answer")

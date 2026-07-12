@@ -24,6 +24,12 @@ export const timeout = (msg = 'Navigation or render exceeded the timeout') =>
 export const emptyContent = (msg = 'No extractable content was found') =>
   new ExtractionError('empty_content', 422, msg);
 
+export const payloadTooLarge = (msg = 'Payload exceeds the maximum allowed size') =>
+  new ExtractionError('payload_too_large', 413, msg);
+
+export const invalidInput = (msg = 'Invalid input') =>
+  new ExtractionError('invalid_input', 400, msg);
+
 // Playwright surfaces timeouts as TimeoutError; normalize to our typed error.
 export function isTimeoutError(err) {
   return err && (err.name === 'TimeoutError' || /Timeout .* exceeded/i.test(err.message ?? ''));
