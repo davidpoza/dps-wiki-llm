@@ -28,6 +28,12 @@ type Tab = 'jobs' | 'ingest' | 'chat' | 'review';
             }
             <p-button
               severity="secondary"
+              label="Explorer"
+              size="small"
+              (onClick)="goToExplorer()"
+            />
+            <p-button
+              severity="secondary"
               label="Sign out"
               size="small"
               (onClick)="logout()"
@@ -90,6 +96,10 @@ export class HomeComponent implements OnInit {
 
   ngOnInit(): void {
     this.store.connect();
+  }
+
+  goToExplorer(): void {
+    this.router.navigateByUrl('/explorer');
   }
 
   logout(): void {
