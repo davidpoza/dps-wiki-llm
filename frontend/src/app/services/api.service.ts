@@ -93,4 +93,8 @@ export class ApiService {
   resetToCommit(sha: string): Observable<{ sha: string }> {
     return this.http.post<{ sha: string }>('/api/git/reset', { sha });
   }
+
+  getFileDiff(sha: string, path: string): Observable<string> {
+    return this.http.get('/api/git/diff', { params: { sha, path }, responseType: 'text' });
+  }
 }

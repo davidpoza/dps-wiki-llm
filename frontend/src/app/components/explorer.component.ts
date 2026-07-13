@@ -20,14 +20,16 @@ import { commonmark } from '@milkdown/preset-commonmark';
 import { replaceAll } from '@milkdown/utils';
 import { createWikilinkPlugin, WikilinkCoords } from './wikilink.plugin';
 import type { EditorView } from '@milkdown/prose/view';
-import { TreeNode, ConfirmationService, MessageService } from 'primeng/api';
+import { TreeNode, ConfirmationService, MessageService, MenuItem } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { ContextMenuModule } from 'primeng/contextmenu';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { TreeModule } from 'primeng/tree';
+import { HttpStatusCode } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 import { FileService } from '../services/file.service';
@@ -35,11 +37,12 @@ import { FileService } from '../services/file.service';
 @Component({
   selector: 'app-explorer',
   standalone: true,
-  imports: [TreeModule, ButtonModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe],
+  imports: [TreeModule, ButtonModule, ContextMenuModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe],
   providers: [MessageService, ConfirmationService],
   template: `
     <p-toast />
     <p-confirmDialog />
+    <p-contextMenu #cm [model]="contextMenuItems()" />
 
     <main class="explorer-shell">
       <header class="topbar">
@@ -83,6 +86,8 @@ import { FileService } from '../services/file.service';
             selectionMode="single"
             [(selection)]="selectedNode"
             (onNodeSelect)="onNodeSelect($event)"
+            [contextMenu]="cm"
+            (onNodeContextMenuSelect)="onNodeContextMenuSelect($event)"
             styleClass="w-full"
           >
             <ng-template pTemplate="default" let-node>
@@ -208,6 +213,110 @@ import { FileService } from '../services/file.service';
           </div>
         }
       </div>
+    </p-dialog>
+
+    <p-dialog
+      header="Renombrar fichero"
+      [(visible)]="showRenameDialog"
+      [modal]="true"
+      [draggable]="false"
+      [style]="{ width: '400px' }"
+    >
+      <div class="search-box">
+        <input
+          pInputText
+          type="text"
+          placeholder="Nuevo nombre..."
+          class="w-full"
+          [value]="renameValue()"
+          (input)="renameValue.set($any($event.target).value)"
+          (keydown.enter)="confirmRename()"
+        />
+      </div>
+      <ng-template pTemplate="footer">
+        <p-button label="Cancelar" severity="secondary" size="small" (onClick)="showRenameDialog.set(false)" />
+        <p-button label="Renombrar" size="small" [disabled]="!renameValue().trim()" (onClick)="confirmRename()" />
+      </ng-template>
+    </p-dialog>
+
+    <p-dialog
+      header="Crear fichero"
+      [(visible)]="showCreateDialog"
+      [modal]="true"
+      [draggable]="false"
+      [style]="{ width: '400px' }"
+    >
+      <div class="search-box">
+        <input
+          pInputText
+          type="text"
+          placeholder="Nombre del fichero..."
+          class="w-full"
+          [value]="createFileName()"
+          (input)="createFileName.set($any($event.target).value)"
+          (keydown.enter)="confirmCreate()"
+        />
+      </div>
+      <ng-template pTemplate="footer">
+        <p-button label="Cancelar" severity="secondary" size="small" (onClick)="showCreateDialog.set(false)" />
+        <p-button label="Crear" size="small" [disabled]="!createFileName().trim()" (onClick)="confirmCreate()" />
+      </ng-template>
+    </p-dialog>
+
+    <p-dialog
+      header="Crear directorio"
+      [(visible)]="showCreateDirDialog"
+      [modal]="true"
+      [draggable]="false"
+      [style]="{ width: '400px' }"
+    >
+      <div class="search-box">
+        <input
+          pInputText
+          type="text"
+          placeholder="Nombre del directorio..."
+          class="w-full"
+          [value]="createDirName()"
+          (input)="createDirName.set($any($event.target).value)"
+          (keydown.enter)="confirmCreateDir()"
+        />
+      </div>
+      <ng-template pTemplate="footer">
+        <p-button label="Cancelar" severity="secondary" size="small" (onClick)="showCreateDirDialog.set(false)" />
+        <p-button label="Crear" size="small" [disabled]="!createDirName().trim()" (onClick)="confirmCreateDir()" />
+      </ng-template>
+    </p-dialog>
+
+    <p-dialog
+      header="Mover fichero"
+      [(visible)]="showMoveDialog"
+      [modal]="true"
+      [draggable]="false"
+      [style]="{ width: '420px' }"
+    >
+      <p class="move-help">Selecciona el directorio de destino:</p>
+      <div class="move-tree-wrap">
+        <div
+          class="move-root-item"
+          [class.selected]="!moveTargetDir()"
+          (click)="moveTargetDir.set(null); moveTargetDirNode = null"
+        >
+          <i class="pi pi-home"></i> Raíz del vault
+        </div>
+        @if (dirTreeNodes().length > 0) {
+          <p-tree
+            [value]="dirTreeNodes()"
+            selectionMode="single"
+            [(selection)]="moveTargetDirNode"
+            (onNodeSelect)="onMoveDirSelect($event)"
+            styleClass="w-full"
+          />
+        }
+      </div>
+      <ng-template pTemplate="footer">
+        <p-button label="Cancelar" severity="secondary" size="small" (onClick)="showMoveDialog.set(false)" />
+        <p-button label="Mover aquí" size="small" (onClick)="confirmMove()" />
+      </ng-template>
     </p-dialog>
   `,
   styles: [`
@@ -471,6 +580,19 @@ import { FileService } from '../services/file.service';
       color: #ef4444;
       margin-top: 4px;
     }
+    .move-help { margin: 0 0 8px; font-size: 0.85rem; color: #5d6878; }
+    .move-tree-wrap { border: 1px solid #d1d9e0; border-radius: 6px; max-height: 300px; overflow-y: auto; padding: 4px 0; }
+    .move-root-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      border-bottom: 1px solid #e2e5ea;
+    }
+    .move-root-item:hover { background: #f0f4f8; }
+    .move-root-item.selected { background: #eef2ff; font-weight: 600; color: #4f46e5; }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -498,6 +620,21 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
   readonly treePanelCollapsed = signal(false);
   readonly showSearch = signal(false);
   readonly searchQuery = signal('');
+  readonly contextMenuItems = signal<MenuItem[]>([]);
+  readonly contextMenuNode = signal<TreeNode | null>(null);
+  readonly showRenameDialog = signal(false);
+  readonly renameValue = signal('');
+  readonly showCreateDialog = signal(false);
+  readonly createFileName = signal('');
+  readonly showCreateDirDialog = signal(false);
+  readonly createDirName = signal('');
+  readonly showMoveDialog = signal(false);
+  readonly moveTargetDir = signal<TreeNode | null>(null);
+  readonly dirTreeNodes = computed(() => {
+    const filterDirs = (nodes: TreeNode[]): TreeNode[] =>
+      nodes.filter(n => !n.leaf).map(n => ({ ...n, children: filterDirs(n.children ?? []) }));
+    return filterDirs(this.treeNodes());
+  });
 
   readonly allFiles = computed(() => {
     const flatten = (nodes: TreeNode[]): TreeNode[] =>
@@ -511,6 +648,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
   });
 
   selectedNode: TreeNode | null = null;
+  moveTargetDirNode: TreeNode | null = null;
 
   readonly wikilinkQuery = signal<string | null>(null);
   readonly wikilinkCoords = signal<WikilinkCoords | null>(null);
@@ -553,6 +691,168 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
     });
   }
 
+  private reloadTree(): void {
+    this.fileService.getTree().subscribe({
+      next: nodes => {
+        this.treeNodes.set(nodes);
+        this.cdr.markForCheck();
+      },
+      error: () =>
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'No se pudo actualizar el árbol de ficheros' }),
+    });
+  }
+
+  openRenameDialog(): void {
+    const node = this.contextMenuNode();
+    if (!node) return;
+    this.renameValue.set(node.label ?? '');
+    this.showRenameDialog.set(true);
+  }
+
+  confirmRename(): void {
+    const node = this.contextMenuNode();
+    const newName = this.renameValue().trim();
+    if (!node || !newName) return;
+    this.showRenameDialog.set(false);
+    this.fileService.renameFile(node.data as string, newName).subscribe({
+      next: () => {
+        if (this.selectedPath() === (node.data as string)) {
+          const dir = (node.data as string).includes('/')
+            ? (node.data as string).substring(0, (node.data as string).lastIndexOf('/') + 1)
+            : '';
+          const newPath = dir + newName;
+          this.selectedPath.set(newPath);
+          this.selectedLabel.set(newName);
+        }
+        this.reloadTree();
+        this.messageService.add({ severity: 'success', summary: 'Renombrado', detail: `Fichero renombrado a "${newName}"` });
+      },
+      error: err => {
+        const msg = err.status === HttpStatusCode.Conflict
+          ? `Ya existe un fichero con el nombre "${newName}"`
+          : 'No se pudo renombrar el fichero';
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: msg });
+      },
+    });
+  }
+
+  openCreateDialog(): void {
+    this.createFileName.set('');
+    this.showCreateDialog.set(true);
+  }
+
+  confirmCreate(): void {
+    const dirNode = this.contextMenuNode();
+    let name = this.createFileName().trim();
+    if (!dirNode || !name) return;
+    if (!name.endsWith('.md')) name = name + '.md';
+    const dirPath = dirNode.data as string;
+    const newPath = dirPath ? dirPath + '/' + name : name;
+    this.showCreateDialog.set(false);
+    this.fileService.createFile(newPath).subscribe({
+      next: () => {
+        this.reloadTree();
+        const newNode: TreeNode = { label: name, data: newPath, leaf: true };
+        this.loadFile(newNode);
+        this.messageService.add({ severity: 'success', summary: 'Creado', detail: `Fichero "${name}" creado` });
+      },
+      error: err => {
+        const msg = err.status === HttpStatusCode.Conflict
+          ? `Ya existe un fichero con el nombre "${name}"`
+          : 'No se pudo crear el fichero';
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: msg });
+      },
+    });
+  }
+
+  openCreateDirDialog(): void {
+    this.createDirName.set('');
+    this.showCreateDirDialog.set(true);
+  }
+
+  confirmCreateDir(): void {
+    const dirNode = this.contextMenuNode();
+    const name = this.createDirName().trim();
+    if (!dirNode || !name) return;
+    const parentPath = dirNode.data as string;
+    const newPath = parentPath ? parentPath + '/' + name : name;
+    this.showCreateDirDialog.set(false);
+    this.fileService.createDirectory(newPath).subscribe({
+      next: () => {
+        this.reloadTree();
+        this.messageService.add({ severity: 'success', summary: 'Creado', detail: `Directorio "${name}" creado` });
+      },
+      error: err => {
+        const msg = err.status === HttpStatusCode.Conflict
+          ? `Ya existe un directorio con el nombre "${name}"`
+          : 'No se pudo crear el directorio';
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: msg });
+      },
+    });
+  }
+
+  openMoveDialog(): void {
+    this.moveTargetDir.set(null);
+    this.moveTargetDirNode = null;
+    this.showMoveDialog.set(true);
+  }
+
+  onMoveDirSelect(event: { node: TreeNode }): void {
+    this.moveTargetDir.set(event.node);
+  }
+
+  confirmMove(): void {
+    const node = this.contextMenuNode();
+    if (!node) return;
+    const targetNode = this.moveTargetDir();
+    const targetDir = targetNode ? (targetNode.data as string) : '';
+    this.showMoveDialog.set(false);
+    this.fileService.moveFile(node.data as string, targetDir).subscribe({
+      next: () => {
+        const filename = node.label ?? '';
+        const newPath = targetDir ? targetDir + '/' + filename : filename;
+        if (this.selectedPath() === (node.data as string)) {
+          this.selectedPath.set(newPath);
+        }
+        this.reloadTree();
+        const dest = targetDir || '/';
+        this.messageService.add({ severity: 'success', summary: 'Movido', detail: `"${filename}" movido a ${dest}` });
+      },
+      error: err => {
+        const msg = err.status === HttpStatusCode.Conflict
+          ? 'Ya existe un fichero con ese nombre en el destino'
+          : 'No se pudo mover el fichero';
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: msg });
+      },
+    });
+  }
+
+  deleteNode(): void {
+    const node = this.contextMenuNode();
+    if (!node) return;
+    this.confirmationService.confirm({
+      message: `¿Eliminar el fichero "${node.label}"?`,
+      header: 'Eliminar fichero',
+      icon: 'pi pi-trash',
+      accept: () => {
+        this.fileService.deleteFile(node.data as string).subscribe({
+          next: () => {
+            if (this.selectedPath() === (node.data as string)) {
+              this.selectedPath.set(null);
+              this.selectedLabel.set('');
+              this.isDirty.set(false);
+              if (this.editor) this.editor.action(replaceAll(''));
+            }
+            this.reloadTree();
+            this.messageService.add({ severity: 'success', summary: 'Eliminado', detail: `Fichero "${node.label}" eliminado` });
+          },
+          error: () =>
+            this.messageService.add({ severity: 'error', summary: 'Error', detail: 'No se pudo eliminar el fichero' }),
+        });
+      },
+    });
+  }
+
   private initEditor(): void {
     Editor.make()
       .config(ctx => {
@@ -587,6 +887,23 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
       .then(editor => {
         this.editor = editor;
       });
+  }
+
+  onNodeContextMenuSelect(event: { node: TreeNode }): void {
+    const node = event.node;
+    this.contextMenuNode.set(node);
+    if (node.leaf) {
+      this.contextMenuItems.set([
+        { label: 'Rename', icon: 'pi pi-pencil', command: () => this.openRenameDialog() },
+        { label: 'Mover', icon: 'pi pi-folder-open', command: () => this.openMoveDialog() },
+        { label: 'Delete', icon: 'pi pi-trash', command: () => this.deleteNode() },
+      ]);
+    } else {
+      this.contextMenuItems.set([
+        { label: 'Crear fichero', icon: 'pi pi-file-plus', command: () => this.openCreateDialog() },
+        { label: 'Crear directorio', icon: 'pi pi-folder-plus', command: () => this.openCreateDirDialog() },
+      ]);
+    }
   }
 
   onNodeSelect(event: { node: TreeNode }): void {

@@ -24,4 +24,24 @@ export class FileService {
       headers: { 'Content-Type': 'text/plain' },
     });
   }
+
+  deleteFile(path: string): Observable<void> {
+    return this.http.delete<void>('/api/files/content', { params: { path } });
+  }
+
+  renameFile(path: string, newName: string): Observable<void> {
+    return this.http.post<void>('/api/files/rename', null, { params: { path, newName } });
+  }
+
+  createFile(path: string): Observable<void> {
+    return this.http.post<void>('/api/files/content', null, { params: { path } });
+  }
+
+  moveFile(path: string, targetDir: string): Observable<void> {
+    return this.http.post<void>('/api/files/move', null, { params: { path, targetDir } });
+  }
+
+  createDirectory(path: string): Observable<void> {
+    return this.http.post<void>('/api/files/directory', null, { params: { path } });
+  }
 }

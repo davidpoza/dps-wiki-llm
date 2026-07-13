@@ -1,10 +1,12 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { NgClass } from '@angular/common';
 import { ApiService } from '../services/api.service';
 import { Commit } from '../types';
 
 @Component({
   selector: 'app-git-history',
   standalone: true,
+  imports: [NgClass],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="git-history">
@@ -43,7 +45,22 @@ import { Commit } from '../types';
                       <span class="file-path">{{ file.path }}</span>
                       <span class="stat-added">+{{ file.added }}</span>
                       <span class="stat-deleted">-{{ file.deleted }}</span>
+                      <button
+                        class="diff-btn"
+                        (click)="toggleDiff(commit.sha, file.path)"
+                      >{{ isDiffOpen(commit.sha, file.path) ? 'Ocultar diff' : 'Ver diff' }}</button>
                     </li>
+                    @if (isDiffOpen(commit.sha, file.path)) {
+                      <li class="diff-container">
+                        @if (isDiffLoading(commit.sha, file.path)) {
+                          <span class="diff-loading">Cargando diff...</span>
+                        } @else {
+                          <pre class="diff-pre">@for (line of getDiffLines(commit.sha, file.path); track $index) {
+<span [ngClass]="lineClass(line)">{{ line }}</span>
+}</pre>
+                        }
+                      </li>
+                    }
                   }
                 </ul>
               </details>
@@ -71,11 +88,21 @@ import { Commit } from '../types';
     .commit-date { color: #888; }
     .commit-message { margin: 0.25rem 0 0.5rem; font-size: 0.95rem; }
     .commit-files { margin-bottom: 0.5rem; font-size: 0.85rem; }
-    .commit-files ul { margin: 0.25rem 0 0 1rem; padding: 0; list-style: none; }
-    .commit-files li { display: flex; gap: 0.5rem; align-items: center; padding: 0.1rem 0; }
-    .file-path { flex: 1; font-family: monospace; font-size: 0.8rem; }
+    .commit-files ul { margin: 0.25rem 0 0 0; padding: 0; list-style: none; }
+    .commit-files li { display: flex; gap: 0.5rem; align-items: center; padding: 0.15rem 0; flex-wrap: wrap; }
+    .file-path { flex: 1; font-family: monospace; font-size: 0.8rem; min-width: 0; }
     .stat-added { color: #22863a; font-weight: 600; }
     .stat-deleted { color: #cb2431; font-weight: 600; }
+    .diff-btn { padding: 0.1rem 0.5rem; font-size: 0.75rem; cursor: pointer; border: 1px solid #aaa; border-radius: 3px; background: #fafafa; white-space: nowrap; }
+    .diff-btn:hover { background: #e8e8e8; }
+    .diff-container { display: block; width: 100%; padding: 0; }
+    .diff-loading { color: #888; font-size: 0.8rem; }
+    .diff-pre { margin: 0.25rem 0 0.5rem; font-size: 0.75rem; line-height: 1.45; background: #1e1e1e; color: #d4d4d4; border-radius: 4px; padding: 0.5rem; overflow-x: auto; white-space: pre; }
+    .diff-pre span { display: block; white-space: pre; }
+    .line-add { background: #1a3a1a; color: #7ee787; }
+    .line-del { background: #3a1a1a; color: #ff7b72; }
+    .line-hunk { background: #1a2a3a; color: #79c0ff; }
+    .line-meta { color: #8b949e; }
     .reset-btn { padding: 0.25rem 0.75rem; cursor: pointer; color: #c0392b; border: 1px solid #c0392b; background: transparent; border-radius: 4px; font-size: 0.85rem; }
     .reset-btn:hover { background: #c0392b; color: white; }
   `]
@@ -86,6 +113,10 @@ export class GitHistoryComponent implements OnInit {
   readonly commits = signal<Commit[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+
+  private readonly openDiffs = new Map<string, string[]>();
+  private readonly loadingDiffs = new Set<string>();
+  private readonly diffVersion = signal(0);
 
   ngOnInit(): void {
     this.load();
@@ -104,6 +135,56 @@ export class GitHistoryComponent implements OnInit {
         this.loading.set(false);
       }
     });
+  }
+
+  private diffKey(sha: string, path: string): string {
+    return `${sha}::${path}`;
+  }
+
+  isDiffOpen(sha: string, path: string): boolean {
+    this.diffVersion();
+    return this.openDiffs.has(this.diffKey(sha, path));
+  }
+
+  isDiffLoading(sha: string, path: string): boolean {
+    this.diffVersion();
+    return this.loadingDiffs.has(this.diffKey(sha, path));
+  }
+
+  getDiffLines(sha: string, path: string): string[] {
+    this.diffVersion();
+    return this.openDiffs.get(this.diffKey(sha, path)) ?? [];
+  }
+
+  toggleDiff(sha: string, path: string): void {
+    const key = this.diffKey(sha, path);
+    if (this.openDiffs.has(key)) {
+      this.openDiffs.delete(key);
+      this.diffVersion.update(v => v + 1);
+      return;
+    }
+    this.loadingDiffs.add(key);
+    this.diffVersion.update(v => v + 1);
+    this.api.getFileDiff(sha, path).subscribe({
+      next: raw => {
+        this.openDiffs.set(key, raw.split('\n'));
+        this.loadingDiffs.delete(key);
+        this.diffVersion.update(v => v + 1);
+      },
+      error: () => {
+        this.openDiffs.set(key, ['Error al cargar el diff.']);
+        this.loadingDiffs.delete(key);
+        this.diffVersion.update(v => v + 1);
+      }
+    });
+  }
+
+  lineClass(line: string): string {
+    if (line.startsWith('+') && !line.startsWith('+++')) return 'line-add';
+    if (line.startsWith('-') && !line.startsWith('---')) return 'line-del';
+    if (line.startsWith('@@')) return 'line-hunk';
+    if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ ')) return 'line-meta';
+    return '';
   }
 
   resetTo(commit: Commit): void {

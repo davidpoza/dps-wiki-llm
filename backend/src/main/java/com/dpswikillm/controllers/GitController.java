@@ -5,6 +5,7 @@ import com.dpswikillm.services.GitService;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +30,20 @@ public class GitController {
             return ResponseEntity.ok(gitService.getLog(limit));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
+        } catch (IOException | InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @GetMapping(value = "/diff", produces = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<String> getFileDiff(
+            @RequestParam String sha,
+            @RequestParam String path) {
+        try {
+            return ResponseEntity.ok(gitService.getFileDiff(sha, path));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         } catch (IOException | InterruptedException e) {
             Thread.currentThread().interrupt();
             return ResponseEntity.internalServerError().build();

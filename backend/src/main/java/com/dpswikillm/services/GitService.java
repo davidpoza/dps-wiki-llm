@@ -77,6 +77,18 @@ public class GitService {
         }
     }
 
+    public String getFileDiff(String sha, String path) throws IOException, InterruptedException {
+        String normalized = pathResolver.normalizeRelativePath(path);
+        // Use diff-tree to get the patch for this file in this commit without commit metadata
+        ProcessResult result = git(List.of("diff-tree", "--no-commit-id", "-p", sha, "--", normalized), false);
+        if (result.exitCode() != 0 || result.stdout().isBlank()) {
+            // Fallback for root commit or renamed files: use show
+            ProcessResult show = git(List.of("show", "--no-commit-id", "-p", sha, "--", normalized), false);
+            return show.stdout();
+        }
+        return result.stdout();
+    }
+
     public Optional<String> getHead() throws IOException, InterruptedException {
         ProcessResult result = git(List.of("rev-parse", "HEAD"), false);
         if (result.exitCode() != 0) {
@@ -115,6 +127,40 @@ public class GitService {
                 .map(String::trim)
                 .filter(path -> !path.isBlank())
                 .toList();
+    }
+
+    public void commitFileChanges(List<String> relPaths, String message) throws IOException, InterruptedException {
+        List<String> addArgs = new ArrayList<>(List.of("add"));
+        List<String> rmArgs = new ArrayList<>(List.of("rm", "--ignore-unmatch"));
+        for (String path : relPaths) {
+            String normalized = pathResolver.normalizeRelativePath(path);
+            if (Files.exists(pathResolver.resolve(normalized))) {
+                addArgs.add(normalized);
+            } else {
+                rmArgs.add(normalized);
+            }
+        }
+        if (addArgs.size() > 1) {
+            // git add returns exit code 1 when all paths are gitignored — treat as no-op
+            ProcessResult addResult = git(addArgs, false);
+            if (addResult.exitCode() != 0 && !addResult.stderr().contains("ignored by one of your .gitignore")) {
+                requireSuccess(addResult);
+            }
+        }
+        if (rmArgs.size() > 2) {
+            requireSuccess(git(rmArgs, true));
+        }
+        // Only commit if there is something staged
+        ProcessResult staged = git(List.of("diff", "--cached", "--quiet"), false);
+        if (staged.exitCode() == 0) {
+            // nothing staged — all paths were gitignored or unchanged
+            return;
+        }
+        requireSuccess(git(List.of(
+                "-c", "user.name=" + properties.userName(),
+                "-c", "user.email=" + properties.userEmail(),
+                "commit",
+                "-m", message), true));
     }
 
     public OperationCommitResult commitOperation(OperationCommitRequest request) throws IOException, InterruptedException {
