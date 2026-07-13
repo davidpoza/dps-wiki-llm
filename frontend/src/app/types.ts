@@ -1,4 +1,18 @@
 export type JobMode = 'unattended' | 'validated';
+
+export interface CommitFileStat {
+  path: string;
+  added: number;
+  deleted: number;
+}
+
+export interface Commit {
+  sha: string;
+  author: string;
+  date: string;
+  message: string;
+  files: CommitFileStat[];
+}
 export type JobStatus = 'QUEUED' | 'STARTED' | 'PROGRESS' | 'AWAITING_REVIEW' | 'COMPLETED' | 'FAILED' | 'REVERTED';
 
 export interface JobPhase {

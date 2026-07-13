@@ -3,6 +3,8 @@ package com.dpswikillm.services;
 import com.dpswikillm.config.GitProperties;
 import com.dpswikillm.domain.OperationCommitRequest;
 import com.dpswikillm.domain.OperationCommitResult;
+import com.dpswikillm.dto.CommitDto;
+import com.dpswikillm.dto.CommitFileStatDto;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,6 +28,53 @@ public class GitService {
     public GitService(VaultPathResolver pathResolver, GitProperties properties) {
         this.pathResolver = pathResolver;
         this.properties = properties;
+    }
+
+    public List<CommitDto> getLog(int limit) throws IOException, InterruptedException {
+        ProcessResult result = git(List.of(
+                "log",
+                "--format=%H|%an|%ai|%s",
+                "--numstat",
+                "-n", String.valueOf(limit)
+        ), false);
+        if (result.exitCode() != 0 || result.stdout().isBlank()) {
+            return List.of();
+        }
+        // Format: meta line, blank line, then file stat lines (no trailing blank before next meta)
+        List<CommitDto> commits = new ArrayList<>();
+        List<CommitFileStatDto> currentFiles = new ArrayList<>();
+        String[] meta = null;
+        for (String line : result.stdout().split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.contains("|") && trimmed.matches("[0-9a-f]{40}\\|.*")) {
+                if (meta != null) {
+                    commits.add(new CommitDto(meta[0], meta[1], meta[2], meta.length > 3 ? meta[3] : "", List.copyOf(currentFiles)));
+                    currentFiles.clear();
+                }
+                meta = trimmed.split("\\|", 4);
+            } else if (!trimmed.isBlank() && meta != null) {
+                String[] parts = trimmed.split("\t", 3);
+                if (parts.length == 3) {
+                    int added = parseStatNum(parts[0]);
+                    int deleted = parseStatNum(parts[1]);
+                    if (added >= 0 || deleted >= 0) {
+                        currentFiles.add(new CommitFileStatDto(parts[2], added, deleted));
+                    }
+                }
+            }
+        }
+        if (meta != null) {
+            commits.add(new CommitDto(meta[0], meta[1], meta[2], meta.length > 3 ? meta[3] : "", List.copyOf(currentFiles)));
+        }
+        return commits;
+    }
+
+    private int parseStatNum(String s) {
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     public Optional<String> getHead() throws IOException, InterruptedException {

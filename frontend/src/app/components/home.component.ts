@@ -2,18 +2,19 @@ import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } 
 import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { ChatComponent } from './chat.component';
+import { GitHistoryComponent } from './git-history.component';
 import { IngestComponent } from './ingest.component';
 import { JobsViewerComponent } from './jobs-viewer.component';
 import { ReviewComponent } from './review.component';
 import { AuthService } from '../services/auth.service';
 import { JobsStore } from '../services/jobs.store';
 
-type Tab = 'jobs' | 'ingest' | 'chat' | 'review';
+type Tab = 'jobs' | 'ingest' | 'chat' | 'review' | 'git';
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [ButtonModule, ChatComponent, IngestComponent, JobsViewerComponent, ReviewComponent],
+  imports: [ButtonModule, ChatComponent, GitHistoryComponent, IngestComponent, JobsViewerComponent, ReviewComponent],
   template: `
     <main class="app-shell">
       <section class="workspace">
@@ -66,6 +67,9 @@ type Tab = 'jobs' | 'ingest' | 'chat' | 'review';
             @case ('review') {
               <app-review />
             }
+            @case ('git') {
+              <app-git-history />
+            }
           }
         </div>
       </section>
@@ -88,6 +92,7 @@ export class HomeComponent implements OnInit {
     { id: 'ingest', label: 'Ingest' },
     { id: 'chat', label: 'Chat' },
     { id: 'review', label: 'Review' },
+    { id: 'git', label: 'Historial Git' },
   ];
 
   readonly reviewCount = computed(() =>

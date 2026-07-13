@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { JobMode } from '../types';
+import { Commit, JobMode } from '../types';
 
 export interface EnqueueResponse {
   jobId: string;
@@ -84,5 +84,13 @@ export class ApiService {
 
   lookupFiles(q: string, limit = 10): Observable<FileSearchResult[]> {
     return this.http.get<FileSearchResult[]>('/api/files/lookup', { params: { q, limit: String(limit) } });
+  }
+
+  getGitLog(limit = 50): Observable<Commit[]> {
+    return this.http.get<Commit[]>('/api/git/log', { params: { limit: String(limit) } });
+  }
+
+  resetToCommit(sha: string): Observable<{ sha: string }> {
+    return this.http.post<{ sha: string }>('/api/git/reset', { sha });
   }
 }
