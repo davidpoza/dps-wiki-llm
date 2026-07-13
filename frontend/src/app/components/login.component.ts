@@ -1,22 +1,23 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { InputText } from 'primeng/inputtext';
 import { Password } from 'primeng/password';
+import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { AuthService } from '../services/auth.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [FormsModule, ButtonModule, InputText, Password],
+  imports: [FormsModule, ButtonModule, InputText, Password, TranslocoPipe],
   template: `
     <div class="login-wrapper">
       <div class="login-card">
-        <h2>DPS Wiki LLM</h2>
+        <h2>{{ 'common.brand' | transloco }}</h2>
         <form (ngSubmit)="submit()" #f="ngForm">
           <div class="field">
-            <label for="username">Username</label>
+            <label for="username">{{ 'login.username' | transloco }}</label>
             <input
               pInputText
               id="username"
@@ -28,7 +29,7 @@ import { AuthService } from '../services/auth.service';
             />
           </div>
           <div class="field">
-            <label for="password">Password</label>
+            <label for="password">{{ 'login.password' | transloco }}</label>
             <p-password
               inputId="password"
               [ngModel]="password()"
@@ -44,7 +45,7 @@ import { AuthService } from '../services/auth.service';
           }
           <p-button
             type="submit"
-            label="Sign in"
+            [label]="'login.signIn' | transloco"
             [loading]="loading()"
             styleClass="w-full"
           />
@@ -75,12 +76,14 @@ import { AuthService } from '../services/auth.service';
   `]
 })
 export class LoginComponent {
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+  private readonly t = inject(TranslocoService);
+
   readonly username = signal('');
   readonly password = signal('');
   readonly error = signal('');
   readonly loading = signal(false);
-
-  constructor(private auth: AuthService, private router: Router) {}
 
   async submit(): Promise<void> {
     this.error.set('');
@@ -89,7 +92,7 @@ export class LoginComponent {
       await this.auth.login(this.username(), this.password());
       await this.router.navigateByUrl('/');
     } catch {
-      this.error.set('Invalid username or password');
+      this.error.set(this.t.translate('login.invalidCredentials'));
     } finally {
       this.loading.set(false);
     }

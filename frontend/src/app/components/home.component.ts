@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
+import { TranslocoPipe } from '@jsverse/transloco';
 import { ChatComponent } from './chat.component';
 import { GitHistoryComponent } from './git-history.component';
 import { IngestComponent } from './ingest.component';
@@ -14,14 +15,14 @@ type Tab = 'jobs' | 'ingest' | 'chat' | 'review' | 'git';
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [ButtonModule, ChatComponent, GitHistoryComponent, IngestComponent, JobsViewerComponent, ReviewComponent],
+  imports: [ButtonModule, ChatComponent, GitHistoryComponent, IngestComponent, JobsViewerComponent, ReviewComponent, TranslocoPipe],
   template: `
     <main class="app-shell">
       <section class="workspace">
         <header class="topbar">
           <div class="brand">
-            <h1>DPS Wiki</h1>
-            <p>Knowledge pipeline</p>
+            <h1>{{ 'common.brand' | transloco }}</h1>
+            <p>{{ 'home.subtitle' | transloco }}</p>
           </div>
           <div class="topbar-actions">
             @if (currentUser()) {
@@ -29,13 +30,13 @@ type Tab = 'jobs' | 'ingest' | 'chat' | 'review' | 'git';
             }
             <p-button
               severity="secondary"
-              label="Explorer"
+              [label]="'home.explorer' | transloco"
               size="small"
               (onClick)="goToExplorer()"
             />
             <p-button
               severity="secondary"
-              label="Sign out"
+              [label]="'common.signOut' | transloco"
               size="small"
               (onClick)="logout()"
             />
@@ -45,7 +46,7 @@ type Tab = 'jobs' | 'ingest' | 'chat' | 'review' | 'git';
         <nav class="tabs">
           @for (tab of tabDefs; track tab.id) {
             <button class="tab-btn" [class.active]="activeTab() === tab.id" (click)="activeTab.set(tab.id)">
-              {{ tab.label }}
+              {{ tab.labelKey | transloco }}
               @if (tab.id === 'review' && reviewCount() > 0) {
                 <span class="badge">{{ reviewCount() }}</span>
               }
@@ -87,12 +88,12 @@ export class HomeComponent implements OnInit {
 
   readonly activeTab = signal<Tab>('jobs');
 
-  readonly tabDefs: Array<{ id: Tab; label: string }> = [
-    { id: 'jobs', label: 'Jobs' },
-    { id: 'ingest', label: 'Ingest' },
-    { id: 'chat', label: 'Chat' },
-    { id: 'review', label: 'Review' },
-    { id: 'git', label: 'Historial Git' },
+  readonly tabDefs: Array<{ id: Tab; labelKey: string }> = [
+    { id: 'jobs', labelKey: 'home.tabs.jobs' },
+    { id: 'ingest', labelKey: 'home.tabs.ingest' },
+    { id: 'chat', labelKey: 'home.tabs.chat' },
+    { id: 'review', labelKey: 'home.tabs.review' },
+    { id: 'git', labelKey: 'home.tabs.git' },
   ];
 
   readonly reviewCount = computed(() =>

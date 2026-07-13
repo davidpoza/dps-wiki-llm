@@ -19,6 +19,7 @@ import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { commonmark } from '@milkdown/preset-commonmark';
 import { replaceAll } from '@milkdown/utils';
 import { createWikilinkPlugin, WikilinkCoords } from './wikilink.plugin';
+import { createMarkdownLinkPlugin } from './markdown-link.plugin';
 import type { EditorView } from '@milkdown/prose/view';
 import { TreeNode, ConfirmationService, MessageService, MenuItem } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -31,13 +32,14 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { TreeModule } from 'primeng/tree';
 import { HttpStatusCode } from '@angular/common/http';
 import { Subscription } from 'rxjs';
+import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { AuthService } from '../services/auth.service';
 import { FileService } from '../services/file.service';
 
 @Component({
   selector: 'app-explorer',
   standalone: true,
-  imports: [TreeModule, ButtonModule, ContextMenuModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe],
+  imports: [TreeModule, ButtonModule, ContextMenuModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe, TranslocoPipe],
   providers: [MessageService, ConfirmationService],
   template: `
     <p-toast />
@@ -47,12 +49,12 @@ import { FileService } from '../services/file.service';
     <main class="explorer-shell">
       <header class="topbar">
         <div class="brand">
-          <h1>DPS Wiki</h1>
-          <p>Explorer</p>
+          <h1>{{ 'common.brand' | transloco }}</h1>
+          <p>{{ 'explorer.subtitle' | transloco }}</p>
         </div>
         <div class="topbar-actions">
-          <p-button severity="secondary" label="Home" size="small" (onClick)="goHome()" />
-          <p-button severity="secondary" label="Sign out" size="small" (onClick)="logout()" />
+          <p-button severity="secondary" [label]="'common.home' | transloco" size="small" (onClick)="goHome()" />
+          <p-button severity="secondary" [label]="'common.signOut' | transloco" size="small" (onClick)="logout()" />
         </div>
       </header>
 
@@ -63,7 +65,7 @@ import { FileService } from '../services/file.service';
             [text]="true"
             severity="secondary"
             size="small"
-            title="Buscar fichero"
+            [title]="'explorer.searchFile' | transloco"
             (onClick)="openSearch()"
           />
           <p-button
@@ -71,7 +73,7 @@ import { FileService } from '../services/file.service';
             [text]="true"
             severity="secondary"
             size="small"
-            [title]="treePanelCollapsed() ? 'Expandir panel' : 'Colapsar panel'"
+            [title]="treePanelCollapsed() ? ('explorer.expandPanel' | transloco) : ('explorer.collapsePanel' | transloco)"
             (onClick)="toggleTreePanel()"
           />
         </nav>
@@ -89,13 +91,14 @@ import { FileService } from '../services/file.service';
             [contextMenu]="cm"
             (onNodeContextMenuSelect)="onNodeContextMenuSelect($event)"
             styleClass="w-full"
+            [emptyMessage]="'explorer.noResults' | transloco"
           >
             <ng-template pTemplate="default" let-node>
               <span class="tree-label" [title]="node.label">{{ node.label }}</span>
             </ng-template>
           </p-tree>
           @if (treeNodes().length === 0) {
-            <p class="empty-msg">No hay documentos</p>
+            <p class="empty-msg">{{ 'explorer.noDocuments' | transloco }}</p>
           }
         </aside>
 
@@ -110,7 +113,7 @@ import { FileService } from '../services/file.service';
             <div class="editor-header">
               <span class="file-title">{{ selectedLabel() }}{{ isDirty() ? ' *' : '' }}</span>
               <p-button
-                label="Guardar"
+                [label]="'explorer.save' | transloco"
                 size="small"
                 [disabled]="!isDirty()"
                 (onClick)="save()"
@@ -119,10 +122,10 @@ import { FileService } from '../services/file.service';
             @if (frontmatterEntries().length > 0) {
               <div class="frontmatter-panel">
                 <div class="frontmatter-header">
-                  <span class="frontmatter-title">Metadatos</span>
+                  <span class="frontmatter-title">{{ 'explorer.metadata' | transloco }}</span>
                   <div class="fm-actions">
                     <button class="fm-toggle" (click)="toggleFrontmatterEdit()" [class.active]="editingFrontmatter()">
-                      {{ editingFrontmatter() ? '✓ Vista' : '✎ Editar' }}
+                      {{ editingFrontmatter() ? ('explorer.editView' | transloco) : ('explorer.editEdit' | transloco) }}
                     </button>
                     <button class="fm-toggle" (click)="toggleFrontmatter()">
                       {{ showFrontmatter() ? '▲' : '▼' }}
@@ -140,7 +143,7 @@ import { FileService } from '../services/file.service';
                         spellcheck="false"
                       ></textarea>
                       @if (frontmatterYamlError()) {
-                        <span class="fm-yaml-error">YAML inválido</span>
+                        <span class="fm-yaml-error">{{ 'explorer.yamlInvalid' | transloco }}</span>
                       }
                     </div>
                   } @else {
@@ -159,7 +162,7 @@ import { FileService } from '../services/file.service';
           }
           <div #editorContainer class="milkdown-container" [class.hidden]="!selectedPath()"></div>
           @if (!selectedPath()) {
-            <div class="placeholder">Selecciona un fichero para editarlo</div>
+            <div class="placeholder">{{ 'explorer.selectFile' | transloco }}</div>
           }
         </section>
       </div>
@@ -172,7 +175,7 @@ import { FileService } from '../services/file.service';
         [style.top.px]="wikilinkCoords()!.bottom + 4"
       >
         @if (wikilinkSuggestions().length === 0) {
-          <div class="wikilink-dropdown-empty">Sin resultados</div>
+          <div class="wikilink-dropdown-empty">{{ 'explorer.noResults' | transloco }}</div>
         }
         @for (file of wikilinkSuggestions(); track file.data) {
           <div class="wikilink-dropdown-item" (mousedown)="$event.preventDefault()" (click)="insertWikilinkFromSuggestion(file)">
@@ -184,7 +187,7 @@ import { FileService } from '../services/file.service';
     }
 
     <p-dialog
-      header="Buscar fichero"
+      [header]="'explorer.searchFile' | transloco"
       [(visible)]="showSearch"
       [modal]="true"
       [draggable]="false"
@@ -196,7 +199,7 @@ import { FileService } from '../services/file.service';
           #searchInput
           pInputText
           type="text"
-          placeholder="Nombre del fichero..."
+          [placeholder]="'explorer.searchPlaceholder' | transloco"
           class="w-full"
           [value]="searchQuery()"
           (input)="searchQuery.set($any($event.target).value)"
@@ -204,7 +207,7 @@ import { FileService } from '../services/file.service';
       </div>
       <div class="search-results">
         @if (filteredFiles().length === 0) {
-          <p class="search-empty">Sin resultados</p>
+          <p class="search-empty">{{ 'explorer.noResults' | transloco }}</p>
         }
         @for (file of filteredFiles(); track file.data) {
           <div class="search-result" (click)="selectFromSearch(file)">
@@ -216,7 +219,7 @@ import { FileService } from '../services/file.service';
     </p-dialog>
 
     <p-dialog
-      header="Renombrar fichero"
+      [header]="'explorer.dialogRenameHeader' | transloco"
       [(visible)]="showRenameDialog"
       [modal]="true"
       [draggable]="false"
@@ -226,7 +229,7 @@ import { FileService } from '../services/file.service';
         <input
           pInputText
           type="text"
-          placeholder="Nuevo nombre..."
+          [placeholder]="'explorer.renamePlaceholder' | transloco"
           class="w-full"
           [value]="renameValue()"
           (input)="renameValue.set($any($event.target).value)"
@@ -234,13 +237,13 @@ import { FileService } from '../services/file.service';
         />
       </div>
       <ng-template pTemplate="footer">
-        <p-button label="Cancelar" severity="secondary" size="small" (onClick)="showRenameDialog.set(false)" />
-        <p-button label="Renombrar" size="small" [disabled]="!renameValue().trim()" (onClick)="confirmRename()" />
+        <p-button [label]="'common.cancel' | transloco" severity="secondary" size="small" (onClick)="showRenameDialog.set(false)" />
+        <p-button [label]="'explorer.rename' | transloco" size="small" [disabled]="!renameValue().trim()" (onClick)="confirmRename()" />
       </ng-template>
     </p-dialog>
 
     <p-dialog
-      header="Crear fichero"
+      [header]="'explorer.dialogCreateFileHeader' | transloco"
       [(visible)]="showCreateDialog"
       [modal]="true"
       [draggable]="false"
@@ -250,7 +253,7 @@ import { FileService } from '../services/file.service';
         <input
           pInputText
           type="text"
-          placeholder="Nombre del fichero..."
+          [placeholder]="'explorer.searchPlaceholder' | transloco"
           class="w-full"
           [value]="createFileName()"
           (input)="createFileName.set($any($event.target).value)"
@@ -258,13 +261,13 @@ import { FileService } from '../services/file.service';
         />
       </div>
       <ng-template pTemplate="footer">
-        <p-button label="Cancelar" severity="secondary" size="small" (onClick)="showCreateDialog.set(false)" />
-        <p-button label="Crear" size="small" [disabled]="!createFileName().trim()" (onClick)="confirmCreate()" />
+        <p-button [label]="'common.cancel' | transloco" severity="secondary" size="small" (onClick)="showCreateDialog.set(false)" />
+        <p-button [label]="'explorer.create' | transloco" size="small" [disabled]="!createFileName().trim()" (onClick)="confirmCreate()" />
       </ng-template>
     </p-dialog>
 
     <p-dialog
-      header="Crear directorio"
+      [header]="'explorer.dialogCreateDirHeader' | transloco"
       [(visible)]="showCreateDirDialog"
       [modal]="true"
       [draggable]="false"
@@ -274,7 +277,7 @@ import { FileService } from '../services/file.service';
         <input
           pInputText
           type="text"
-          placeholder="Nombre del directorio..."
+          [placeholder]="'explorer.createDirPlaceholder' | transloco"
           class="w-full"
           [value]="createDirName()"
           (input)="createDirName.set($any($event.target).value)"
@@ -282,26 +285,26 @@ import { FileService } from '../services/file.service';
         />
       </div>
       <ng-template pTemplate="footer">
-        <p-button label="Cancelar" severity="secondary" size="small" (onClick)="showCreateDirDialog.set(false)" />
-        <p-button label="Crear" size="small" [disabled]="!createDirName().trim()" (onClick)="confirmCreateDir()" />
+        <p-button [label]="'common.cancel' | transloco" severity="secondary" size="small" (onClick)="showCreateDirDialog.set(false)" />
+        <p-button [label]="'explorer.create' | transloco" size="small" [disabled]="!createDirName().trim()" (onClick)="confirmCreateDir()" />
       </ng-template>
     </p-dialog>
 
     <p-dialog
-      header="Mover fichero"
+      [header]="'explorer.dialogMoveHeader' | transloco"
       [(visible)]="showMoveDialog"
       [modal]="true"
       [draggable]="false"
       [style]="{ width: '420px' }"
     >
-      <p class="move-help">Selecciona el directorio de destino:</p>
+      <p class="move-help">{{ 'explorer.moveHelp' | transloco }}</p>
       <div class="move-tree-wrap">
         <div
           class="move-root-item"
           [class.selected]="!moveTargetDir()"
           (click)="moveTargetDir.set(null); moveTargetDirNode = null"
         >
-          <i class="pi pi-home"></i> Raíz del vault
+          <i class="pi pi-home"></i> {{ 'explorer.vaultRoot' | transloco }}
         </div>
         @if (dirTreeNodes().length > 0) {
           <p-tree
@@ -314,8 +317,8 @@ import { FileService } from '../services/file.service';
         }
       </div>
       <ng-template pTemplate="footer">
-        <p-button label="Cancelar" severity="secondary" size="small" (onClick)="showMoveDialog.set(false)" />
-        <p-button label="Mover aquí" size="small" (onClick)="confirmMove()" />
+        <p-button [label]="'common.cancel' | transloco" severity="secondary" size="small" (onClick)="showMoveDialog.set(false)" />
+        <p-button [label]="'explorer.moveHere' | transloco" size="small" (onClick)="confirmMove()" />
       </ng-template>
     </p-dialog>
   `,
@@ -499,6 +502,8 @@ import { FileService } from '../services/file.service';
     }
     :host ::ng-deep .milkdown { outline: none; min-height: 100%; }
     :host ::ng-deep .milkdown .editor { outline: none; min-height: 400px; }
+    :host ::ng-deep .milkdown a { cursor: pointer; color: #2563eb; text-decoration: underline; }
+    :host ::ng-deep .milkdown a:hover { color: #1d4ed8; }
     :host ::ng-deep .wikilink-token {
       color: #6366f1;
       background: #eef2ff;
@@ -605,6 +610,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
   private readonly messageService = inject(MessageService);
   private readonly confirmationService = inject(ConfirmationService);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly t = inject(TranslocoService);
 
   readonly treeNodes = signal<TreeNode[]>([]);
   readonly selectedPath = signal<string | null>(null);
@@ -687,7 +693,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
         this.cdr.markForCheck();
       },
       error: () =>
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'No se pudo cargar el árbol de ficheros' }),
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorLoadTree') }),
     });
   }
 
@@ -698,7 +704,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
         this.cdr.markForCheck();
       },
       error: () =>
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'No se pudo actualizar el árbol de ficheros' }),
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorUpdateTree') }),
     });
   }
 
@@ -725,13 +731,13 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
           this.selectedLabel.set(newName);
         }
         this.reloadTree();
-        this.messageService.add({ severity: 'success', summary: 'Renombrado', detail: `Fichero renombrado a "${newName}"` });
+        this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryRenamed'), detail: this.t.translate('explorer.toastSuccessRenamed', { name: newName }) });
       },
       error: err => {
         const msg = err.status === HttpStatusCode.Conflict
-          ? `Ya existe un fichero con el nombre "${newName}"`
-          : 'No se pudo renombrar el fichero';
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: msg });
+          ? this.t.translate('explorer.toastErrorRenameConflict', { name: newName })
+          : this.t.translate('explorer.toastErrorRename');
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: msg });
       },
     });
   }
@@ -754,13 +760,13 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
         this.reloadTree();
         const newNode: TreeNode = { label: name, data: newPath, leaf: true };
         this.loadFile(newNode);
-        this.messageService.add({ severity: 'success', summary: 'Creado', detail: `Fichero "${name}" creado` });
+        this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryCreated'), detail: this.t.translate('explorer.toastSuccessFileCreated', { name }) });
       },
       error: err => {
         const msg = err.status === HttpStatusCode.Conflict
-          ? `Ya existe un fichero con el nombre "${name}"`
-          : 'No se pudo crear el fichero';
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: msg });
+          ? this.t.translate('explorer.toastErrorFileConflict', { name })
+          : this.t.translate('explorer.toastErrorFileCreate');
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: msg });
       },
     });
   }
@@ -780,13 +786,13 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
     this.fileService.createDirectory(newPath).subscribe({
       next: () => {
         this.reloadTree();
-        this.messageService.add({ severity: 'success', summary: 'Creado', detail: `Directorio "${name}" creado` });
+        this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryCreated'), detail: this.t.translate('explorer.toastSuccessDirCreated', { name }) });
       },
       error: err => {
         const msg = err.status === HttpStatusCode.Conflict
-          ? `Ya existe un directorio con el nombre "${name}"`
-          : 'No se pudo crear el directorio';
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: msg });
+          ? this.t.translate('explorer.toastErrorDirConflict', { name })
+          : this.t.translate('explorer.toastErrorDirCreate');
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: msg });
       },
     });
   }
@@ -816,13 +822,13 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
         }
         this.reloadTree();
         const dest = targetDir || '/';
-        this.messageService.add({ severity: 'success', summary: 'Movido', detail: `"${filename}" movido a ${dest}` });
+        this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryMoved'), detail: this.t.translate('explorer.toastSuccessMoved', { name: filename, dest }) });
       },
       error: err => {
         const msg = err.status === HttpStatusCode.Conflict
-          ? 'Ya existe un fichero con ese nombre en el destino'
-          : 'No se pudo mover el fichero';
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: msg });
+          ? this.t.translate('explorer.toastErrorMoveConflict')
+          : this.t.translate('explorer.toastErrorMove');
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: msg });
       },
     });
   }
@@ -831,8 +837,8 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
     const node = this.contextMenuNode();
     if (!node) return;
     this.confirmationService.confirm({
-      message: `¿Eliminar el fichero "${node.label}"?`,
-      header: 'Eliminar fichero',
+      message: this.t.translate('explorer.confirmDeleteMessage', { name: node.label }),
+      header: this.t.translate('explorer.confirmDeleteHeader'),
       icon: 'pi pi-trash',
       accept: () => {
         this.fileService.deleteFile(node.data as string).subscribe({
@@ -844,10 +850,10 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
               if (this.editor) this.editor.action(replaceAll(''));
             }
             this.reloadTree();
-            this.messageService.add({ severity: 'success', summary: 'Eliminado', detail: `Fichero "${node.label}" eliminado` });
+            this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryDeleted'), detail: this.t.translate('explorer.toastSuccessDeleted', { name: node.label }) });
           },
           error: () =>
-            this.messageService.add({ severity: 'error', summary: 'Error', detail: 'No se pudo eliminar el fichero' }),
+            this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorDelete') }),
         });
       },
     });
@@ -874,6 +880,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
       })
       .use(commonmark)
       .use(listener)
+      .use(createMarkdownLinkPlugin())
       .use(createWikilinkPlugin({
         onNavigate: target => this.navigateToWikilink(target),
         onAutocomplete: (query, coords, view) => {
@@ -894,14 +901,14 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
     this.contextMenuNode.set(node);
     if (node.leaf) {
       this.contextMenuItems.set([
-        { label: 'Rename', icon: 'pi pi-pencil', command: () => this.openRenameDialog() },
-        { label: 'Mover', icon: 'pi pi-folder-open', command: () => this.openMoveDialog() },
-        { label: 'Delete', icon: 'pi pi-trash', command: () => this.deleteNode() },
+        { label: this.t.translate('explorer.contextMenuRename'), icon: 'pi pi-pencil', command: () => this.openRenameDialog() },
+        { label: this.t.translate('explorer.contextMenuMove'), icon: 'pi pi-folder-open', command: () => this.openMoveDialog() },
+        { label: this.t.translate('explorer.contextMenuDelete'), icon: 'pi pi-trash', command: () => this.deleteNode() },
       ]);
     } else {
       this.contextMenuItems.set([
-        { label: 'Crear fichero', icon: 'pi pi-file-plus', command: () => this.openCreateDialog() },
-        { label: 'Crear directorio', icon: 'pi pi-folder-plus', command: () => this.openCreateDirDialog() },
+        { label: this.t.translate('explorer.contextMenuCreateFile'), icon: 'pi pi-file-plus', command: () => this.openCreateDialog() },
+        { label: this.t.translate('explorer.contextMenuCreateDir'), icon: 'pi pi-folder-plus', command: () => this.openCreateDirDialog() },
       ]);
     }
   }
@@ -912,8 +919,8 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
 
     if (this.isDirty()) {
       this.confirmationService.confirm({
-        message: 'Hay cambios sin guardar. ¿Descartar y abrir el fichero seleccionado?',
-        header: 'Cambios sin guardar',
+        message: this.t.translate('explorer.confirmUnsavedMessage'),
+        header: this.t.translate('explorer.confirmUnsavedHeader'),
         icon: 'pi pi-exclamation-triangle',
         accept: () => this.loadFile(node),
         reject: () => {
@@ -959,7 +966,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
         this.cdr.markForCheck();
       },
       error: () =>
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'No se pudo cargar el fichero' }),
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorLoadTree') }),
     });
   }
 
@@ -1010,13 +1017,13 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
       (n.label ?? '').toLowerCase() === label
     );
     if (!file) {
-      this.messageService.add({ severity: 'warn', summary: 'Enlace roto', detail: `No se encontró el documento "${target}"` });
+      this.messageService.add({ severity: 'warn', summary: this.t.translate('explorer.toastSummaryBrokenLink'), detail: this.t.translate('explorer.toastBrokenLink', { target }) });
       return;
     }
     if (this.isDirty()) {
       this.confirmationService.confirm({
-        message: 'Hay cambios sin guardar. ¿Descartar y navegar?',
-        header: 'Cambios sin guardar',
+        message: this.t.translate('explorer.confirmUnsavedNavigate'),
+        header: this.t.translate('explorer.confirmUnsavedHeader'),
         icon: 'pi pi-exclamation-triangle',
         accept: () => this.loadFile(file),
         reject: () => {},
@@ -1060,8 +1067,8 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
     this.showSearch.set(false);
     if (this.isDirty()) {
       this.confirmationService.confirm({
-        message: 'Hay cambios sin guardar. ¿Descartar y abrir el fichero seleccionado?',
-        header: 'Cambios sin guardar',
+        message: this.t.translate('explorer.confirmUnsavedMessage'),
+        header: this.t.translate('explorer.confirmUnsavedHeader'),
         icon: 'pi pi-exclamation-triangle',
         accept: () => this.loadFile(node),
         reject: () => {},
@@ -1113,11 +1120,11 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
     this.fileService.saveContent(path, fullContent).subscribe({
       next: () => {
         this.isDirty.set(false);
-        this.messageService.add({ severity: 'success', summary: 'Guardado', detail: 'Fichero guardado correctamente' });
+        this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryGuardado'), detail: this.t.translate('explorer.toastSuccessSaved') });
         this.cdr.markForCheck();
       },
       error: () =>
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'No se pudo guardar el fichero' }),
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorSave') }),
     });
   }
 

@@ -7,6 +7,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import jakarta.servlet.DispatcherType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -41,6 +42,8 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Allow error dispatches (Spring Security 6: MVC matchers don't cover ERROR dispatch)
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         // Paths are matched relative to the servlet context-path ("/api"),
                         // so they are declared WITHOUT the "/api" prefix here.
                         .requestMatchers(

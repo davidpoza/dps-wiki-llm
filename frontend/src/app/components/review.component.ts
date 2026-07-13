@@ -4,6 +4,7 @@ import { ButtonModule } from 'primeng/button';
 import { Checkbox } from 'primeng/checkbox';
 import { InputText } from 'primeng/inputtext';
 import { TagModule } from 'primeng/tag';
+import { TranslocoPipe } from '@jsverse/transloco';
 import { ApiService, ConnectionCandidate } from '../services/api.service';
 import { JobsStore } from '../services/jobs.store';
 import { JobState } from '../types';
@@ -11,23 +12,23 @@ import { JobState } from '../types';
 @Component({
   selector: 'app-review',
   standalone: true,
-  imports: [FormsModule, ButtonModule, Checkbox, InputText, TagModule],
+  imports: [FormsModule, ButtonModule, Checkbox, InputText, TagModule, TranslocoPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="review">
       @if (awaitingJobs().length === 0) {
-        <p class="empty">No jobs awaiting review.</p>
+        <p class="empty">{{ 'review.empty' | transloco }}</p>
       }
       @for (job of awaitingJobs(); track job.id) {
         <div class="review-card">
           <div class="review-header">
-            <span class="job-label">Job {{ job.id }}</span>
+            <span class="job-label">{{ 'review.jobLabel' | transloco: { id: job.id } }}</span>
             <p-tag value="AWAITING_REVIEW" severity="warn" />
           </div>
 
           @if (loaded().get(job.id)) {
             <div class="candidates">
-              <div class="candidates-title">Connection candidates</div>
+              <div class="candidates-title">{{ 'review.connectionCandidates' | transloco }}</div>
               @for (c of candidates().get(job.id) ?? []; track c.id) {
                 <div class="candidate">
                   <p-checkbox [(ngModel)]="checkedMap[job.id + ':' + c.id]" [binary]="true" />
@@ -39,15 +40,15 @@ import { JobState } from '../types';
                 </div>
               }
               @if ((candidates().get(job.id) ?? []).length === 0) {
-                <p class="no-candidates">No connection candidates found.</p>
+                <p class="no-candidates">{{ 'review.noCandidates' | transloco }}</p>
               }
             </div>
 
             <div class="manual-picker">
-              <div class="picker-title">Manual connections (file search)</div>
+              <div class="picker-title">{{ 'review.manualConnections' | transloco }}</div>
               <div class="picker-row">
                 <input pInputText type="text" [ngModel]="fileSearchQuery[job.id]" (ngModelChange)="fileSearchQuery[job.id] = $event"
-                       placeholder="Search files…" (input)="searchFiles(job.id)" class="search-input" />
+                       [placeholder]="'review.searchFiles' | transloco" (input)="searchFiles(job.id)" class="search-input" />
               </div>
               @if (fileResults().get(job.id)?.length) {
                 <div class="file-results">
@@ -62,11 +63,11 @@ import { JobState } from '../types';
             </div>
 
             <div class="review-actions">
-              <button pButton type="button" label="Submit Review" icon="pi pi-check"
+              <button pButton type="button" [label]="'review.submitReview' | transloco" icon="pi pi-check"
                       [disabled]="submitting()" (click)="submitReview(job)"></button>
             </div>
           } @else {
-            <button pButton type="button" label="Load Candidates" severity="secondary"
+            <button pButton type="button" [label]="'review.loadCandidates' | transloco" severity="secondary"
                     (click)="loadCandidates(job)"></button>
           }
         </div>

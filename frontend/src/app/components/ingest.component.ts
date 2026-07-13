@@ -1,36 +1,37 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { InputText } from 'primeng/inputtext';
 import { SelectButton } from 'primeng/selectbutton';
 import { TagModule } from 'primeng/tag';
+import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { ApiService } from '../services/api.service';
 import { JobMode } from '../types';
 
 @Component({
   selector: 'app-ingest',
   standalone: true,
-  imports: [FormsModule, ButtonModule, InputText, SelectButton, TagModule],
+  imports: [FormsModule, ButtonModule, InputText, SelectButton, TagModule, TranslocoPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="ingest">
       <div class="mode-row">
-        <span class="label">Mode</span>
-        <p-selectButton [options]="modeOptions" [ngModel]="mode()" (ngModelChange)="mode.set($event)" optionLabel="label" optionValue="value" />
+        <span class="label">{{ 'ingest.mode' | transloco }}</span>
+        <p-selectButton [options]="modeOptions()" [ngModel]="mode()" (ngModelChange)="mode.set($event)" optionLabel="label" optionValue="value" />
         <span class="mode-hint">
           @if (mode() === 'validated') {
-            Validated: pauses for guided review before applying connections.
+            {{ 'ingest.modeValidated' | transloco }}
           } @else {
-            Unattended: automatically applies discovered connections.
+            {{ 'ingest.modeUnattended' | transloco }}
           }
         </span>
       </div>
 
       <div class="section">
-        <div class="section-title">Upload File <span class="section-hint">PDF or Markdown</span></div>
+        <div class="section-title">{{ 'ingest.uploadFile' | transloco }} <span class="section-hint">{{ 'ingest.uploadHint' | transloco }}</span></div>
         <div class="upload-row">
           <input type="file" accept=".pdf,.md,.markdown" (change)="onFileChange($event)" class="file-input" #fileInput />
-          <button pButton type="button" label="Ingest File" icon="pi pi-upload"
+          <button pButton type="button" [label]="'ingest.ingestFile' | transloco" icon="pi pi-upload"
                   [disabled]="!selectedFile() || busy()" (click)="ingestFile(fileInput)"></button>
         </div>
         @if (selectedFile()) {
@@ -39,18 +40,17 @@ import { JobMode } from '../types';
       </div>
 
       <div class="section">
-        <div class="section-title">Ingest Link</div>
+        <div class="section-title">{{ 'ingest.ingestLink' | transloco }}</div>
         <div class="url-row">
-          <input pInputText type="url" [ngModel]="url()" (ngModelChange)="url.set($event)" placeholder="https://…" class="url-input" />
-          <button pButton type="button" label="Ingest URL" icon="pi pi-link"
+          <input pInputText type="url" [ngModel]="url()" (ngModelChange)="url.set($event)" [placeholder]="'ingest.urlPlaceholder' | transloco" class="url-input" />
+          <button pButton type="button" [label]="'ingest.ingestUrl' | transloco" icon="pi pi-link"
                   [disabled]="!url().trim() || busy()" (click)="ingestUrl()"></button>
         </div>
       </div>
 
       @if (lastJobId()) {
         <div class="enqueue-notice">
-          Job enqueued: <code>{{ lastJobId() }}</code>
-          — watch progress in the Jobs tab.
+          {{ 'ingest.jobEnqueued' | transloco: { id: lastJobId() } }}
         </div>
       }
       @if (errorMessage()) {
@@ -83,6 +83,7 @@ import { JobMode } from '../types';
 })
 export class IngestComponent {
   private readonly api = inject(ApiService);
+  private readonly t = inject(TranslocoService);
 
   readonly mode = signal<JobMode>('unattended');
   readonly url = signal('');
@@ -91,10 +92,10 @@ export class IngestComponent {
   readonly lastJobId = signal<string | null>(null);
   readonly errorMessage = signal<string | null>(null);
 
-  readonly modeOptions = [
-    { label: 'Unattended', value: 'unattended' },
-    { label: 'Validated', value: 'validated' },
-  ];
+  readonly modeOptions = computed(() => [
+    { label: this.t.translate('ingest.modeOptions.unattended'), value: 'unattended' },
+    { label: this.t.translate('ingest.modeOptions.validated'), value: 'validated' },
+  ]);
 
   onFileChange(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -114,7 +115,7 @@ export class IngestComponent {
         this.busy.set(false);
       },
       error: err => {
-        this.errorMessage.set(err.message ?? 'Upload failed');
+        this.errorMessage.set(err.message ?? this.t.translate('ingest.uploadFailed'));
         this.busy.set(false);
       },
     });
@@ -132,7 +133,7 @@ export class IngestComponent {
         this.busy.set(false);
       },
       error: err => {
-        this.errorMessage.set(err.message ?? 'Ingest failed');
+        this.errorMessage.set(err.message ?? this.t.translate('ingest.ingestFailed'));
         this.busy.set(false);
       },
     });

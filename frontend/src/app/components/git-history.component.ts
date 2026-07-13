@@ -1,18 +1,23 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
+import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
+import { ConfirmationService } from 'primeng/api';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ApiService } from '../services/api.service';
 import { Commit } from '../types';
 
 @Component({
   selector: 'app-git-history',
   standalone: true,
-  imports: [NgClass],
+  imports: [NgClass, TranslocoPipe, ConfirmDialogModule],
+  providers: [ConfirmationService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
+    <p-confirmDialog />
     <div class="git-history">
       <div class="git-history-header">
-        <h2>Historial Git</h2>
-        <button class="refresh-btn" (click)="load()">Actualizar</button>
+        <h2>{{ 'git.title' | transloco }}</h2>
+        <button class="refresh-btn" (click)="load()">{{ 'git.refresh' | transloco }}</button>
       </div>
 
       @if (error()) {
@@ -20,11 +25,11 @@ import { Commit } from '../types';
       }
 
       @if (loading()) {
-        <p class="loading">Cargando historial...</p>
+        <p class="loading">{{ 'git.loading' | transloco }}</p>
       }
 
       @if (!loading() && commits().length === 0 && !error()) {
-        <p class="empty">No hay commits en el repositorio.</p>
+        <p class="empty">{{ 'git.empty' | transloco }}</p>
       }
 
       <div class="commit-list">
@@ -38,7 +43,7 @@ import { Commit } from '../types';
             <p class="commit-message">{{ commit.message }}</p>
             @if (commit.files.length > 0) {
               <details class="commit-files">
-                <summary>{{ commit.files.length }} archivo(s) modificado(s)</summary>
+                <summary>{{ 'git.filesModified' | transloco: { count: commit.files.length } }}</summary>
                 <ul>
                   @for (file of commit.files; track file.path) {
                     <li>
@@ -48,12 +53,12 @@ import { Commit } from '../types';
                       <button
                         class="diff-btn"
                         (click)="toggleDiff(commit.sha, file.path)"
-                      >{{ isDiffOpen(commit.sha, file.path) ? 'Ocultar diff' : 'Ver diff' }}</button>
+                      >{{ isDiffOpen(commit.sha, file.path) ? ('git.hideDiff' | transloco) : ('git.showDiff' | transloco) }}</button>
                     </li>
                     @if (isDiffOpen(commit.sha, file.path)) {
                       <li class="diff-container">
                         @if (isDiffLoading(commit.sha, file.path)) {
-                          <span class="diff-loading">Cargando diff...</span>
+                          <span class="diff-loading">{{ 'git.loadingDiff' | transloco }}</span>
                         } @else {
                           <pre class="diff-pre">@for (line of getDiffLines(commit.sha, file.path); track $index) {
 <span [ngClass]="lineClass(line)">{{ line }}</span>
@@ -66,7 +71,7 @@ import { Commit } from '../types';
               </details>
             }
             <button class="reset-btn" (click)="resetTo(commit)">
-              Revertir a este commit
+              {{ 'git.revertTo' | transloco }}
             </button>
           </div>
         }
@@ -109,6 +114,8 @@ import { Commit } from '../types';
 })
 export class GitHistoryComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly t = inject(TranslocoService);
+  private readonly confirmationService = inject(ConfirmationService);
 
   readonly commits = signal<Commit[]>([]);
   readonly loading = signal(false);
@@ -131,7 +138,7 @@ export class GitHistoryComponent implements OnInit {
         this.loading.set(false);
       },
       error: () => {
-        this.error.set('Error al cargar el historial de commits.');
+        this.error.set(this.t.translate('git.errorLoadHistory'));
         this.loading.set(false);
       }
     });
@@ -172,7 +179,7 @@ export class GitHistoryComponent implements OnInit {
         this.diffVersion.update(v => v + 1);
       },
       error: () => {
-        this.openDiffs.set(key, ['Error al cargar el diff.']);
+        this.openDiffs.set(key, [this.t.translate('git.errorLoadDiff')]);
         this.loadingDiffs.delete(key);
         this.diffVersion.update(v => v + 1);
       }
@@ -188,14 +195,19 @@ export class GitHistoryComponent implements OnInit {
   }
 
   resetTo(commit: Commit): void {
-    const confirmed = window.confirm(
-      `¿Revertir el repositorio al commit ${commit.sha.slice(0, 7)}?\n\n"${commit.message}"\n\nEsta operación es destructiva e irreversible.`
-    );
-    if (!confirmed) return;
-
-    this.api.resetToCommit(commit.sha).subscribe({
-      next: () => this.load(),
-      error: () => this.error.set(`Error al revertir al commit ${commit.sha.slice(0, 7)}.`)
+    this.confirmationService.confirm({
+      header: this.t.translate('git.revertConfirmHeader'),
+      message: this.t.translate('git.revertConfirmMessage', {
+        sha: commit.sha.slice(0, 7),
+        message: commit.message,
+      }),
+      icon: 'pi pi-exclamation-triangle',
+      accept: () => {
+        this.api.resetToCommit(commit.sha).subscribe({
+          next: () => this.load(),
+          error: () => this.error.set(this.t.translate('git.errorRevert', { sha: commit.sha.slice(0, 7) })),
+        });
+      },
     });
   }
 

@@ -64,7 +64,7 @@ class IngestPipelineServicesTests {
     @Test
     void markdownUploadWritesRawInboxAndNormalizerRejectsNonRaw() throws Exception {
         RawIntakeService intake = new RawIntakeService(resolver(), mock(WebExtractorClient.class));
-        String rawPath = intake.ingestMarkdown(new MockMultipartFile(
+        String rawPath = intake.ingestFile(new MockMultipartFile(
                 "file", "note.md", "text/markdown", "# Uploaded\n\nBody".getBytes(StandardCharsets.UTF_8)));
 
         assertThat(rawPath).startsWith("raw/inbox/");

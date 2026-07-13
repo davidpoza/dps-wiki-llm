@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
+import { TranslocoPipe } from '@jsverse/transloco';
 import { ApiService } from '../services/api.service';
 import { JobsStore } from '../services/jobs.store';
 import { JobState, JobStatus } from '../types';
@@ -8,12 +9,12 @@ import { JobState, JobStatus } from '../types';
 @Component({
   selector: 'app-jobs-viewer',
   standalone: true,
-  imports: [ButtonModule, TagModule],
+  imports: [ButtonModule, TagModule, TranslocoPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="jobs-viewer">
       @if (jobList().length === 0) {
-        <p class="empty">No jobs yet. Ingest a document or ask a question to get started.</p>
+        <p class="empty">{{ 'jobs.empty' | transloco }}</p>
       }
       @for (job of jobList(); track job.id) {
         <div class="job-card">
@@ -21,7 +22,7 @@ import { JobState, JobStatus } from '../types';
             <span class="job-type">{{ job.type }}</span>
             <p-tag [value]="job.status" [severity]="severity(job.status)" />
             @if (canRevert(job)) {
-              <button pButton type="button" label="Revert" severity="danger" size="small"
+              <button pButton type="button" [label]="'jobs.revert' | transloco" severity="danger" size="small"
                       (click)="revert(job.id)"></button>
             }
           </div>
@@ -40,7 +41,7 @@ import { JobState, JobStatus } from '../types';
 
           @if (job.files.length > 0) {
             <div class="files">
-              <div class="files-title">Files</div>
+              <div class="files-title">{{ 'jobs.files' | transloco }}</div>
               @for (f of job.files; track f.path) {
                 <div class="file-entry">
                   <span class="file-action" [class]="'action-' + f.action">{{ f.action }}</span>
@@ -56,7 +57,7 @@ import { JobState, JobStatus } from '../types';
 
           @if (job.status === 'AWAITING_REVIEW') {
             <div class="review-notice">
-              This job is awaiting your review. Switch to the Review tab.
+              {{ 'jobs.awaitingReview' | transloco }}
             </div>
           }
         </div>

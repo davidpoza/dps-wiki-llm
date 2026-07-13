@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { Textarea } from 'primeng/textarea';
 import { TagModule } from 'primeng/tag';
+import { TranslocoPipe } from '@jsverse/transloco';
 import { ApiService } from '../services/api.service';
 import { JobsStore } from '../services/jobs.store';
 import { JobState } from '../types';
@@ -15,15 +16,15 @@ interface AnswerView {
 @Component({
   selector: 'app-chat',
   standalone: true,
-  imports: [FormsModule, ButtonModule, Textarea, TagModule],
+  imports: [FormsModule, ButtonModule, Textarea, TagModule, TranslocoPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="chat">
       <div class="input-area">
         <textarea pTextarea [ngModel]="question()" (ngModelChange)="question.set($event)" [autoResize]="true" rows="3"
-                  placeholder="Ask a question about your knowledge base…"
+                  [placeholder]="'chat.placeholder' | transloco"
                   (keydown.ctrl.enter)="submit()" class="question-input"></textarea>
-        <button pButton type="button" label="Ask" icon="pi pi-send"
+        <button pButton type="button" [label]="'chat.ask' | transloco" icon="pi pi-send"
                 [disabled]="!question().trim() || submitting()"
                 (click)="submit()"></button>
       </div>
@@ -40,7 +41,7 @@ interface AnswerView {
               <div class="answer-body">{{ parseAnswer(job.result!) }}</div>
               @if (evidencePaths(job).length > 0) {
                 <div class="evidence">
-                  <span class="evidence-label">Evidence:</span>
+                  <span class="evidence-label">{{ 'chat.evidence' | transloco }}</span>
                   @for (path of evidencePaths(job); track path) {
                     <span class="evidence-path">{{ path }}</span>
                   }
