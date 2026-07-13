@@ -29,6 +29,13 @@ export interface ConnectionCandidate {
   decision: string;
 }
 
+export interface Prompt {
+  key: string;
+  name: string;
+  text: string;
+  updatedAt: string;
+}
+
 export interface FileSearchResult {
   path: string;
   title: string;
@@ -96,5 +103,13 @@ export class ApiService {
 
   getFileDiff(sha: string, path: string): Observable<string> {
     return this.http.get('/api/git/diff', { params: { sha, path }, responseType: 'text' });
+  }
+
+  getPrompts(): Observable<Prompt[]> {
+    return this.http.get<Prompt[]>('/api/settings/prompts');
+  }
+
+  updatePrompt(key: string, text: string): Observable<Prompt> {
+    return this.http.put<Prompt>(`/api/settings/prompts/${key}`, { text });
   }
 }

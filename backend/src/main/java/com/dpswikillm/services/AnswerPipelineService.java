@@ -22,13 +22,16 @@ public class AnswerPipelineService {
     private final LlmClient llmClient;
     private final VaultPathResolver pathResolver;
     private final JobLifecycleService lifecycleService;
+    private final PromptService promptService;
 
     public AnswerPipelineService(SemanticSearchService semanticSearch, LlmClient llmClient,
-                                 VaultPathResolver pathResolver, JobLifecycleService lifecycleService) {
+                                 VaultPathResolver pathResolver, JobLifecycleService lifecycleService,
+                                 PromptService promptService) {
         this.semanticSearch = semanticSearch;
         this.llmClient = llmClient;
         this.pathResolver = pathResolver;
         this.lifecycleService = lifecycleService;
+        this.promptService = promptService;
     }
 
     public AnswerRecord run(Job job) throws IOException {
@@ -44,9 +47,7 @@ public class AnswerPipelineService {
 
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "synthesis", "Synthesizing answer with LLM");
             String answer = llmClient.chat(List.of(
-                    new ChatMessage("system",
-                            "You are a knowledge assistant. Answer only from the provided context. " +
-                            "If the context is empty, say so. Cite which documents you used."),
+                    new ChatMessage("system", promptService.getText("answer-system")),
                     new ChatMessage("user", "Question: " + question + "\n\nContext:\n" + contextPacket)));
 
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "record", "Writing answer artifact");

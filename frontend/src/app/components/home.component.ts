@@ -36,6 +36,12 @@ type Tab = 'jobs' | 'ingest' | 'chat' | 'review' | 'git';
             />
             <p-button
               severity="secondary"
+              label="Configuración"
+              size="small"
+              (onClick)="goToSettings()"
+            />
+            <p-button
+              severity="secondary"
               [label]="'common.signOut' | transloco"
               size="small"
               (onClick)="logout()"
@@ -106,6 +112,10 @@ export class HomeComponent implements OnInit {
 
   goToExplorer(): void {
     this.router.navigateByUrl('/explorer');
+  }
+
+  goToSettings(): void {
+    this.router.navigateByUrl('/settings');
   }
 
   logout(): void {

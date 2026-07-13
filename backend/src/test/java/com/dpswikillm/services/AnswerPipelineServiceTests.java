@@ -36,7 +36,8 @@ class AnswerPipelineServiceTests {
         JobLifecycleService lifecycle = mock(JobLifecycleService.class);
         when(lifecycle.transition(any(), any(JobStatus.class), any(), any())).thenAnswer(i -> new Job());
 
-        AnswerPipelineService service = new AnswerPipelineService(search, llm, resolver(), lifecycle);
+        PromptService prompts = promptService();
+        AnswerPipelineService service = new AnswerPipelineService(search, llm, resolver(), lifecycle, prompts);
 
         Job job = job("What is Foo?");
         AnswerRecord record = service.run(job);
@@ -63,7 +64,7 @@ class AnswerPipelineServiceTests {
         JobLifecycleService lifecycle = mock(JobLifecycleService.class);
         when(lifecycle.transition(any(), any(JobStatus.class), any(), any())).thenAnswer(i -> new Job());
 
-        AnswerPipelineService service = new AnswerPipelineService(search, llm, resolver(), lifecycle);
+        AnswerPipelineService service = new AnswerPipelineService(search, llm, resolver(), lifecycle, promptService());
 
         Job job = job("unknown question");
         AnswerRecord record = service.run(job);
@@ -81,7 +82,7 @@ class AnswerPipelineServiceTests {
         JobLifecycleService lifecycle = mock(JobLifecycleService.class);
         when(lifecycle.transition(any(), any(JobStatus.class), any(), any())).thenAnswer(i -> new Job());
 
-        AnswerPipelineService service = new AnswerPipelineService(search, llm, resolver(), lifecycle);
+        AnswerPipelineService service = new AnswerPipelineService(search, llm, resolver(), lifecycle, promptService());
 
         Job job = job("some question");
         assertThatThrownBy(() -> service.run(job)).hasMessageContaining("LLM unavailable");
@@ -101,10 +102,16 @@ class AnswerPipelineServiceTests {
         JobLifecycleService lifecycle = mock(JobLifecycleService.class);
         when(lifecycle.transition(any(), any(JobStatus.class), any(), any())).thenAnswer(i -> new Job());
 
-        AnswerPipelineService service = new AnswerPipelineService(search, llm, resolver(), lifecycle);
+        AnswerPipelineService service = new AnswerPipelineService(search, llm, resolver(), lifecycle, promptService());
         service.run(job("test?"));
 
         assertThat(Files.exists(vault.resolve("wiki"))).isFalse();
+    }
+
+    private PromptService promptService() {
+        PromptService ps = mock(PromptService.class);
+        when(ps.getText(any())).thenReturn("You are a knowledge assistant. Answer only from context.");
+        return ps;
     }
 
     private VaultPathResolver resolver() {

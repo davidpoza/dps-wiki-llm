@@ -12,15 +12,18 @@ import org.springframework.stereotype.Service;
 public class SourceNoteLlmService {
     private final LlmClient llmClient;
     private final JsonExtractionService jsonExtractionService;
+    private final PromptService promptService;
 
-    public SourceNoteLlmService(LlmClient llmClient, JsonExtractionService jsonExtractionService) {
+    public SourceNoteLlmService(LlmClient llmClient, JsonExtractionService jsonExtractionService,
+                                PromptService promptService) {
         this.llmClient = llmClient;
         this.jsonExtractionService = jsonExtractionService;
+        this.promptService = promptService;
     }
 
     public LlmSourceNote clean(NormalizedSourcePayload payload) {
         String response = llmClient.chat(List.of(
-                new ChatMessage("system", "Return only JSON for a cleaned source note with summary, raw_context, extracted_claims, and open_questions. Do not invent facts."),
+                new ChatMessage("system", promptService.getText("source-note-system")),
                 new ChatMessage("user", "Source payload:\n" + payload.content())));
         JsonNode node = jsonExtractionService.extractObject(response,
                 json -> nonEmpty(json, "summary") && nonEmpty(json, "raw_context"));

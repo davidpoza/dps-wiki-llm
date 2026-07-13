@@ -13,16 +13,19 @@ public class LlmMutationPlanService {
     private final LlmClient llmClient;
     private final JsonExtractionService jsonExtractionService;
     private final ObjectMapper objectMapper;
+    private final PromptService promptService;
 
-    public LlmMutationPlanService(LlmClient llmClient, JsonExtractionService jsonExtractionService, ObjectMapper objectMapper) {
+    public LlmMutationPlanService(LlmClient llmClient, JsonExtractionService jsonExtractionService,
+                                   ObjectMapper objectMapper, PromptService promptService) {
         this.llmClient = llmClient;
         this.jsonExtractionService = jsonExtractionService;
         this.objectMapper = objectMapper;
+        this.promptService = promptService;
     }
 
     public MutationPlan requestPlan(NormalizedSourcePayload payload, String sourceNotePath) {
         String response = llmClient.chat(List.of(
-                new ChatMessage("system", "Return only JSON for an optional mutation plan. Use page_actions create/update/noop. Never create wiki/topics. Every write needs idempotency_key and Sources backlink."),
+                new ChatMessage("system", promptService.getText("mutation-plan-system")),
                 new ChatMessage("user", "Raw path: " + payload.rawPath() + "\nSource note: " + sourceNotePath + "\nContent:\n" + payload.content())));
         JsonNode node = jsonExtractionService.extractObject(response,
                 json -> json.hasNonNull("plan_id") && json.has("page_actions") && json.get("page_actions").isArray());

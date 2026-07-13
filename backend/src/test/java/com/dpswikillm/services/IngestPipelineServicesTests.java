@@ -78,9 +78,12 @@ class IngestPipelineServicesTests {
     void sourceNoteCleaningRejectsMissingRequiredFields() throws Exception {
         Files.createDirectories(vault.resolve("raw/inbox"));
         Files.writeString(vault.resolve("raw/inbox/missing.md"), "# Missing");
+        PromptService ps = mock(PromptService.class);
+        when(ps.getText(anyString())).thenReturn("system prompt");
         SourceNoteLlmService service = new SourceNoteLlmService(
                 messages -> "{\"summary\":\"ok\"}",
-                new JsonExtractionService(new ObjectMapper()));
+                new JsonExtractionService(new ObjectMapper()),
+                ps);
 
         assertThatThrownBy(() -> service.clean(new SourceNormalizer(resolver()).normalize("raw/inbox/missing.md")))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -311,8 +314,10 @@ class IngestPipelineServicesTests {
         when(lifecycle.transition(any(), any(JobStatus.class), any(), any())).thenAnswer(invocation -> new Job());
 
         LlmClient llm = new SequencedLlmClient();
-        SourceNoteLlmService sourceNoteLlm = new SourceNoteLlmService(llm, new JsonExtractionService(new ObjectMapper()));
-        LlmMutationPlanService planService = new LlmMutationPlanService(llm, new JsonExtractionService(new ObjectMapper()), new ObjectMapper());
+        PromptService ps = mock(PromptService.class);
+        when(ps.getText(anyString())).thenReturn("system prompt");
+        SourceNoteLlmService sourceNoteLlm = new SourceNoteLlmService(llm, new JsonExtractionService(new ObjectMapper()), ps);
+        LlmMutationPlanService planService = new LlmMutationPlanService(llm, new JsonExtractionService(new ObjectMapper()), new ObjectMapper(), ps);
         ReindexService reindex = new ReindexService(resolver, new MarkdownService(), documentRepository);
         EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, embeddingClient, properties());
         return new PipelineHarness(new IngestPipelineService(
