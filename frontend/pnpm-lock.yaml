@@ -41,6 +41,9 @@ importers:
       '@milkdown/preset-commonmark':
         specifier: ^7.21.3
         version: 7.21.3
+      '@milkdown/prose':
+        specifier: 7.21.3
+        version: 7.21.3
       '@milkdown/transformer':
         specifier: ^7.21.3
         version: 7.21.3

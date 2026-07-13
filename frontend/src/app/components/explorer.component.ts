@@ -11,12 +11,15 @@ import {
   signal,
   ViewChild,
 } from '@angular/core';
+import { SlicePipe } from '@angular/common';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { Router } from '@angular/router';
 import { Editor, defaultValueCtx, editorViewOptionsCtx, rootCtx } from '@milkdown/core';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { commonmark } from '@milkdown/preset-commonmark';
 import { replaceAll } from '@milkdown/utils';
+import { createWikilinkPlugin, WikilinkCoords } from './wikilink.plugin';
+import type { EditorView } from '@milkdown/prose/view';
 import { TreeNode, ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -32,7 +35,7 @@ import { FileService } from '../services/file.service';
 @Component({
   selector: 'app-explorer',
   standalone: true,
-  imports: [TreeModule, ButtonModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule],
+  imports: [TreeModule, ButtonModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe],
   providers: [MessageService, ConfirmationService],
   template: `
     <p-toast />
@@ -157,6 +160,24 @@ import { FileService } from '../services/file.service';
       </div>
     </main>
 
+    @if (wikilinkQuery() !== null && wikilinkCoords()) {
+      <div
+        class="wikilink-dropdown"
+        [style.left.px]="wikilinkCoords()!.left"
+        [style.top.px]="wikilinkCoords()!.bottom + 4"
+      >
+        @if (wikilinkSuggestions().length === 0) {
+          <div class="wikilink-dropdown-empty">Sin resultados</div>
+        }
+        @for (file of wikilinkSuggestions(); track file.data) {
+          <div class="wikilink-dropdown-item" (mousedown)="$event.preventDefault()" (click)="insertWikilinkFromSuggestion(file)">
+            <i class="pi pi-file"></i>
+            <span>{{ (file.label ?? '') | slice:0:-3 }}</span>
+          </div>
+        }
+      </div>
+    }
+
     <p-dialog
       header="Buscar fichero"
       [(visible)]="showSearch"
@@ -254,6 +275,42 @@ import { FileService } from '../services/file.service';
     .resizer:hover, .resizer.active {
       background: #a0aec0;
     }
+    .wikilink-dropdown {
+      position: fixed;
+      z-index: 9999;
+      background: #fff;
+      border: 1px solid #d1d9e0;
+      border-radius: 6px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      min-width: 240px;
+      max-width: 380px;
+      max-height: 280px;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+    .wikilink-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      color: #18212f;
+      transition: background 0.1s;
+    }
+    .wikilink-dropdown-item:hover {
+      background: #f0f4f8;
+    }
+    .wikilink-dropdown-item .pi {
+      color: #5d6878;
+      font-size: 0.8rem;
+      flex-shrink: 0;
+    }
+    .wikilink-dropdown-empty {
+      padding: 12px 14px;
+      font-size: 0.875rem;
+      color: #5d6878;
+    }
     .search-box {
       margin-bottom: 12px;
     }
@@ -333,6 +390,18 @@ import { FileService } from '../services/file.service';
     }
     :host ::ng-deep .milkdown { outline: none; min-height: 100%; }
     :host ::ng-deep .milkdown .editor { outline: none; min-height: 400px; }
+    :host ::ng-deep .wikilink-token {
+      color: #6366f1;
+      background: #eef2ff;
+      border-radius: 3px;
+      padding: 1px 2px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    :host ::ng-deep .wikilink-token:hover {
+      background: #e0e7ff;
+      text-decoration: underline;
+    }
     .frontmatter-panel {
       background: #f0f4f8;
       border-bottom: 1px solid #d1d9e0;
@@ -443,7 +512,19 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
 
   selectedNode: TreeNode | null = null;
 
+  readonly wikilinkQuery = signal<string | null>(null);
+  readonly wikilinkCoords = signal<WikilinkCoords | null>(null);
+  readonly wikilinkSuggestions = computed(() => {
+    const q = this.wikilinkQuery();
+    if (q === null) return [];
+    const lower = q.toLowerCase();
+    return this.allFiles()
+      .filter(n => !lower || (n.label ?? '').toLowerCase().includes(lower))
+      .slice(0, 12);
+  });
+
   private editor: Editor | null = null;
+  private editorView: EditorView | null = null;
   private currentMarkdown = '';
   private isLoading = false;
   private treeSubscription: Subscription | null = null;
@@ -493,6 +574,15 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
       })
       .use(commonmark)
       .use(listener)
+      .use(createWikilinkPlugin({
+        onNavigate: target => this.navigateToWikilink(target),
+        onAutocomplete: (query, coords, view) => {
+          this.editorView = view;
+          this.wikilinkQuery.set(query);
+          this.wikilinkCoords.set(coords);
+          this.cdr.markForCheck();
+        },
+      }))
       .create()
       .then(editor => {
         this.editor = editor;
@@ -596,6 +686,54 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
     this.treePanelCollapsed.update(v => !v);
   }
 
+  navigateToWikilink(target: string): void {
+    const label = target.toLowerCase();
+    const file = this.allFiles().find(n =>
+      (n.label ?? '').toLowerCase().replace(/\.md$/i, '') === label ||
+      (n.label ?? '').toLowerCase() === label
+    );
+    if (!file) {
+      this.messageService.add({ severity: 'warn', summary: 'Enlace roto', detail: `No se encontró el documento "${target}"` });
+      return;
+    }
+    if (this.isDirty()) {
+      this.confirmationService.confirm({
+        message: 'Hay cambios sin guardar. ¿Descartar y navegar?',
+        header: 'Cambios sin guardar',
+        icon: 'pi pi-exclamation-triangle',
+        accept: () => this.loadFile(file),
+        reject: () => {},
+      });
+    } else {
+      this.loadFile(file);
+    }
+  }
+
+  insertWikilinkFromSuggestion(node: TreeNode): void {
+    const view = this.editorView;
+    if (!view) return;
+
+    const { $head } = view.state.selection;
+    const textBefore = $head.parent.textContent.slice(0, $head.parentOffset);
+    const match = textBefore.match(/\[\[([^\]|]*)$/);
+    if (!match) return;
+
+    const target = (node.label ?? '').replace(/\.md$/i, '');
+    const insertion = `[[${target}]]`;
+    const from = $head.pos - match[0].length;
+    const to = $head.pos;
+
+    view.dispatch(view.state.tr.insertText(insertion, from, to));
+    view.focus();
+    this.wikilinkQuery.set(null);
+    this.wikilinkCoords.set(null);
+  }
+
+  closeWikilinkDropdown(): void {
+    this.wikilinkQuery.set(null);
+    this.wikilinkCoords.set(null);
+  }
+
   openSearch(): void {
     this.searchQuery.set('');
     this.showSearch.set(true);
@@ -635,6 +773,11 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
   @HostListener('document:mouseup')
   onMouseUp(): void {
     this.isResizing = false;
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.wikilinkQuery() !== null) this.closeWikilinkDropdown();
   }
 
   @HostListener('document:keydown.control.s', ['$event'])
