@@ -1,15 +1,18 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { ConfirmationService } from 'primeng/api';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { PaginatorModule, PaginatorState } from 'primeng/paginator';
 import { ApiService } from '../services/api.service';
 import { Commit } from '../types';
+
+const PAGE_SIZE = 20;
 
 @Component({
   selector: 'app-git-history',
   standalone: true,
-  imports: [NgClass, TranslocoPipe, ConfirmDialogModule],
+  imports: [NgClass, TranslocoPipe, ConfirmDialogModule, PaginatorModule],
   providers: [ConfirmationService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -33,7 +36,7 @@ import { Commit } from '../types';
       }
 
       <div class="commit-list">
-        @for (commit of commits(); track commit.sha) {
+        @for (commit of page(); track commit.sha) {
           <div class="commit-card">
             <div class="commit-meta">
               <code class="commit-sha">{{ commit.sha.slice(0, 7) }}</code>
@@ -76,6 +79,15 @@ import { Commit } from '../types';
           </div>
         }
       </div>
+
+      @if (commits().length > pageSize) {
+        <p-paginator
+          [rows]="pageSize"
+          [totalRecords]="commits().length"
+          [first]="first()"
+          (onPageChange)="onPage($event)"
+        />
+      }
     </div>
   `,
   styles: [`
@@ -121,6 +133,10 @@ export class GitHistoryComponent implements OnInit {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
 
+  readonly pageSize = PAGE_SIZE;
+  readonly first = signal(0);
+  readonly page = computed(() => this.commits().slice(this.first(), this.first() + this.pageSize));
+
   private readonly openDiffs = new Map<string, string[]>();
   private readonly loadingDiffs = new Set<string>();
   private readonly diffVersion = signal(0);
@@ -129,9 +145,14 @@ export class GitHistoryComponent implements OnInit {
     this.load();
   }
 
+  onPage(e: PaginatorState): void {
+    this.first.set(e.first ?? 0);
+  }
+
   load(): void {
     this.loading.set(true);
     this.error.set(null);
+    this.first.set(0);
     this.api.getGitLog().subscribe({
       next: commits => {
         this.commits.set(commits);
