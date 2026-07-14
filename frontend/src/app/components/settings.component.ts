@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { ApiService, Prompt } from '../services/api.service';
 import { AuthService } from '../services/auth.service';
+import { ThemeService } from '../services/theme.service';
 
 interface PromptState extends Prompt {
   saving: boolean;
@@ -24,6 +25,15 @@ interface PromptState extends Prompt {
             <p>Ajustes del sistema</p>
           </div>
           <div class="topbar-actions">
+            <p-button
+              severity="secondary"
+              [icon]="theme.isDark() ? 'pi pi-sun' : 'pi pi-moon'"
+              [rounded]="true"
+              [text]="true"
+              size="small"
+              [title]="theme.isDark() ? 'Modo claro' : 'Modo oscuro'"
+              (onClick)="theme.toggle()"
+            />
             <p-button severity="secondary" label="Volver" size="small" (onClick)="goHome()" />
             <p-button severity="secondary" label="Cerrar sesión" size="small" (onClick)="logout()" />
           </div>
@@ -77,8 +87,8 @@ interface PromptState extends Prompt {
   styles: [`
     .app-shell {
       min-height: 100vh;
-      background: #f6f7f9;
-      color: #18212f;
+      background: var(--app-bg);
+      color: var(--app-text);
     }
     .workspace {
       width: min(900px, calc(100vw - 32px));
@@ -98,22 +108,22 @@ interface PromptState extends Prompt {
     }
     h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
     h2 { margin: 0 0 6px; font-size: 1.1rem; }
-    p { margin: 4px 0 0; color: #5d6878; font-size: 0.875rem; }
-    .settings-section { background: #fff; border-radius: 10px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+    p { margin: 4px 0 0; color: var(--app-text-muted); font-size: 0.875rem; }
+    .settings-section { background: var(--app-surface); border-radius: 10px; padding: 24px; box-shadow: var(--app-shadow); }
     .section-desc { margin-bottom: 20px; }
     .prompts-list { display: flex; flex-direction: column; gap: 20px; }
-    .prompt-card { border: 1px solid #e2e5ea; border-radius: 8px; padding: 16px; }
+    .prompt-card { border: 1px solid var(--app-border); border-radius: 8px; padding: 16px; }
     .prompt-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
     .prompt-name { font-weight: 600; font-size: 0.95rem; }
-    .prompt-key { font-size: 0.75rem; color: #8a94a2; font-family: monospace; background: #f1f3f5; padding: 2px 6px; border-radius: 4px; }
-    .prompt-textarea { width: 100%; box-sizing: border-box; font-family: monospace; font-size: 0.85rem; border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; resize: vertical; color: #18212f; background: #fafafa; }
-    .prompt-textarea:focus { outline: 2px solid #3b82f6; border-color: #3b82f6; }
+    .prompt-key { font-size: 0.75rem; color: var(--app-text-subtle); font-family: monospace; background: var(--app-surface-subtle); padding: 2px 6px; border-radius: 4px; }
+    .prompt-textarea { width: 100%; box-sizing: border-box; font-family: monospace; font-size: 0.85rem; border: 1px solid var(--app-border-strong); border-radius: 6px; padding: 10px; resize: vertical; color: var(--app-text); background: var(--app-surface-muted); }
+    .prompt-textarea:focus { outline: 2px solid var(--app-primary); border-color: var(--app-primary); }
     .prompt-textarea:disabled { opacity: 0.6; }
     .prompt-footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 10px; }
     .feedback { font-size: 0.85rem; }
-    .feedback.success { color: #16a34a; }
-    .feedback.error { color: #dc2626; }
-    .loading-msg, .empty-msg { color: #5d6878; }
+    .feedback.success { color: var(--app-success-text); }
+    .feedback.error { color: var(--app-error-text); }
+    .loading-msg, .empty-msg { color: var(--app-text-muted); }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -121,6 +131,7 @@ export class SettingsComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  readonly theme = inject(ThemeService);
 
   readonly loading = signal(true);
   readonly prompts = signal<PromptState[]>([]);

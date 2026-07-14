@@ -5,6 +5,8 @@
     "save": "Guardar",
     "signOut": "Cerrar sesión",
     "home": "Inicio",
+    "darkMode": "Modo oscuro",
+    "lightMode": "Modo claro",
     "brand": "DPS Wiki"
   },
   "login": {

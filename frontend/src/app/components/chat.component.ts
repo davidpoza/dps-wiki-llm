@@ -66,21 +66,21 @@ interface AnswerView {
     .input-area { display: grid; gap: 8px; }
     .question-input { width: 100%; resize: vertical; }
     .answer-card {
-      border: 1px solid #e2e5ea;
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 14px;
-      background: #fff;
+      background: var(--app-surface);
       display: grid;
       gap: 10px;
     }
-    .answer-question { font-weight: 600; color: #18212f; }
+    .answer-question { font-weight: 600; color: var(--app-text); }
     .answer-status { display: flex; }
     .answer-body { font-size: 0.9rem; line-height: 1.6; white-space: pre-wrap; }
     .evidence { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.8rem; }
-    .evidence-label { color: #5d6878; font-weight: 600; }
-    .evidence-path { font-family: monospace; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
-    .error { color: #ef4444; font-size: 0.85rem; }
-    .progress-list { display: grid; gap: 4px; font-size: 0.82rem; color: #5d6878; }
+    .evidence-label { color: var(--app-text-muted); font-weight: 600; }
+    .evidence-path { font-family: monospace; background: var(--app-surface-subtle); padding: 2px 6px; border-radius: 4px; }
+    .error { color: var(--app-error-text); font-size: 0.85rem; }
+    .progress-list { display: grid; gap: 4px; font-size: 0.82rem; color: var(--app-text-muted); }
     .progress-phase::before { content: '⏳ '; }
   `]
 })

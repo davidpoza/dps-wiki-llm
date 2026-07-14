@@ -9,6 +9,7 @@ import { JobsViewerComponent } from './jobs-viewer.component';
 import { ReviewComponent } from './review.component';
 import { AuthService } from '../services/auth.service';
 import { JobsStore } from '../services/jobs.store';
+import { ThemeService } from '../services/theme.service';
 
 type Tab = 'jobs' | 'ingest' | 'chat' | 'review' | 'git';
 
@@ -28,6 +29,15 @@ type Tab = 'jobs' | 'ingest' | 'chat' | 'review' | 'git';
             @if (currentUser()) {
               <span class="username">{{ currentUser()?.username }}</span>
             }
+            <p-button
+              severity="secondary"
+              [icon]="theme.isDark() ? 'pi pi-sun' : 'pi pi-moon'"
+              [rounded]="true"
+              [text]="true"
+              size="small"
+              [title]="theme.isDark() ? ('common.lightMode' | transloco) : ('common.darkMode' | transloco)"
+              (onClick)="theme.toggle()"
+            />
             <p-button
               severity="secondary"
               [label]="'home.explorer' | transloco"
@@ -89,6 +99,7 @@ export class HomeComponent implements OnInit {
   private readonly store = inject(JobsStore);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  readonly theme = inject(ThemeService);
 
   readonly currentUser = this.auth.currentUser;
 

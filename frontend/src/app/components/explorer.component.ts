@@ -37,6 +37,8 @@ import { Subscription } from 'rxjs';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { AuthService } from '../services/auth.service';
 import { FileService } from '../services/file.service';
+import { ThemeService } from '../services/theme.service';
+import { UnsavedChangesAware } from '../unsaved-changes.guard';
 
 @Component({
   selector: 'app-explorer',
@@ -55,6 +57,15 @@ import { FileService } from '../services/file.service';
           <p>{{ 'explorer.subtitle' | transloco }}</p>
         </div>
         <div class="topbar-actions">
+          <p-button
+            severity="secondary"
+            [icon]="theme.isDark() ? 'pi pi-sun' : 'pi pi-moon'"
+            [rounded]="true"
+            [text]="true"
+            size="small"
+            [title]="theme.isDark() ? ('common.lightMode' | transloco) : ('common.darkMode' | transloco)"
+            (onClick)="theme.toggle()"
+          />
           <p-button severity="secondary" [label]="'common.home' | transloco" size="small" (onClick)="goHome()" />
           <p-button severity="secondary" [label]="'common.signOut' | transloco" size="small" (onClick)="logout()" />
         </div>
@@ -333,8 +344,8 @@ import { FileService } from '../services/file.service';
     .explorer-shell {
       height: 100vh;
       overflow: hidden;
-      background: #f6f7f9;
-      color: #18212f;
+      background: var(--app-bg);
+      color: var(--app-text);
       display: flex;
       flex-direction: column;
     }
@@ -343,12 +354,12 @@ import { FileService } from '../services/file.service';
       justify-content: space-between;
       align-items: center;
       padding: 12px 24px;
-      border-bottom: 1px solid #e2e5ea;
-      background: #fff;
+      border-bottom: 1px solid var(--app-border);
+      background: var(--app-surface);
     }
     .topbar-actions { display: flex; gap: 8px; align-items: center; }
     .brand h1 { margin: 0; font-size: 1.3rem; }
-    .brand p { margin: 2px 0 0; font-size: 0.8rem; color: #5d6878; }
+    .brand p { margin: 2px 0 0; font-size: 0.8rem; color: var(--app-text-muted); }
     .explorer-layout {
       display: flex;
       flex: 1;
@@ -358,7 +369,7 @@ import { FileService } from '../services/file.service';
     .file-tree-panel {
       flex-shrink: 0;
       border-right: none;
-      background: #fff;
+      background: var(--app-surface);
       overflow-y: auto;
       overflow-x: hidden;
       padding: 8px;
@@ -376,24 +387,24 @@ import { FileService } from '../services/file.service';
       align-items: center;
       padding: 6px 0;
       gap: 2px;
-      border-right: 1px solid #e2e5ea;
-      background: #fafbfc;
+      border-right: 1px solid var(--app-border);
+      background: var(--app-surface-muted);
     }
     .resizer {
       flex-shrink: 0;
       width: 5px;
-      background: #e2e5ea;
+      background: var(--app-border);
       cursor: col-resize;
       transition: background 0.15s;
     }
     .resizer:hover, .resizer.active {
-      background: #a0aec0;
+      background: var(--app-text-subtle);
     }
     .wikilink-dropdown {
       position: fixed;
       z-index: 9999;
-      background: #fff;
-      border: 1px solid #d1d9e0;
+      background: var(--app-surface);
+      border: 1px solid var(--app-border-strong);
       border-radius: 6px;
       box-shadow: 0 4px 16px rgba(0,0,0,0.12);
       min-width: 240px;
@@ -409,21 +420,21 @@ import { FileService } from '../services/file.service';
       padding: 7px 14px;
       cursor: pointer;
       font-size: 0.875rem;
-      color: #18212f;
+      color: var(--app-text);
       transition: background 0.1s;
     }
     .wikilink-dropdown-item:hover {
-      background: #f0f4f8;
+      background: var(--app-surface-subtle);
     }
     .wikilink-dropdown-item .pi {
-      color: #5d6878;
+      color: var(--app-text-muted);
       font-size: 0.8rem;
       flex-shrink: 0;
     }
     .wikilink-dropdown-empty {
       padding: 12px 14px;
       font-size: 0.875rem;
-      color: #5d6878;
+      color: var(--app-text-muted);
     }
     .search-box {
       margin-bottom: 12px;
@@ -443,19 +454,19 @@ import { FileService } from '../services/file.service';
       border-radius: 4px;
       cursor: pointer;
       font-size: 0.875rem;
-      color: #18212f;
+      color: var(--app-text);
       transition: background 0.1s;
     }
     .search-result:hover {
-      background: #f0f4f8;
+      background: var(--app-surface-subtle);
     }
     .search-result .pi {
-      color: #5d6878;
+      color: var(--app-text-muted);
       font-size: 0.8rem;
     }
     .search-empty {
       text-align: center;
-      color: #5d6878;
+      color: var(--app-text-muted);
       font-size: 0.875rem;
       padding: 24px 0;
     }
@@ -471,7 +482,7 @@ import { FileService } from '../services/file.service';
       min-width: 0;
       flex: 1;
     }
-    .empty-msg { color: #5d6878; font-size: 0.85rem; padding: 8px; }
+    .empty-msg { color: var(--app-text-muted); font-size: 0.85rem; padding: 8px; }
     .editor-panel {
       flex: 1;
       display: flex;
@@ -483,15 +494,15 @@ import { FileService } from '../services/file.service';
       justify-content: space-between;
       align-items: center;
       padding: 8px 16px;
-      border-bottom: 1px solid #e2e5ea;
-      background: #fff;
+      border-bottom: 1px solid var(--app-border);
+      background: var(--app-surface);
     }
     .file-title { font-size: 0.9rem; font-weight: 500; }
     .milkdown-container {
       flex: 1;
       overflow-y: auto;
       padding: 16px;
-      background: #fff;
+      background: var(--app-surface);
     }
     .milkdown-container.hidden { display: none; }
     .placeholder {
@@ -499,23 +510,23 @@ import { FileService } from '../services/file.service';
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #5d6878;
+      color: var(--app-text-muted);
       font-size: 0.95rem;
     }
     :host ::ng-deep .milkdown { outline: none; min-height: 100%; }
     :host ::ng-deep .milkdown .editor { outline: none; min-height: 400px; }
-    :host ::ng-deep .milkdown a { cursor: pointer; color: #2563eb; text-decoration: underline; }
-    :host ::ng-deep .milkdown a:hover { color: #1d4ed8; }
+    :host ::ng-deep .milkdown a { cursor: pointer; color: var(--app-primary); text-decoration: underline; }
+    :host ::ng-deep .milkdown a:hover { color: var(--app-primary-hover); }
     :host ::ng-deep .wikilink-token {
-      color: #6366f1;
-      background: #eef2ff;
+      color: var(--app-primary);
+      background: var(--app-primary-soft);
       border-radius: 3px;
       padding: 1px 2px;
       cursor: pointer;
       font-weight: 500;
     }
     :host ::ng-deep .wikilink-token:hover {
-      background: #e0e7ff;
+      background: var(--app-primary-soft-hover);
       text-decoration: underline;
     }
     :host ::ng-deep .milkdown h1 { font-size: 2em; font-weight: 700; margin: 0.5em 0 0.3em; line-height: 1.2; }
@@ -523,20 +534,20 @@ import { FileService } from '../services/file.service';
     :host ::ng-deep .milkdown h3 { font-size: 1.25em; font-weight: 600; margin: 0.7em 0 0.3em; line-height: 1.4; }
     :host ::ng-deep .milkdown h4 { font-size: 1.05em; font-weight: 600; margin: 0.8em 0 0.25em; }
     :host ::ng-deep .milkdown h5 { font-size: 0.9em; font-weight: 600; margin: 0.9em 0 0.25em; }
-    :host ::ng-deep .milkdown h6 { font-size: 0.85em; font-weight: 600; margin: 0.9em 0 0.25em; color: #5d6878; }
+    :host ::ng-deep .milkdown h6 { font-size: 0.85em; font-weight: 600; margin: 0.9em 0 0.25em; color: var(--app-text-muted); }
     :host ::ng-deep .milkdown blockquote {
-      border-left: 4px solid #6366f1;
+      border-left: 4px solid var(--app-primary);
       margin: 0.75em 0;
       padding: 0.4em 1em;
-      background: #f8f8ff;
-      color: #374151;
+      background: var(--app-primary-soft);
+      color: var(--app-text);
       border-radius: 0 4px 4px 0;
     }
     :host ::ng-deep .milkdown ul { list-style: disc; padding-left: 1.75em; margin: 0.5em 0; }
     :host ::ng-deep .milkdown ol { list-style: decimal; padding-left: 1.75em; margin: 0.5em 0; }
     :host ::ng-deep .milkdown li { margin: 0.2em 0; }
     :host ::ng-deep .milkdown pre {
-      background: #f3f4f6;
+      background: var(--app-surface-subtle);
       border-radius: 6px;
       padding: 0.9em 1em;
       overflow-x: auto;
@@ -552,18 +563,18 @@ import { FileService } from '../services/file.service';
     :host ::ng-deep .milkdown code {
       font-family: 'Fira Code', 'Cascadia Code', monospace;
       font-size: 0.85em;
-      background: #f3f4f6;
+      background: var(--app-surface-subtle);
       padding: 0.15em 0.35em;
       border-radius: 3px;
     }
     :host ::ng-deep .milkdown hr {
       border: none;
-      border-top: 2px solid #e2e5ea;
+      border-top: 2px solid var(--app-border);
       margin: 1.5em 0;
     }
     .frontmatter-panel {
-      background: #f0f4f8;
-      border-bottom: 1px solid #d1d9e0;
+      background: var(--app-surface-subtle);
+      border-bottom: 1px solid var(--app-border-strong);
       padding: 0;
     }
     .frontmatter-header {
@@ -575,7 +586,7 @@ import { FileService } from '../services/file.service';
     .frontmatter-title {
       font-size: 0.75rem;
       font-weight: 600;
-      color: #5d6878;
+      color: var(--app-text-muted);
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
@@ -585,12 +596,12 @@ import { FileService } from '../services/file.service';
       border: none;
       cursor: pointer;
       font-size: 0.75rem;
-      color: #5d6878;
+      color: var(--app-text-muted);
       padding: 2px 6px;
       border-radius: 3px;
     }
-    .fm-toggle:hover { background: #e2e5ea; color: #18212f; }
-    .fm-toggle.active { background: #e2e5ea; color: #18212f; }
+    .fm-toggle:hover { background: var(--app-border); color: var(--app-text); }
+    .fm-toggle.active { background: var(--app-border); color: var(--app-text); }
     .frontmatter-entries {
       display: flex;
       flex-direction: column;
@@ -601,11 +612,11 @@ import { FileService } from '../services/file.service';
     .fm-key {
       font-size: 0.75rem;
       font-weight: 600;
-      color: #5d6878;
+      color: var(--app-text-muted);
     }
     .fm-value {
       font-size: 0.8rem;
-      color: #18212f;
+      color: var(--app-text);
     }
     .fm-editor { padding: 4px 16px 10px; }
     .fm-yaml-textarea {
@@ -615,23 +626,23 @@ import { FileService } from '../services/file.service';
       font-size: 0.8rem;
       line-height: 1.5;
       padding: 8px;
-      border: 1px solid #d1d9e0;
+      border: 1px solid var(--app-border-strong);
       border-radius: 4px;
       resize: vertical;
-      background: #fff;
-      color: #18212f;
+      background: var(--app-surface);
+      color: var(--app-text);
       outline: none;
     }
-    .fm-yaml-textarea:focus { border-color: #6366f1; }
-    .fm-yaml-textarea.error { border-color: #ef4444; }
+    .fm-yaml-textarea:focus { border-color: var(--app-primary); }
+    .fm-yaml-textarea.error { border-color: var(--app-error-text); }
     .fm-yaml-error {
       display: block;
       font-size: 0.75rem;
-      color: #ef4444;
+      color: var(--app-error-text);
       margin-top: 4px;
     }
-    .move-help { margin: 0 0 8px; font-size: 0.85rem; color: #5d6878; }
-    .move-tree-wrap { border: 1px solid #d1d9e0; border-radius: 6px; max-height: 300px; overflow-y: auto; padding: 4px 0; }
+    .move-help { margin: 0 0 8px; font-size: 0.85rem; color: var(--app-text-muted); }
+    .move-tree-wrap { border: 1px solid var(--app-border-strong); border-radius: 6px; max-height: 300px; overflow-y: auto; padding: 4px 0; }
     .move-root-item {
       display: flex;
       align-items: center;
@@ -639,14 +650,14 @@ import { FileService } from '../services/file.service';
       padding: 6px 12px;
       cursor: pointer;
       font-size: 0.875rem;
-      border-bottom: 1px solid #e2e5ea;
+      border-bottom: 1px solid var(--app-border);
     }
-    .move-root-item:hover { background: #f0f4f8; }
-    .move-root-item.selected { background: #eef2ff; font-weight: 600; color: #4f46e5; }
+    .move-root-item:hover { background: var(--app-surface-subtle); }
+    .move-root-item.selected { background: var(--app-primary-soft); font-weight: 600; color: var(--app-primary); }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ExplorerComponent implements AfterViewInit, OnDestroy {
+export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChangesAware {
   @ViewChild('editorContainer') editorContainer!: ElementRef<HTMLDivElement>;
 
   private readonly fileService = inject(FileService);
@@ -656,6 +667,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
   private readonly confirmationService = inject(ConfirmationService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly t = inject(TranslocoService);
+  readonly theme = inject(ThemeService);
 
   readonly treeNodes = signal<TreeNode[]>([]);
   readonly selectedPath = signal<string | null>(null);
@@ -720,6 +732,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
   protected isResizing = false;
   private resizeStartX = 0;
   private resizeStartWidth = 0;
+  private allowDiscardOnDeactivate = false;
 
   ngAfterViewInit(): void {
     this.loadTree();
@@ -1179,6 +1192,35 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
     if (this.isDirty()) this.save();
   }
 
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (!this.isDirty()) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }
+
+  canDeactivate(): boolean {
+    if (!this.isDirty() || this.allowDiscardOnDeactivate) return true;
+    return window.confirm(this.t.translate('explorer.confirmUnsavedNavigate'));
+  }
+
+  private confirmDiscardChanges(action: () => void): void {
+    if (!this.isDirty()) {
+      action();
+      return;
+    }
+
+    this.confirmationService.confirm({
+      message: this.t.translate('explorer.confirmUnsavedNavigate'),
+      header: this.t.translate('explorer.confirmUnsavedHeader'),
+      icon: 'pi pi-exclamation-triangle',
+      accept: () => {
+        this.allowDiscardOnDeactivate = true;
+        action();
+      },
+    });
+  }
+
   save(): void {
     const path = this.selectedPath();
     if (!path) return;
@@ -1198,11 +1240,15 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
   }
 
   goHome(): void {
-    this.router.navigateByUrl('/');
+    this.confirmDiscardChanges(() => {
+      this.router.navigateByUrl('/');
+    });
   }
 
   logout(): void {
-    this.auth.logout();
-    this.router.navigateByUrl('/login');
+    this.confirmDiscardChanges(() => {
+      this.auth.logout();
+      this.router.navigateByUrl('/login');
+    });
   }
 }

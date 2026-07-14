@@ -23,7 +23,7 @@ import { LoadingService } from './services/loading.service';
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(255, 255, 255, 0.55);
+      background: var(--app-overlay);
       z-index: 9999;
       pointer-events: none;
     }

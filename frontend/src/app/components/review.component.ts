@@ -76,12 +76,12 @@ import { JobState } from '../types';
   `,
   styles: [`
     .review { display: grid; gap: 16px; }
-    .empty { color: #5d6878; margin: 0; }
+    .empty { color: var(--app-text-muted); margin: 0; }
     .review-card {
-      border: 1px solid #fde68a;
+      border: 1px solid var(--app-warning-border);
       border-radius: 8px;
       padding: 14px;
-      background: #fffbeb;
+      background: var(--app-warning-bg);
       display: grid;
       gap: 14px;
     }
@@ -92,9 +92,9 @@ import { JobState } from '../types';
     .candidate { display: flex; align-items: flex-start; gap: 8px; }
     .candidate-info { display: flex; flex-direction: column; gap: 2px; font-size: 0.82rem; }
     .candidate-target { font-family: monospace; font-weight: 500; }
-    .candidate-link { color: #5d6878; font-family: monospace; }
-    .candidate-score { font-size: 0.75rem; color: #8a95a3; }
-    .no-candidates { color: #5d6878; font-size: 0.82rem; margin: 0; }
+    .candidate-link { color: var(--app-text-muted); font-family: monospace; }
+    .candidate-score { font-size: 0.75rem; color: var(--app-text-subtle); }
+    .no-candidates { color: var(--app-text-muted); font-size: 0.82rem; margin: 0; }
     .picker-row { display: flex; gap: 8px; }
     .search-input { flex: 1; }
     .file-results { display: grid; gap: 4px; }

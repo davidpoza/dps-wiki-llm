@@ -6,6 +6,7 @@ import { InputText } from 'primeng/inputtext';
 import { Password } from 'primeng/password';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { AuthService } from '../services/auth.service';
+import { ThemeService } from '../services/theme.service';
 
 @Component({
   selector: 'app-login',
@@ -14,6 +15,16 @@ import { AuthService } from '../services/auth.service';
   template: `
     <div class="login-wrapper">
       <div class="login-card">
+        <p-button
+          severity="secondary"
+          [icon]="theme.isDark() ? 'pi pi-sun' : 'pi pi-moon'"
+          [rounded]="true"
+          [text]="true"
+          size="small"
+          styleClass="theme-button"
+          [title]="theme.isDark() ? ('common.lightMode' | transloco) : ('common.darkMode' | transloco)"
+          (onClick)="theme.toggle()"
+        />
         <h2>{{ 'common.brand' | transloco }}</h2>
         <form (ngSubmit)="submit()" #f="ngForm">
           <div class="field">
@@ -59,13 +70,19 @@ import { AuthService } from '../services/auth.service';
       display: flex;
       align-items: center;
       justify-content: center;
+      background: var(--app-bg);
+      color: var(--app-text);
     }
     .login-card {
+      position: relative;
       width: 360px;
       padding: 2rem;
-      border: 1px solid var(--p-surface-200);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
+      background: var(--app-surface);
+      box-shadow: var(--app-shadow);
     }
+    :host ::ng-deep .theme-button { position: absolute; top: .75rem; right: .75rem; }
     h2 { margin-bottom: 1.5rem; text-align: center; }
     .field { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
     .field label { font-size: .875rem; font-weight: 500; }
@@ -79,6 +96,7 @@ export class LoginComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly t = inject(TranslocoService);
+  readonly theme = inject(ThemeService);
 
   readonly username = signal('');
   readonly password = signal('');

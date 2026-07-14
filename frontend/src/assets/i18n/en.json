@@ -5,6 +5,8 @@
     "save": "Save",
     "signOut": "Sign out",
     "home": "Home",
+    "darkMode": "Dark mode",
+    "lightMode": "Light mode",
     "brand": "DPS Wiki"
   },
   "login": {

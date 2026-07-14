@@ -1,7 +1,7 @@
 .app-shell {
   min-height: 100vh;
-  background: #f6f7f9;
-  color: #18212f;
+  background: var(--app-bg);
+  color: var(--app-text);
 }
 
 .workspace {
@@ -25,7 +25,7 @@
 
 .username {
   font-size: 0.875rem;
-  color: #5d6878;
+  color: var(--app-text-muted);
 }
 
 h1 {
@@ -36,14 +36,14 @@ h1 {
 
 p {
   margin: 4px 0 0;
-  color: #5d6878;
+  color: var(--app-text-muted);
   font-size: 0.875rem;
 }
 
 .tabs {
   display: flex;
   gap: 4px;
-  border-bottom: 2px solid #e2e5ea;
+  border-bottom: 2px solid var(--app-border);
   margin-bottom: 20px;
   overflow-x: auto;
   scrollbar-width: none;
@@ -56,7 +56,7 @@ p {
   cursor: pointer;
   font-size: 0.9rem;
   font-weight: 500;
-  color: #5d6878;
+  color: var(--app-text-muted);
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
   white-space: nowrap;
@@ -67,12 +67,12 @@ p {
 }
 
 .tab-btn:hover {
-  color: #18212f;
+  color: var(--app-text);
 }
 
 .tab-btn.active {
-  color: #3b82f6;
-  border-bottom-color: #3b82f6;
+  color: var(--app-primary);
+  border-bottom-color: var(--app-primary);
 }
 
 .badge {
@@ -82,7 +82,7 @@ p {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #f59e0b;
+  background: var(--app-warning-text);
   color: #fff;
   font-size: 0.7rem;
   font-weight: 700;

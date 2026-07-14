@@ -14,6 +14,7 @@ import { SettingsComponent } from './app/components/settings.component';
 import { authInterceptor } from './app/services/auth.interceptor';
 import { loadingInterceptor } from './app/services/loading.interceptor';
 import { authGuard } from './app/auth.guard';
+import { unsavedChangesGuard } from './app/unsaved-changes.guard';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
@@ -31,13 +32,24 @@ function detectLang(): 'es' | 'en' {
 
 const activeLang = detectLang();
 
+function initializeTheme(): void {
+  const stored = localStorage.getItem('dps-wiki-theme');
+  const theme = stored === 'light' || stored === 'dark'
+    ? stored
+    : window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+  document.documentElement.style.colorScheme = theme;
+}
+
+initializeTheme();
+
 bootstrapApplication(AppComponent, {
   providers: [
     provideHttpClient(withInterceptors([authInterceptor, loadingInterceptor])),
     provideRouter([
       { path: 'login', component: LoginComponent },
       { path: '', component: HomeComponent, canActivate: [authGuard] },
-      { path: 'explorer', component: ExplorerComponent, canActivate: [authGuard] },
+      { path: 'explorer', component: ExplorerComponent, canActivate: [authGuard], canDeactivate: [unsavedChangesGuard] },
       { path: 'settings', component: SettingsComponent, canActivate: [authGuard] },
     ]),
     provideAnimationsAsync(),

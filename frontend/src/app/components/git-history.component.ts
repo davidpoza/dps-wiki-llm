@@ -95,14 +95,14 @@ const PAGE_SIZE = 20;
     .git-history-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
     .git-history-header h2 { margin: 0; }
     .refresh-btn { padding: 0.25rem 0.75rem; cursor: pointer; }
-    .error-msg { color: red; }
-    .loading, .empty { color: #888; }
+    .error-msg { color: var(--app-error-text); }
+    .loading, .empty { color: var(--app-text-muted); }
     .commit-list { display: flex; flex-direction: column; gap: 0.75rem; overflow-y: auto; max-height: calc(100vh - 200px); padding: 4px 2px; }
-    .commit-card { border: 1px solid #ddd; border-radius: 6px; padding: 0.75rem 1rem; }
+    .commit-card { border: 1px solid var(--app-border); border-radius: 6px; padding: 0.75rem 1rem; background: var(--app-surface); }
     .commit-meta { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem; font-size: 0.85rem; }
-    .commit-sha { background: #f0f0f0; padding: 0.1rem 0.4rem; border-radius: 3px; font-family: monospace; }
+    .commit-sha { background: var(--app-surface-subtle); padding: 0.1rem 0.4rem; border-radius: 3px; font-family: monospace; }
     .commit-author { font-weight: 500; }
-    .commit-date { color: #888; }
+    .commit-date { color: var(--app-text-muted); }
     .commit-message { margin: 0.25rem 0 0.5rem; font-size: 0.95rem; }
     .commit-files { margin-bottom: 0.5rem; font-size: 0.85rem; }
     .commit-files ul { margin: 0.25rem 0 0 0; padding: 0; list-style: none; }
@@ -110,18 +110,18 @@ const PAGE_SIZE = 20;
     .file-path { flex: 1; font-family: monospace; font-size: 0.8rem; min-width: 0; }
     .stat-added { color: #22863a; font-weight: 600; }
     .stat-deleted { color: #cb2431; font-weight: 600; }
-    .diff-btn { padding: 0.1rem 0.5rem; font-size: 0.75rem; cursor: pointer; border: 1px solid #aaa; border-radius: 3px; background: #fafafa; white-space: nowrap; }
-    .diff-btn:hover { background: #e8e8e8; }
+    .diff-btn { padding: 0.1rem 0.5rem; font-size: 0.75rem; cursor: pointer; border: 1px solid var(--app-border-strong); border-radius: 3px; background: var(--app-surface-muted); color: var(--app-text); white-space: nowrap; }
+    .diff-btn:hover { background: var(--app-surface-subtle); }
     .diff-container { display: block; width: 100%; padding: 0; }
-    .diff-loading { color: #888; font-size: 0.8rem; }
+    .diff-loading { color: var(--app-text-muted); font-size: 0.8rem; }
     .diff-pre { margin: 0.25rem 0 0.5rem; font-size: 0.75rem; line-height: 1.45; background: #1e1e1e; color: #d4d4d4; border-radius: 4px; padding: 0.5rem; overflow-x: auto; white-space: pre; }
     .diff-pre span { display: block; white-space: pre; }
     .line-add { background: #1a3a1a; color: #7ee787; }
     .line-del { background: #3a1a1a; color: #ff7b72; }
     .line-hunk { background: #1a2a3a; color: #79c0ff; }
     .line-meta { color: #8b949e; }
-    .reset-btn { padding: 0.25rem 0.75rem; cursor: pointer; color: #c0392b; border: 1px solid #c0392b; background: transparent; border-radius: 4px; font-size: 0.85rem; }
-    .reset-btn:hover { background: #c0392b; color: white; }
+    .reset-btn { padding: 0.25rem 0.75rem; cursor: pointer; color: var(--app-error-text); border: 1px solid var(--app-error-text); background: transparent; border-radius: 4px; font-size: 0.85rem; }
+    .reset-btn:hover { background: var(--app-error-text); color: #fff; }
   `]
 })
 export class GitHistoryComponent implements OnInit {

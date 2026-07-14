@@ -85,35 +85,35 @@ const PAGE_SIZE = 10;
   styles: [`
     .jobs-viewer { display: grid; gap: 12px; }
     .jobs-list { display: grid; gap: 12px; overflow-y: auto; padding: 4px 2px; align-content: start; max-height: calc(100vh - 240px); }
-    .empty { color: #5d6878; margin: 0; }
+    .empty { color: var(--app-text-muted); margin: 0; }
     .job-card {
-      border: 1px solid #e2e5ea;
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 14px;
-      background: #fff;
+      background: var(--app-surface);
       display: grid;
       gap: 8px;
     }
     .job-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .job-type { font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
-    .job-date { font-size: 0.78rem; color: #8a95a3; margin-left: auto; }
-    .job-id { font-size: 0.75rem; color: #8a95a3; font-family: monospace; }
+    .job-date { font-size: 0.78rem; color: var(--app-text-subtle); margin-left: auto; }
+    .job-id { font-size: 0.75rem; color: var(--app-text-subtle); font-family: monospace; }
     .phases { display: grid; gap: 4px; font-size: 0.82rem; }
     .phase { display: flex; gap: 8px; }
-    .phase-step { color: #5d6878; min-width: 120px; font-weight: 500; }
-    .phase-msg { color: #18212f; }
+    .phase-step { color: var(--app-text-muted); min-width: 120px; font-weight: 500; }
+    .phase-msg { color: var(--app-text); }
     .files { font-size: 0.8rem; }
-    .files-title { font-weight: 600; color: #5d6878; margin-bottom: 4px; }
+    .files-title { font-weight: 600; color: var(--app-text-muted); margin-bottom: 4px; }
     .file-entry { display: flex; gap: 8px; align-items: center; padding: 2px 0; }
     .file-action { font-size: 0.72rem; padding: 1px 6px; border-radius: 4px; font-weight: 600; color: #fff;
       text-transform: uppercase; letter-spacing: 0.04em; }
     .action-create { background: #22c55e; }
-    .action-update { background: #3b82f6; }
+    .action-update { background: var(--app-primary); }
     .action-read { background: #94a3b8; }
     .action-modified { background: #8b5cf6; }
     .file-path { font-family: monospace; }
-    .job-error { color: #ef4444; font-size: 0.85rem; padding: 6px; background: #fef2f2; border-radius: 4px; }
-    .review-notice { color: #d97706; font-size: 0.85rem; padding: 6px; background: #fffbeb; border-radius: 4px; }
+    .job-error { color: var(--app-error-text); font-size: 0.85rem; padding: 6px; background: var(--app-error-bg); border-radius: 4px; }
+    .review-notice { color: var(--app-warning-text); font-size: 0.85rem; padding: 6px; background: var(--app-warning-bg); border-radius: 4px; }
   `]
 })
 export class JobsViewerComponent {

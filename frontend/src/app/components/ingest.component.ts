@@ -61,24 +61,24 @@ import { JobMode } from '../types';
   styles: [`
     .ingest { display: grid; gap: 20px; }
     .mode-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
-    .label { font-weight: 600; color: #5d6878; }
-    .mode-hint { font-size: 0.82rem; color: #5d6878; }
-    .section-hint { font-size: 0.78rem; font-weight: 400; color: #8a93a2; margin-left: 6px; }
+    .label { font-weight: 600; color: var(--app-text-muted); }
+    .mode-hint { font-size: 0.82rem; color: var(--app-text-muted); }
+    .section-hint { font-size: 0.78rem; font-weight: 400; color: var(--app-text-subtle); margin-left: 6px; }
     .section { display: grid; gap: 10px; }
     .section-title { font-weight: 600; }
     .upload-row, .url-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .url-input { flex: 1; min-width: 200px; }
     .file-input { flex: 1; }
-    .file-name { font-size: 0.82rem; color: #5d6878; font-family: monospace; }
+    .file-name { font-size: 0.82rem; color: var(--app-text-muted); font-family: monospace; }
     .enqueue-notice {
       font-size: 0.85rem;
       padding: 10px;
-      background: #eff6ff;
+      background: var(--app-primary-soft);
       border-radius: 6px;
-      border: 1px solid #bfdbfe;
+      border: 1px solid var(--app-primary);
     }
     code { font-family: monospace; font-size: 0.8em; }
-    .error { color: #ef4444; font-size: 0.85rem; padding: 8px; background: #fef2f2; border-radius: 4px; }
+    .error { color: var(--app-error-text); font-size: 0.85rem; padding: 8px; background: var(--app-error-bg); border-radius: 4px; }
   `]
 })
 export class IngestComponent {
