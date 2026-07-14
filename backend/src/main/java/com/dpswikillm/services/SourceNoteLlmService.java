@@ -6,10 +6,13 @@ import com.dpswikillm.dto.ChatMessage;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class SourceNoteLlmService {
+    private static final Logger log = LoggerFactory.getLogger(SourceNoteLlmService.class);
     private final LlmClient llmClient;
     private final JsonExtractionService jsonExtractionService;
     private final PromptService promptService;
@@ -22,9 +25,11 @@ public class SourceNoteLlmService {
     }
 
     public LlmSourceNote clean(NormalizedSourcePayload payload) {
+        log.debug("Sending source payload to LLM ({} chars)", payload.content().length());
         String response = llmClient.chat(List.of(
                 new ChatMessage("system", promptService.getText("source-note-system")),
                 new ChatMessage("user", "Source payload:\n" + payload.content())));
+        log.debug("LLM raw response ({} chars): {}", response.length(), response);
         JsonNode node = jsonExtractionService.extractObject(response,
                 json -> nonEmpty(json, "summary") && nonEmpty(json, "raw_context"));
         return new LlmSourceNote(

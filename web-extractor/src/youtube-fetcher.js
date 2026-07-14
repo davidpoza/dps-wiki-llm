@@ -13,8 +13,37 @@ export function isYoutubeUrl(url) {
   }
 }
 
+// Parse SRT into one text line per cue: strip cue numbers, timestamps, join
+// multi-line cues with a space, and deduplicate overlapping YouTube auto-sub windows.
+export function srtToPlainText(srtContent) {
+  const TIMESTAMP_RE = /^\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,\.]\d{3}/;
+  const CUE_NUMBER_RE = /^\d+$/;
+
+  const cues = [];
+  let current = [];
+
+  const flushCue = () => {
+    if (!current.length) return;
+    const text = current.join(' ');
+    const recent = cues.slice(-10).join(' ');
+    if (!recent.includes(text)) cues.push(text);
+    current = [];
+  };
+
+  for (const line of srtContent.split('\n')) {
+    const t = line.trim();
+    if (!t) { flushCue(); continue; }
+    if (TIMESTAMP_RE.test(t) || CUE_NUMBER_RE.test(t)) continue;
+    current.push(t);
+  }
+  flushCue();
+
+  return cues.join('\n');
+}
+
 export function srtToMarkdown(srtContent, title) {
-  return `# ${title}\n\n${srtContent.trim()}\n`;
+  const list = srtToPlainText(srtContent).split('\n').filter(Boolean).map((l) => `- ${l}`).join('\n');
+  return `# ${title}\n\n${list}\n`;
 }
 
 const BASE_ARGS = [
@@ -22,7 +51,6 @@ const BASE_ARGS = [
   '--skip-download',
   '--sub-format', 'srt',
   '--no-playlist',
-  '--impersonate', 'chrome',
   '--js-runtimes', 'node:/usr/local/bin/node',
   '--extractor-retries', '3',
 ];
@@ -66,9 +94,10 @@ async function runYtDlpWithRetry(extraArgs, outPath, url, ytDlp, retryDelayMs = 
   } catch (err) {
     if (err instanceof ExtractionError) throw err;
     if (!isRateLimited(err)) throw err;
-    // 429: wait and retry via iOS player client which uses a different YouTube endpoint
+    // 429: back off and retry with android_vr (different subtitle endpoint, no PO token needed)
     await new Promise((res) => setTimeout(res, retryDelayMs));
-    await runYtDlp([...extraArgs, '--extractor-args', 'youtube:player_client=ios'], outPath, url, ytDlp);
+    const retryArgs = extraArgs.map((a) => a.replace('player_client=android', 'player_client=android_vr'));
+    await runYtDlp(retryArgs, outPath, url, ytDlp);
   }
 }
 
@@ -81,11 +110,12 @@ export async function fetchYoutubeTranscript(url, { _ytDlp = spawnYtDlp, _retryD
     const outPath = join(tmpDir, '%(id)s');
     let lastError;
 
-    // Pass 1: manual subtitles in any common language (avoids auto-generated rate limits).
-    // Pass 2: auto-generated English subtitles (most English videos); retries on 429 with iOS client.
+    // Pass 1: manual subtitles. android client works without PO tokens.
+    // Pass 2: auto-generated English subtitles; retries on 429 with android_vr (different subtitle endpoint).
+    const ANDROID = ['--extractor-args', 'youtube:player_client=android'];
     const passes = [
-      { args: ['--write-subs', '--sub-langs', 'en,es,es-ES,pt,pt-BR,fr,de,ja,ko,zh-Hans,zh-Hant'], retry: false },
-      { args: ['--write-auto-subs', '--write-subs', '--sub-langs', 'en'], retry: true },
+      { args: [...ANDROID, '--write-subs', '--sub-langs', 'en,es,es-ES,pt,pt-BR,fr,de,ja,ko,zh-Hans,zh-Hant'], retry: false },
+      { args: [...ANDROID, '--write-auto-subs', '--write-subs', '--sub-langs', 'en'], retry: true },
     ];
 
     for (const { args: extraArgs, retry } of passes) {

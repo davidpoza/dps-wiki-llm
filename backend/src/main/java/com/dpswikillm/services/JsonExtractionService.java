@@ -4,10 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.util.function.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class JsonExtractionService {
+    private static final Logger log = LoggerFactory.getLogger(JsonExtractionService.class);
     private final ObjectMapper objectMapper;
 
     public JsonExtractionService(ObjectMapper objectMapper) {
@@ -19,13 +22,16 @@ public class JsonExtractionService {
         try {
             JsonNode node = objectMapper.readTree(json);
             if (!node.isObject()) {
+                log.warn("LLM response was not a JSON object. Raw response: {}", response);
                 throw new IllegalArgumentException("Expected a JSON object");
             }
             if (validator != null && !validator.test(node)) {
+                log.warn("LLM response failed shape validation. Parsed keys: {}. Raw response: {}", node.fieldNames(), response);
                 throw new IllegalArgumentException("JSON object failed shape validation");
             }
             return node;
         } catch (IOException ex) {
+            log.warn("LLM response could not be parsed as JSON. Raw response: {}", response);
             throw new IllegalArgumentException("Invalid JSON object in LLM response", ex);
         }
     }
