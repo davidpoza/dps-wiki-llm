@@ -17,6 +17,16 @@ export function srtToMarkdown(srtContent, title) {
   return `# ${title}\n\n${srtContent.trim()}\n`;
 }
 
+const BASE_ARGS = [
+  '--write-info-json',
+  '--skip-download',
+  '--sub-format', 'srt',
+  '--no-playlist',
+  '--impersonate', 'chrome',
+  '--js-runtimes', 'node:/usr/local/bin/node',
+  '--extractor-retries', '3',
+];
+
 async function spawnYtDlp(args, timeoutMs = 60_000) {
   return new Promise((resolve, reject) => {
     const proc = spawn('yt-dlp', args);
@@ -42,35 +52,43 @@ async function spawnYtDlp(args, timeoutMs = 60_000) {
   });
 }
 
+async function runYtDlp(extraArgs, outPath, url, ytDlp) {
+  await ytDlp([...BASE_ARGS, ...extraArgs, '-o', outPath, url]);
+}
+
 // opts._ytDlp is injectable for testing (replaces the real spawnYtDlp).
 export async function fetchYoutubeTranscript(url, { _ytDlp = spawnYtDlp } = {}) {
   const tmpDir = await mkdtemp(join(tmpdir(), 'yt-'));
   try {
-    try {
-      await _ytDlp([
-        '--write-auto-subs',
-        '--write-subs',
-        '--write-info-json',
-        '--skip-download',
-        '--sub-format', 'srt',
-        '--sub-langs', 'en',
-        '--no-playlist',
-        '-o', join(tmpDir, '%(id)s'),
-        url,
-      ]);
-    } catch (err) {
-      if (err instanceof ExtractionError) throw err;
-      throw new ExtractionError('extraction_failed', 422, `Could not download subtitles: ${err.message}`);
+    const outPath = join(tmpDir, '%(id)s');
+    let lastError;
+
+    // Pass 1: manual subtitles in any common language (avoids auto-generated rate limits).
+    // Pass 2: auto-generated English subtitles (most English videos).
+    const passes = [
+      ['--write-subs', '--sub-langs', 'en,es,es-ES,pt,pt-BR,fr,de,ja,ko,zh-Hans,zh-Hant'],
+      ['--write-auto-subs', '--write-subs', '--sub-langs', 'en'],
+    ];
+
+    for (const extraArgs of passes) {
+      try {
+        await runYtDlp(extraArgs, outPath, url, _ytDlp);
+      } catch (err) {
+        if (err instanceof ExtractionError) throw err;
+        lastError = err;
+      }
+      const found = (await readdir(tmpDir)).filter((f) => f.endsWith('.srt'));
+      if (found.length) break;
     }
 
     const files = (await readdir(tmpDir)).filter((f) => f.endsWith('.srt'));
     if (!files.length) {
-      throw emptyContent('No subtitles available for this video');
+      const msg = lastError ? `Could not download subtitles: ${lastError.message}` : 'No subtitles available for this video';
+      throw lastError ? new ExtractionError('extraction_failed', 422, msg) : emptyContent(msg);
     }
 
     const srtContent = await readFile(join(tmpDir, files[0]), 'utf8');
 
-    // Read title from the info JSON yt-dlp writes alongside the subtitle.
     let title = 'Video';
     const infoFiles = (await readdir(tmpDir)).filter((f) => f.endsWith('.info.json'));
     if (infoFiles.length) {

@@ -6,11 +6,13 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
-# Install yt-dlp for YouTube transcript extraction.
+# Upgrade Node to 22 (yt-dlp EJS requires >= 22) and install yt-dlp with curl_cffi.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3-pip \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    && pip3 install --no-cache-dir yt-dlp \
+    && npm install -g n \
+    && n 22 \
+    && pip3 install --no-cache-dir "yt-dlp[default]" curl_cffi \
     && yt-dlp --version
 
 COPY package.json package-lock.json* ./
