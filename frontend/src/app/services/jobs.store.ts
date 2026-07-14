@@ -34,7 +34,7 @@ export class JobsStore implements OnDestroy {
             type: j.type,
             status: j.status as JobStatus,
             phases: [],
-            files: [],
+            files: (j.affectedPaths ?? []).map(path => ({ path, action: 'modified' as const })),
             error: j.error,
             createdAt: j.createdAt,
             completedAt: j.completedAt ?? undefined,

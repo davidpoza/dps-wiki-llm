@@ -15,6 +15,9 @@ import com.dpswikillm.services.GuidedReviewService;
 import com.dpswikillm.services.JobEventService;
 import com.dpswikillm.services.JobQueueService;
 import com.dpswikillm.services.RawIntakeService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.util.UUID;
@@ -38,16 +41,18 @@ public class JobController {
     private final RawIntakeService rawIntakeService;
     private final GuidedReviewService guidedReviewService;
     private final FileLookupService fileLookupService;
+    private final ObjectMapper objectMapper;
 
     public JobController(JobEventService eventService, JobQueueService queueService, JobRepository jobRepository,
                          RawIntakeService rawIntakeService, GuidedReviewService guidedReviewService,
-                         FileLookupService fileLookupService) {
+                         FileLookupService fileLookupService, ObjectMapper objectMapper) {
         this.eventService = eventService;
         this.queueService = queueService;
         this.jobRepository = jobRepository;
         this.rawIntakeService = rawIntakeService;
         this.guidedReviewService = guidedReviewService;
         this.fileLookupService = fileLookupService;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping("/jobs/events")
@@ -59,8 +64,18 @@ public class JobController {
     public java.util.List<JobSummary> listJobs() {
         return jobRepository.findTop50ByOrderByCreatedAtDesc().stream()
                 .map(j -> new JobSummary(j.getId(), j.getType().name(), j.getStatus().name(),
-                        j.getCreatedAt(), j.getCompletedAt(), j.getError()))
+                        j.getCreatedAt(), j.getCompletedAt(), j.getError(), parseAffectedPaths(j)))
                 .toList();
+    }
+
+    private List<String> parseAffectedPaths(Job job) {
+        String raw = job.getAffectedPaths();
+        if (raw == null || raw.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(raw, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     @GetMapping("/jobs/{id}")

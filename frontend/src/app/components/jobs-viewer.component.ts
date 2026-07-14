@@ -110,6 +110,7 @@ const PAGE_SIZE = 10;
     .action-create { background: #22c55e; }
     .action-update { background: #3b82f6; }
     .action-read { background: #94a3b8; }
+    .action-modified { background: #8b5cf6; }
     .file-path { font-family: monospace; }
     .job-error { color: #ef4444; font-size: 0.85rem; padding: 6px; background: #fef2f2; border-radius: 4px; }
     .review-notice { color: #d97706; font-size: 0.85rem; padding: 6px; background: #fffbeb; border-radius: 4px; }

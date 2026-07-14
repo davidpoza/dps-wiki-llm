@@ -61,6 +61,7 @@ export interface JobSummary {
   createdAt: string;
   completedAt?: string;
   error?: string;
+  affectedPaths?: string[];
 }
 
 @Injectable({ providedIn: 'root' })
