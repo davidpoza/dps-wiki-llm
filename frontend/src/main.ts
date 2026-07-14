@@ -12,6 +12,7 @@ import { HomeComponent } from './app/components/home.component';
 import { LoginComponent } from './app/components/login.component';
 import { SettingsComponent } from './app/components/settings.component';
 import { authInterceptor } from './app/services/auth.interceptor';
+import { loadingInterceptor } from './app/services/loading.interceptor';
 import { authGuard } from './app/auth.guard';
 import { firstValueFrom } from 'rxjs';
 
@@ -25,7 +26,7 @@ class AppTranslocoLoader implements TranslocoLoader {
 
 bootstrapApplication(AppComponent, {
   providers: [
-    provideHttpClient(withInterceptors([authInterceptor])),
+    provideHttpClient(withInterceptors([authInterceptor, loadingInterceptor])),
     provideRouter([
       { path: 'login', component: LoginComponent },
       { path: '', component: HomeComponent, canActivate: [authGuard] },
