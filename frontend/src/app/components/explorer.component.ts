@@ -518,6 +518,49 @@ import { FileService } from '../services/file.service';
       background: #e0e7ff;
       text-decoration: underline;
     }
+    :host ::ng-deep .milkdown h1 { font-size: 2em; font-weight: 700; margin: 0.5em 0 0.3em; line-height: 1.2; }
+    :host ::ng-deep .milkdown h2 { font-size: 1.5em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.3; }
+    :host ::ng-deep .milkdown h3 { font-size: 1.25em; font-weight: 600; margin: 0.7em 0 0.3em; line-height: 1.4; }
+    :host ::ng-deep .milkdown h4 { font-size: 1.05em; font-weight: 600; margin: 0.8em 0 0.25em; }
+    :host ::ng-deep .milkdown h5 { font-size: 0.9em; font-weight: 600; margin: 0.9em 0 0.25em; }
+    :host ::ng-deep .milkdown h6 { font-size: 0.85em; font-weight: 600; margin: 0.9em 0 0.25em; color: #5d6878; }
+    :host ::ng-deep .milkdown blockquote {
+      border-left: 4px solid #6366f1;
+      margin: 0.75em 0;
+      padding: 0.4em 1em;
+      background: #f8f8ff;
+      color: #374151;
+      border-radius: 0 4px 4px 0;
+    }
+    :host ::ng-deep .milkdown ul { list-style: disc; padding-left: 1.75em; margin: 0.5em 0; }
+    :host ::ng-deep .milkdown ol { list-style: decimal; padding-left: 1.75em; margin: 0.5em 0; }
+    :host ::ng-deep .milkdown li { margin: 0.2em 0; }
+    :host ::ng-deep .milkdown pre {
+      background: #f3f4f6;
+      border-radius: 6px;
+      padding: 0.9em 1em;
+      overflow-x: auto;
+      margin: 0.75em 0;
+    }
+    :host ::ng-deep .milkdown pre code {
+      font-family: 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.85em;
+      background: none;
+      padding: 0;
+      border-radius: 0;
+    }
+    :host ::ng-deep .milkdown code {
+      font-family: 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.85em;
+      background: #f3f4f6;
+      padding: 0.15em 0.35em;
+      border-radius: 3px;
+    }
+    :host ::ng-deep .milkdown hr {
+      border: none;
+      border-top: 2px solid #e2e5ea;
+      margin: 1.5em 0;
+    }
     .frontmatter-panel {
       background: #f0f4f8;
       border-bottom: 1px solid #d1d9e0;
