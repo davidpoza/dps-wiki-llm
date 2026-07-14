@@ -54,6 +54,15 @@ export interface JobResponse {
   queuePosition?: number;
 }
 
+export interface JobSummary {
+  id: string;
+  type: string;
+  status: string;
+  createdAt: string;
+  completedAt?: string;
+  error?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
@@ -71,6 +80,10 @@ export class ApiService {
     form.append('file', file);
     form.append('mode', mode);
     return this.http.post<EnqueueResponse>('/api/ingest/upload', form);
+  }
+
+  getJobs(): Observable<JobSummary[]> {
+    return this.http.get<JobSummary[]>('/api/jobs');
   }
 
   getJob(id: string): Observable<JobResponse> {

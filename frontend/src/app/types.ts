@@ -46,4 +46,6 @@ export interface JobState {
   files: JobFileEvent[];
   result?: string;
   error?: string;
+  createdAt?: string;
+  completedAt?: string;
 }

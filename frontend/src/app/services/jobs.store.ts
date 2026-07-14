@@ -1,6 +1,6 @@
 import { inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { JobState, JobStatus, SseJobEvent } from '../types';
-import { ApiService } from './api.service';
+import { ApiService, JobSummary } from './api.service';
 import { AuthService } from './auth.service';
 
 @Injectable({ providedIn: 'root' })
@@ -17,7 +17,32 @@ export class JobsStore implements OnDestroy {
     if (this.eventSource) {
       return;
     }
+    this.api.getJobs().subscribe({
+      next: jobs => this.mergeHistory(jobs),
+      error: () => {},
+    });
     this.openEventSource();
+  }
+
+  private mergeHistory(jobs: JobSummary[]): void {
+    this.jobs.update(map => {
+      const updated = new Map(map);
+      for (const j of jobs) {
+        if (!updated.has(j.id)) {
+          updated.set(j.id, {
+            id: j.id,
+            type: j.type,
+            status: j.status as JobStatus,
+            phases: [],
+            files: [],
+            error: j.error,
+            createdAt: j.createdAt,
+            completedAt: j.completedAt ?? undefined,
+          });
+        }
+      }
+      return updated;
+    });
   }
 
   disconnect(): void {

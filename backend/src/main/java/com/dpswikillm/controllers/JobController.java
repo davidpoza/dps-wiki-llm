@@ -6,6 +6,7 @@ import com.dpswikillm.domain.JobMode;
 import com.dpswikillm.domain.JobType;
 import com.dpswikillm.dto.EnqueueJobRequest;
 import com.dpswikillm.dto.EnqueueJobResponse;
+import com.dpswikillm.dto.JobSummary;
 import com.dpswikillm.dto.ReviewRequest;
 import com.dpswikillm.domain.SearchResult;
 import com.dpswikillm.repositories.JobRepository;
@@ -52,6 +53,14 @@ public class JobController {
     @GetMapping("/jobs/events")
     public SseEmitter events() {
         return eventService.subscribe();
+    }
+
+    @GetMapping("/jobs")
+    public java.util.List<JobSummary> listJobs() {
+        return jobRepository.findTop50ByOrderByCreatedAtDesc().stream()
+                .map(j -> new JobSummary(j.getId(), j.getType().name(), j.getStatus().name(),
+                        j.getCreatedAt(), j.getCompletedAt(), j.getError()))
+                .toList();
     }
 
     @GetMapping("/jobs/{id}")

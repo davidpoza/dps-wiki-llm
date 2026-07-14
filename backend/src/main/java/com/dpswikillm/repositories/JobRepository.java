@@ -11,4 +11,6 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
     long countByStatus(JobStatus status);
 
     List<Job> findByCreatedAtAfterOrderByCreatedAtAsc(Instant createdAt);
+
+    List<Job> findTop50ByOrderByCreatedAtDesc();
 }
