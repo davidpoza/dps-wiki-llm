@@ -85,7 +85,7 @@ import { Commit } from '../types';
     .refresh-btn { padding: 0.25rem 0.75rem; cursor: pointer; }
     .error-msg { color: red; }
     .loading, .empty { color: #888; }
-    .commit-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .commit-list { display: flex; flex-direction: column; gap: 0.75rem; overflow-y: auto; max-height: calc(100vh - 200px); padding: 4px 2px; }
     .commit-card { border: 1px solid #ddd; border-radius: 6px; padding: 0.75rem 1rem; }
     .commit-meta { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem; font-size: 0.85rem; }
     .commit-sha { background: #f0f0f0; padding: 0.1rem 0.4rem; border-radius: 3px; font-family: monospace; }

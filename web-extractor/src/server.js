@@ -5,6 +5,7 @@ import { browserManager } from './browser.js';
 import { render } from './renderer.js';
 import { extractFromHtml, extractFromPdf } from './extract.js';
 import { fetchPdf, isPdfUrl } from './pdf-fetcher.js';
+import { isYoutubeUrl, fetchYoutubeTranscript, srtToMarkdown } from './youtube-fetcher.js';
 import { ExtractionError, invalidUrl, invalidInput, payloadTooLarge, emptyContent } from './errors.js';
 
 export function validateUrl(body) {
@@ -43,10 +44,17 @@ export function buildApp(opts = {}) {
     return reply.status(ready ? 200 : 503).send({ status: ready ? 'up' : 'starting' });
   });
 
-  // Main extraction contract. Automatically handles PDF URLs.
+  // Main extraction contract. Automatically handles YouTube URLs, PDF URLs, and HTML pages.
   app.post('/extract', async (req, reply) => {
     try {
       const url = validateUrl(req.body);
+
+      if (isYoutubeUrl(url)) {
+        const { srtContent, title, videoUrl } = await fetchYoutubeTranscript(url);
+        const markdown = srtToMarkdown(srtContent, title);
+        const metadata = { source: videoUrl, title, extractionConfidence: 'high' };
+        return reply.send({ markdown, metadata });
+      }
 
       if (await isPdfUrl(url)) {
         const buffer = await fetchPdf(url);
