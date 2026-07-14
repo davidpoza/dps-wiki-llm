@@ -2,6 +2,7 @@ node_modules/
 dist/
 state/semantic/
 backend/target/**
+BOOT-INF
 
 # Angular build cache & output
 frontend/.angular/

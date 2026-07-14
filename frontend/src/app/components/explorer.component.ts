@@ -20,6 +20,7 @@ import { commonmark } from '@milkdown/preset-commonmark';
 import { replaceAll } from '@milkdown/utils';
 import { createWikilinkPlugin, WikilinkCoords } from './wikilink.plugin';
 import { createMarkdownLinkPlugin } from './markdown-link.plugin';
+import { createMarkdownImagePlugin } from './markdown-image.plugin';
 import type { EditorView } from '@milkdown/prose/view';
 import { TreeNode, ConfirmationService, MessageService, MenuItem } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -880,6 +881,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
       })
       .use(commonmark)
       .use(listener)
+      .use(createMarkdownImagePlugin())
       .use(createMarkdownLinkPlugin())
       .use(createWikilinkPlugin({
         onNavigate: target => this.navigateToWikilink(target),
