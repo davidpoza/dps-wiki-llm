@@ -27,6 +27,10 @@ const BASE_ARGS = [
   '--extractor-retries', '3',
 ];
 
+function isRateLimited(err) {
+  return /429|too many requests/i.test(err?.message ?? '');
+}
+
 async function spawnYtDlp(args, timeoutMs = 60_000) {
   return new Promise((resolve, reject) => {
     const proc = spawn('yt-dlp', args);
@@ -56,23 +60,41 @@ async function runYtDlp(extraArgs, outPath, url, ytDlp) {
   await ytDlp([...BASE_ARGS, ...extraArgs, '-o', outPath, url]);
 }
 
+async function runYtDlpWithRetry(extraArgs, outPath, url, ytDlp, retryDelayMs = 5_000) {
+  try {
+    await runYtDlp(extraArgs, outPath, url, ytDlp);
+  } catch (err) {
+    if (err instanceof ExtractionError) throw err;
+    if (!isRateLimited(err)) throw err;
+    // 429: wait and retry via iOS player client which uses a different YouTube endpoint
+    await new Promise((res) => setTimeout(res, retryDelayMs));
+    await runYtDlp([...extraArgs, '--extractor-args', 'youtube:player_client=ios'], outPath, url, ytDlp);
+  }
+}
+
+
 // opts._ytDlp is injectable for testing (replaces the real spawnYtDlp).
-export async function fetchYoutubeTranscript(url, { _ytDlp = spawnYtDlp } = {}) {
+// opts._retryDelayMs overrides the 429-retry sleep (use 0 in tests).
+export async function fetchYoutubeTranscript(url, { _ytDlp = spawnYtDlp, _retryDelayMs = 5_000 } = {}) {
   const tmpDir = await mkdtemp(join(tmpdir(), 'yt-'));
   try {
     const outPath = join(tmpDir, '%(id)s');
     let lastError;
 
     // Pass 1: manual subtitles in any common language (avoids auto-generated rate limits).
-    // Pass 2: auto-generated English subtitles (most English videos).
+    // Pass 2: auto-generated English subtitles (most English videos); retries on 429 with iOS client.
     const passes = [
-      ['--write-subs', '--sub-langs', 'en,es,es-ES,pt,pt-BR,fr,de,ja,ko,zh-Hans,zh-Hant'],
-      ['--write-auto-subs', '--write-subs', '--sub-langs', 'en'],
+      { args: ['--write-subs', '--sub-langs', 'en,es,es-ES,pt,pt-BR,fr,de,ja,ko,zh-Hans,zh-Hant'], retry: false },
+      { args: ['--write-auto-subs', '--write-subs', '--sub-langs', 'en'], retry: true },
     ];
 
-    for (const extraArgs of passes) {
+    for (const { args: extraArgs, retry } of passes) {
       try {
-        await runYtDlp(extraArgs, outPath, url, _ytDlp);
+        if (retry) {
+          await runYtDlpWithRetry(extraArgs, outPath, url, _ytDlp, _retryDelayMs);
+        } else {
+          await runYtDlp(extraArgs, outPath, url, _ytDlp);
+        }
       } catch (err) {
         if (err instanceof ExtractionError) throw err;
         lastError = err;

@@ -104,6 +104,41 @@ test('fetchYoutubeTranscript throws extraction_failed when yt-dlp exits non-zero
   );
 });
 
+test('fetchYoutubeTranscript retries on 429 and succeeds with SRT from retry', async () => {
+  let callCount = 0;
+  const mockYtDlp = async (args) => {
+    callCount += 1;
+    // First call (pass 1 manual subs): succeeds but writes no SRT
+    if (callCount === 1) return { stdout: '' };
+    // Second call (pass 2 first attempt): simulates YouTube 429
+    if (callCount === 2) throw new Error('HTTP Error 429: Too Many Requests');
+    // Third call (pass 2 retry with ios client): succeeds and writes SRT
+    const oIdx = args.indexOf('-o');
+    const tmpDir = args[oIdx + 1].replace(/\/[^/]+$/, '');
+    writeFileSync(join(tmpDir, 'abc.en.srt'), SAMPLE_SRT);
+    writeFileSync(join(tmpDir, 'abc.info.json'), JSON.stringify({ title: 'Rate Limited Video' }));
+    return { stdout: '' };
+  };
+
+  const { title, srtContent } = await fetchYoutubeTranscript(
+    'https://www.youtube.com/watch?v=abc',
+    { _ytDlp: mockYtDlp, _retryDelayMs: 0 },
+  );
+
+  assert.equal(title, 'Rate Limited Video');
+  assert.match(srtContent, /10,000 tool changes\./);
+  assert.equal(callCount, 3);
+});
+
+test('fetchYoutubeTranscript throws extraction_failed when retry also fails on 429', async () => {
+  const mockYtDlp = async () => { throw new Error('HTTP Error 429: Too Many Requests'); };
+
+  await assert.rejects(
+    () => fetchYoutubeTranscript('https://www.youtube.com/watch?v=abc', { _ytDlp: mockYtDlp, _retryDelayMs: 0 }),
+    (err) => err instanceof ExtractionError && err.code === 'extraction_failed',
+  );
+});
+
 test('fetchYoutubeTranscript derives canonical URL for youtu.be short links', async () => {
   const mockYtDlp = async (args) => {
     const oIdx = args.indexOf('-o');

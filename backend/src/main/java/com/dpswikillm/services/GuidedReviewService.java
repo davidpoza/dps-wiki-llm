@@ -99,7 +99,7 @@ public class GuidedReviewService {
             }
         }
 
-        MutationResult result = applyAccepted(job, accepted, "guided-review-" + jobId);
+        MutationResult result = applyAccepted(job, accepted, "guided-review-" + jobId, true);
         if (result.created().isEmpty() && result.updated().isEmpty()) {
             recordOperation(job, result, null);
         }
@@ -107,7 +107,8 @@ public class GuidedReviewService {
     }
 
     @Transactional
-    public MutationResult applyAccepted(Job job, List<JobConnectionCandidate> accepted, String planId) throws Exception {
+    public MutationResult applyAccepted(Job job, List<JobConnectionCandidate> accepted, String planId,
+                                        boolean commitImmediately) throws Exception {
         if (accepted == null || accepted.isEmpty()) {
             return MutationResult.empty(planId);
         }
@@ -132,24 +133,27 @@ public class GuidedReviewService {
         reindexService.reindexWiki();
         embeddingIndexService.embedIncremental();
 
-        List<String> changed = new ArrayList<>();
-        changed.addAll(result.created());
-        changed.addAll(result.updated());
-        if (!changed.isEmpty()) {
-            changed.add("state/runtime/idempotency-keys.json");
-            var commit = gitService.commitOperation(new OperationCommitRequest(
-                    "guided-review",
-                    job.getId().toString(),
-                    "Apply guided ingestion review",
-                    changed,
-                    Map.of("accepted", accepted.size())));
-            job.setCommitRange(appendRange(job, commit.commitRange()));
-            job.setAffectedPaths(toJson(appendAffectedPaths(job, changed)));
-            jobRepository.save(job);
-            recordOperation(job, result, commit.commitSha());
+        if (commitImmediately) {
+            List<String> changed = new ArrayList<>();
+            changed.addAll(result.created());
+            changed.addAll(result.updated());
+            if (!changed.isEmpty()) {
+                changed.add("state/runtime/idempotency-keys.json");
+                var commit = gitService.commitOperation(new OperationCommitRequest(
+                        "guided-review",
+                        job.getId().toString(),
+                        "Apply guided ingestion review",
+                        changed,
+                        Map.of("accepted", accepted.size())));
+                job.setCommitRange(appendRange(job, commit.commitRange()));
+                job.setAffectedPaths(toJson(appendAffectedPaths(job, changed)));
+                jobRepository.save(job);
+                recordOperation(job, result, commit.commitSha());
+            }
+
+            lifecycleService.transition(job.getId(), JobStatus.COMPLETED, "completed", "Guided review completed");
         }
 
-        lifecycleService.transition(job.getId(), JobStatus.COMPLETED, "completed", "Guided review completed");
         return result;
     }
 

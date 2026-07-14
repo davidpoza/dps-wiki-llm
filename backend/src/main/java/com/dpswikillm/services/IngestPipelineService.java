@@ -104,21 +104,20 @@ public class IngestPipelineService {
             reindexService.reindexWiki();
             embeddingIndexService.embedIncremental();
 
-            List<String> baselinePaths = new ArrayList<>(List.of(sourceNotePath, "INDEX.md", "state/runtime/idempotency-keys.json"));
-            var baselineCommit = gitService.commitOperation(new OperationCommitRequest(
-                    "ingest-baseline",
-                    job.getId().toString(),
-                    "Ingest baseline source note: " + payload.title(),
-                    baselinePaths,
-                    java.util.Map.of("source_id", payload.sourceId())));
-            recordCommitMetadata(job, preHead, baselineCommit.commitRange(), List.of(sourceNotePath, "INDEX.md"));
-
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "connection-discovery", "Requesting optional connection plan");
             MutationPlan llmPlan = requestOptionalPlan(payload, sourceNotePath);
             GuardrailResult guarded = guardrailService.guardrail(llmPlan, payload.rawPath(), sourceNotePath);
             var candidates = connectionDiscoveryService.discoverAndPersist(job, payload, sourceNotePath, guarded.plan());
 
             if (job.getMode() == JobMode.validated) {
+                List<String> baselinePaths = new ArrayList<>(List.of(sourceNotePath, "INDEX.md", "state/runtime/idempotency-keys.json"));
+                var baselineCommit = gitService.commitOperation(new OperationCommitRequest(
+                        "ingest-baseline",
+                        job.getId().toString(),
+                        "Ingest baseline source note: " + payload.title(),
+                        baselinePaths,
+                        java.util.Map.of("source_id", payload.sourceId())));
+                recordCommitMetadata(job, preHead, baselineCommit.commitRange(), List.of(sourceNotePath, "INDEX.md"));
                 lifecycleService.transition(job.getId(), JobStatus.AWAITING_REVIEW, "awaiting-review",
                         "Baseline committed; connection application deferred to guided review");
                 lifecycleService.awaitingReview(job, "Connection candidates ready for review", objectMapper.writeValueAsString(candidates));
@@ -126,10 +125,28 @@ public class IngestPipelineService {
                 return;
             }
 
+            MutationResult connectionsResult = MutationResult.empty("no-connections");
             if (!candidates.isEmpty()) {
                 candidates.forEach(candidate -> candidate.setDecision(ConnectionCandidateDecision.accepted));
-                guidedReviewService.applyAccepted(job, candidates, "unattended-connections-" + job.getId());
+                connectionsResult = guidedReviewService.applyAccepted(job, candidates,
+                        "unattended-connections-" + job.getId(), false);
             }
+
+            List<String> allPaths = new ArrayList<>(List.of(sourceNotePath, "INDEX.md"));
+            allPaths.addAll(connectionsResult.created());
+            allPaths.addAll(connectionsResult.updated());
+            allPaths.add("state/runtime/idempotency-keys.json");
+            int connectionCount = connectionsResult.created().size() + connectionsResult.updated().size();
+            String commitMessage = connectionCount > 0
+                    ? "Ingest: " + payload.title() + " (+" + connectionCount + " connections)"
+                    : "Ingest: " + payload.title();
+            var ingestCommit = gitService.commitOperation(new OperationCommitRequest(
+                    "ingest",
+                    job.getId().toString(),
+                    commitMessage,
+                    allPaths,
+                    java.util.Map.of("source_id", payload.sourceId(), "connections", connectionCount)));
+            recordCommitMetadata(job, preHead, ingestCommit.commitRange(), allPaths);
 
             lifecycleService.transition(job.getId(), JobStatus.COMPLETED, "completed", "Ingest completed");
             tx.clear();

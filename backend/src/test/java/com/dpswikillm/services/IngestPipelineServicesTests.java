@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -130,6 +131,7 @@ class IngestPipelineServicesTests {
                 .toList()).hasSize(1);
         assertThat(Files.readString(vault.resolve("INDEX.md"))).contains("Fixture");
         assertThat(git("rev-parse", "HEAD")).isNotEqualTo(before);
+        assertThat(git("rev-list", "--count", before + "..HEAD")).isEqualTo("1");
     }
 
     @Test
@@ -164,7 +166,7 @@ class IngestPipelineServicesTests {
         ConnectionDiscoveryService discovery = mock(ConnectionDiscoveryService.class);
         when(discovery.discoverAndPersist(any(), any(), anyString(), any())).thenReturn(List.of(candidate));
         GuidedReviewService guidedReview = mock(GuidedReviewService.class);
-        when(guidedReview.applyAccepted(any(Job.class), any(), any())).thenReturn(MutationResult.empty("mock"));
+        when(guidedReview.applyAccepted(any(Job.class), any(), any(), anyBoolean())).thenReturn(MutationResult.empty("mock"));
         PipelineHarness harness = pipeline(new StubEmbeddingClient(), discovery, guidedReview);
 
         Job job = new Job();
@@ -176,7 +178,7 @@ class IngestPipelineServicesTests {
         harness.pipeline().run(job);
 
         verify(harness.lifecycle()).awaitingReview(any(Job.class), anyString(), anyString());
-        verify(guidedReview, never()).applyAccepted(any(Job.class), any(), any());
+        verify(guidedReview, never()).applyAccepted(any(Job.class), any(), any(), anyBoolean());
     }
 
     @Test
@@ -190,7 +192,7 @@ class IngestPipelineServicesTests {
         ConnectionDiscoveryService discovery = mock(ConnectionDiscoveryService.class);
         when(discovery.discoverAndPersist(any(), any(), anyString(), any())).thenReturn(List.of(candidate));
         GuidedReviewService guidedReview = mock(GuidedReviewService.class);
-        when(guidedReview.applyAccepted(any(Job.class), any(), any())).thenReturn(new MutationResult(
+        when(guidedReview.applyAccepted(any(Job.class), any(), any(), anyBoolean())).thenReturn(new MutationResult(
                 "auto", List.of(), List.of("wiki/concepts/existing.md"), List.of(), List.of()));
         PipelineHarness harness = pipeline(new StubEmbeddingClient(), discovery, guidedReview);
 
@@ -203,7 +205,84 @@ class IngestPipelineServicesTests {
         harness.pipeline().run(job);
 
         assertThat(candidate.getDecision()).isEqualTo(ConnectionCandidateDecision.accepted);
-        verify(guidedReview).applyAccepted(any(Job.class), any(), anyString());
+        verify(guidedReview).applyAccepted(any(Job.class), any(), anyString(), anyBoolean());
+    }
+
+    @Test
+    void unattendedIngestWithConnectionsProducesExactlyOneCommit() throws Exception {
+        Files.createDirectories(vault.resolve("raw/inbox"));
+        Files.createDirectories(vault.resolve("wiki/concepts"));
+        Files.writeString(vault.resolve("raw/inbox/input.md"), "# Fixture\n\nA grounded fact.");
+        Files.writeString(vault.resolve("wiki/concepts/existing.md"), """
+                ---
+                type: concept
+                title: Existing
+                ---
+
+                # Existing
+
+                ## Summary
+                An existing concept.
+                """);
+        git("add", ".");
+        git("commit", "-m", "raw and concept fixtures");
+        String before = git("rev-parse", "HEAD");
+
+        JobConnectionCandidate candidate = candidate("wiki/concepts/existing.md", "wiki/sources/fixture.md");
+        ReflectionTestUtils.setField(candidate, "id", UUID.randomUUID());
+        ConnectionDiscoveryService discovery = mock(ConnectionDiscoveryService.class);
+        when(discovery.discoverAndPersist(any(), any(), anyString(), any())).thenReturn(List.of(candidate));
+
+        VaultPathResolver resolver = resolver();
+        FakeRepository documentRepository = new FakeRepository();
+        JobRepository jobRepository = mock(JobRepository.class);
+        when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(jobRepository.findById(any())).thenAnswer(invocation -> {
+            Job j = new Job();
+            ReflectionTestUtils.setField(j, "id", invocation.getArgument(0));
+            return Optional.of(j);
+        });
+        JobConnectionCandidateRepository candidateRepository = mock(JobConnectionCandidateRepository.class);
+        when(candidateRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        OperationRepository operationRepository = mock(OperationRepository.class);
+        when(operationRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        JobLifecycleService lifecycle = mock(JobLifecycleService.class);
+        when(lifecycle.transition(any(), any(JobStatus.class), any(), any())).thenAnswer(invocation -> new Job());
+        ReindexService reindex = new ReindexService(resolver, new MarkdownService(), documentRepository);
+        EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, new StubEmbeddingClient(), properties());
+        GuidedReviewService realGuidedReview = new GuidedReviewService(
+                jobRepository, candidateRepository, operationRepository,
+                new MutationApplier(resolver, new MarkdownService(), new ObjectMapper()),
+                reindex, embeddings,
+                new GitService(resolver, new GitProperties("Test User", "test@example.local")),
+                lifecycle, new ObjectMapper());
+
+        LlmClient llm = new SequencedLlmClient();
+        PromptService ps = mock(PromptService.class);
+        when(ps.getText(anyString())).thenReturn("system prompt");
+        IngestPipelineService pipeline = new IngestPipelineService(
+                new SourceNormalizer(resolver),
+                new SourceNoteLlmService(llm, new JsonExtractionService(new ObjectMapper()), ps),
+                new SourceNotePlanner(),
+                new LlmMutationPlanService(llm, new JsonExtractionService(new ObjectMapper()), new ObjectMapper(), ps),
+                new MutationGuardrailService(resolver),
+                new MutationApplier(resolver, new MarkdownService(), new ObjectMapper()),
+                new RootIndexService(resolver),
+                reindex, embeddings,
+                new GitService(resolver, new GitProperties("Test User", "test@example.local")),
+                resolver, lifecycle, jobRepository, discovery, realGuidedReview,
+                new ObjectMapper().findAndRegisterModules());
+
+        Job job = new Job();
+        ReflectionTestUtils.setField(job, "id", UUID.randomUUID());
+        job.setType(JobType.INGEST);
+        job.setMode(JobMode.unattended);
+        job.setPayloadRef("raw/inbox/input.md");
+        job.setQueuePosition(1);
+
+        pipeline.run(job);
+
+        assertThat(git("rev-list", "--count", before + "..HEAD")).isEqualTo("1");
     }
 
     @Test
@@ -278,7 +357,7 @@ class IngestPipelineServicesTests {
                 List.of("wiki/concepts/manual.md"));
 
         MutationResult first = reviewService.review(jobId, request);
-        MutationResult second = reviewService.applyAccepted(job, List.of(persisted), "guided-review-" + jobId);
+        MutationResult second = reviewService.applyAccepted(job, List.of(persisted), "guided-review-" + jobId, true);
 
         assertThat(first.updated()).contains("wiki/concepts/target.md", "wiki/concepts/manual.md");
         assertThat(second.idempotentHits()).contains("review:" + jobId + ":wiki/concepts/target.md:wiki/sources/source.md");
@@ -297,7 +376,7 @@ class IngestPipelineServicesTests {
         ConnectionDiscoveryService discovery = mock(ConnectionDiscoveryService.class);
         GuidedReviewService guidedReview = mock(GuidedReviewService.class);
         try {
-            when(guidedReview.applyAccepted(any(Job.class), any(), any())).thenReturn(MutationResult.empty("mock"));
+            when(guidedReview.applyAccepted(any(Job.class), any(), any(), anyBoolean())).thenReturn(MutationResult.empty("mock"));
         } catch (Exception ex) {
             throw new IllegalStateException(ex);
         }
