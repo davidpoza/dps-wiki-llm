@@ -24,6 +24,13 @@ class AppTranslocoLoader implements TranslocoLoader {
   }
 }
 
+function detectLang(): 'es' | 'en' {
+  const browserLang = navigator.language ?? navigator.languages?.[0] ?? '';
+  return browserLang.toLowerCase().startsWith('es') ? 'es' : 'en';
+}
+
+const activeLang = detectLang();
+
 bootstrapApplication(AppComponent, {
   providers: [
     provideHttpClient(withInterceptors([authInterceptor, loadingInterceptor])),
@@ -45,7 +52,7 @@ bootstrapApplication(AppComponent, {
     provideTransloco({
       config: {
         availableLangs: ['es', 'en'],
-        defaultLang: 'es',
+        defaultLang: activeLang,
         reRenderOnLangChange: false,
         prodMode: false,
       },
@@ -53,7 +60,7 @@ bootstrapApplication(AppComponent, {
     }),
     {
       provide: APP_INITIALIZER,
-      useFactory: (transloco: TranslocoService) => () => firstValueFrom(transloco.load('es')),
+      useFactory: (transloco: TranslocoService) => () => firstValueFrom(transloco.load(activeLang)),
       deps: [TranslocoService],
       multi: true,
     },

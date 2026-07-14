@@ -122,8 +122,13 @@ export class JobsViewerComponent {
   readonly pageSize = PAGE_SIZE;
   readonly first = signal(0);
 
+  private readonly ACTIVE_STATUSES: ReadonlySet<JobStatus> = new Set(['QUEUED', 'STARTED', 'PROGRESS', 'AWAITING_REVIEW']);
+
   readonly sortedJobs = computed(() =>
     [...this.store.jobs().values()].sort((a, b) => {
+      const aActive = this.ACTIVE_STATUSES.has(a.status) ? 0 : 1;
+      const bActive = this.ACTIVE_STATUSES.has(b.status) ? 0 : 1;
+      if (aActive !== bActive) return aActive - bActive;
       const ta = a.createdAt ? new Date(a.createdAt).getTime() : Number.MAX_SAFE_INTEGER;
       const tb = b.createdAt ? new Date(b.createdAt).getTime() : Number.MAX_SAFE_INTEGER;
       return tb - ta;

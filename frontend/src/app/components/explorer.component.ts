@@ -742,10 +742,31 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
     });
   }
 
+  private getExpandedPaths(nodes: TreeNode[]): Set<string> {
+    const paths = new Set<string>();
+    const collect = (ns: TreeNode[]) => {
+      for (const n of ns) {
+        if (n.expanded) paths.add(n.data as string);
+        if (n.children?.length) collect(n.children);
+      }
+    };
+    collect(nodes);
+    return paths;
+  }
+
+  private restoreExpanded(nodes: TreeNode[], expanded: Set<string>): TreeNode[] {
+    return nodes.map(n => ({
+      ...n,
+      expanded: expanded.has(n.data as string),
+      children: n.children ? this.restoreExpanded(n.children, expanded) : [],
+    }));
+  }
+
   private reloadTree(): void {
+    const expanded = this.getExpandedPaths(this.treeNodes());
     this.fileService.getTree().subscribe({
       next: nodes => {
-        this.treeNodes.set(nodes);
+        this.treeNodes.set(this.restoreExpanded(nodes, expanded));
         this.cdr.markForCheck();
       },
       error: () =>
@@ -980,13 +1001,14 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy {
   }
 
   private parseFrontmatter(raw: string): { data: Record<string, unknown>; content: string } {
-    const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-    if (!match) return { data: {}, content: raw };
+    const input = raw.startsWith('﻿') ? raw.slice(1) : raw;
+    const match = input.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)([\s\S]*)$/);
+    if (!match) return { data: {}, content: input };
     try {
       const data = (parseYaml(match[1]) ?? {}) as Record<string, unknown>;
       return { data, content: match[2] };
     } catch {
-      return { data: {}, content: raw };
+      return { data: {}, content: match[2] };
     }
   }
 

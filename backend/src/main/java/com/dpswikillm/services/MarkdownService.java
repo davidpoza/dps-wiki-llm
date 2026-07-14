@@ -161,11 +161,19 @@ public class MarkdownService {
         if (value instanceof Iterable<?> items) {
             out.append(key).append(":\n");
             for (Object item : items) {
-                out.append("  - ").append(item).append("\n");
+                out.append("  - ").append(yamlScalar(item)).append("\n");
             }
             return;
         }
-        out.append(key).append(": ").append(value == null ? "" : value).append("\n");
+        out.append(key).append(": ").append(yamlScalar(value)).append("\n");
+    }
+
+    private static String yamlScalar(Object value) {
+        if (value == null) return "";
+        if (value instanceof String s) {
+            return '"' + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ") + '"';
+        }
+        return value.toString();
     }
 
     private String renderSection(String title, String content) {
