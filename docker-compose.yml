@@ -127,7 +127,7 @@ services:
     volumes:
       - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "8080:80"
+      - "2141:80"
     depends_on:
       frontend:
         condition: service_started

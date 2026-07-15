@@ -15,4 +15,3 @@ frontend/dist/
 .env
 .env.*
 !.env.sample
-backend/secrets.yml
