@@ -103,6 +103,10 @@ export class ApiService {
     return this.http.post<EnqueueResponse>(`/api/jobs/${jobId}/revert`, {});
   }
 
+  cancelJob(jobId: string): Observable<void> {
+    return this.http.delete<void>(`/api/jobs/${jobId}`);
+  }
+
   lookupFiles(q: string, limit = 10): Observable<FileSearchResult[]> {
     return this.http.get<FileSearchResult[]>('/api/files/lookup', { params: { q, limit: String(limit) } });
   }

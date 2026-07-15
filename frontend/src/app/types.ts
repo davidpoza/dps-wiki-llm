@@ -13,7 +13,7 @@ export interface Commit {
   message: string;
   files: CommitFileStat[];
 }
-export type JobStatus = 'QUEUED' | 'STARTED' | 'PROGRESS' | 'AWAITING_REVIEW' | 'COMPLETED' | 'FAILED' | 'REVERTED';
+export type JobStatus = 'QUEUED' | 'STARTED' | 'PROGRESS' | 'AWAITING_REVIEW' | 'COMPLETED' | 'FAILED' | 'REVERTED' | 'CANCELLED';
 
 export interface JobPhase {
   step: string;

@@ -13,6 +13,7 @@ import com.dpswikillm.repositories.JobRepository;
 import com.dpswikillm.services.FileLookupService;
 import com.dpswikillm.services.GuidedReviewService;
 import com.dpswikillm.services.JobEventService;
+import com.dpswikillm.services.JobLifecycleService;
 import com.dpswikillm.services.JobQueueService;
 import com.dpswikillm.services.RawIntakeService;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -23,6 +24,7 @@ import java.io.IOException;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,17 +39,20 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public class JobController {
     private final JobEventService eventService;
     private final JobQueueService queueService;
+    private final JobLifecycleService lifecycleService;
     private final JobRepository jobRepository;
     private final RawIntakeService rawIntakeService;
     private final GuidedReviewService guidedReviewService;
     private final FileLookupService fileLookupService;
     private final ObjectMapper objectMapper;
 
-    public JobController(JobEventService eventService, JobQueueService queueService, JobRepository jobRepository,
+    public JobController(JobEventService eventService, JobQueueService queueService,
+                         JobLifecycleService lifecycleService, JobRepository jobRepository,
                          RawIntakeService rawIntakeService, GuidedReviewService guidedReviewService,
                          FileLookupService fileLookupService, ObjectMapper objectMapper) {
         this.eventService = eventService;
         this.queueService = queueService;
+        this.lifecycleService = lifecycleService;
         this.jobRepository = jobRepository;
         this.rawIntakeService = rawIntakeService;
         this.guidedReviewService = guidedReviewService;
@@ -81,6 +86,12 @@ public class JobController {
     @GetMapping("/jobs/{id}")
     public Job getJob(@PathVariable UUID id) {
         return jobRepository.findById(id).orElseThrow();
+    }
+
+    @DeleteMapping("/jobs/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cancelJob(@PathVariable UUID id) {
+        lifecycleService.cancelJob(id);
     }
 
     @PostMapping("/ingest")

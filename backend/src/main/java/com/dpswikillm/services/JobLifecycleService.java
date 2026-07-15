@@ -5,8 +5,10 @@ import com.dpswikillm.domain.JobStatus;
 import com.dpswikillm.dto.JobEvent;
 import com.dpswikillm.repositories.JobRepository;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class JobLifecycleService {
@@ -47,6 +49,19 @@ public class JobLifecycleService {
     public void awaitingReview(Job job, String message, String result) {
         eventService.broadcast(new JobEvent(JobStatus.AWAITING_REVIEW, job.getId(), job.getType(), job.getQueuePosition(),
                 "awaiting-review", null, null, message, result));
+    }
+
+    @Transactional
+    public void cancelJob(UUID jobId) {
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (job.getStatus() != JobStatus.QUEUED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Job is not in QUEUED state");
+        }
+        job.transitionTo(JobStatus.CANCELLED);
+        Job saved = jobRepository.save(job);
+        eventService.broadcast(new JobEvent(JobStatus.CANCELLED, saved.getId(), saved.getType(),
+                saved.getQueuePosition(), "cancelled", null, null, null, null));
     }
 
     private String escapeJson(String value) {

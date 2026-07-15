@@ -33,6 +33,10 @@ const PAGE_SIZE = 10;
                 <button pButton type="button" [label]="'jobs.revert' | transloco" severity="danger" size="small"
                         (click)="revert(job.id)"></button>
               }
+              @if (canCancel(job)) {
+                <button pButton type="button" [label]="'common.cancel' | transloco" severity="warn" size="small"
+                        (click)="cancel(job.id)"></button>
+              }
             </div>
             <div class="job-id">{{ job.id }}</div>
 
@@ -150,6 +154,7 @@ export class JobsViewerComponent {
       case 'FAILED': return 'danger';
       case 'AWAITING_REVIEW': return 'warn';
       case 'REVERTED': return 'secondary';
+      case 'CANCELLED': return 'secondary';
       case 'QUEUED': return 'info';
       default: return 'info';
     }
@@ -161,5 +166,13 @@ export class JobsViewerComponent {
 
   revert(jobId: string): void {
     this.api.enqueueRevert(jobId).subscribe({ error: err => console.error('Revert failed', err) });
+  }
+
+  canCancel(job: JobState): boolean {
+    return job.status === 'QUEUED';
+  }
+
+  cancel(jobId: string): void {
+    this.api.cancelJob(jobId).subscribe({ error: err => console.error('Cancel failed', err) });
   }
 }

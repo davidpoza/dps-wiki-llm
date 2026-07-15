@@ -7,5 +7,6 @@ public enum JobStatus {
     AWAITING_REVIEW,
     COMPLETED,
     FAILED,
-    REVERTED
+    REVERTED,
+    CANCELLED
 }

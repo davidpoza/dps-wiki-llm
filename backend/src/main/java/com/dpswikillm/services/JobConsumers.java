@@ -28,6 +28,9 @@ public class JobConsumers {
 
     @RabbitListener(queues = RabbitConfig.WRITE_QUEUE)
     public void consumeWriteJob(JobMessage message) {
+        if (jobRepository.findById(message.jobId()).map(j -> j.getStatus() == JobStatus.CANCELLED).orElse(false)) {
+            return;
+        }
         lifecycleService.transition(message.jobId(), JobStatus.STARTED, "started", "Write job started");
         try {
             if (message.jobType() == JobType.INGEST) {
@@ -47,6 +50,9 @@ public class JobConsumers {
 
     @RabbitListener(queues = RabbitConfig.ANSWER_QUEUE)
     public void consumeAnswerJob(JobMessage message) {
+        if (jobRepository.findById(message.jobId()).map(j -> j.getStatus() == JobStatus.CANCELLED).orElse(false)) {
+            return;
+        }
         lifecycleService.transition(message.jobId(), JobStatus.STARTED, "started", "Answer job started");
         try {
             answerPipelineService.run(jobRepository.findById(message.jobId()).orElseThrow());
