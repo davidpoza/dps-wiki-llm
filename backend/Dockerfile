@@ -8,8 +8,8 @@ RUN mvn -q -DskipTests package
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends git pandoc weasyprint && rm -rf /var/lib/apt/lists/*
-RUN addgroup --system spring && adduser --system --ingroup spring spring
+RUN groupadd -g 1000 spring && useradd -u 1000 -g spring spring
 COPY --from=build /workspace/target/dps-wiki-llm-backend-*.jar app.jar
-USER spring:spring
+USER 1000:1000
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

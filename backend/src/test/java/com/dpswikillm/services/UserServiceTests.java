@@ -3,7 +3,6 @@ package com.dpswikillm.services;
 import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.domain.User;
 import com.dpswikillm.repositories.UserRepository;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +34,7 @@ class UserServiceTests {
     void setUp() {
         passwordEncoder = new BCryptPasswordEncoder();
         AppProperties props = new AppProperties(
-                Path.of("/vault"),
+                "/vault",
                 List.of(),
                 null, null, null,
                 new AppProperties.Jwt("", 86400000L),

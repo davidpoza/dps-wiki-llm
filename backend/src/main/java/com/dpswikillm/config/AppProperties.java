@@ -1,13 +1,12 @@
 package com.dpswikillm.config;
 
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app")
 public record AppProperties(
-        Path vaultPath,
+        String vaultPath,
         List<String> corsAllowedOrigins,
         Embeddings embeddings,
         Llm llm,
@@ -18,7 +17,7 @@ public record AppProperties(
 ) {
     public AppProperties {
         if (vaultPath == null) {
-            vaultPath = Path.of("/vault");
+            vaultPath = "/vault";
         }
         if (corsAllowedOrigins == null || corsAllowedOrigins.isEmpty()) {
             corsAllowedOrigins = List.of("http://localhost:4200", "http://localhost:8080");

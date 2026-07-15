@@ -1,7 +1,6 @@
 package com.dpswikillm.security;
 
 import com.dpswikillm.config.AppProperties;
-import java.nio.file.Path;
 import java.util.Base64;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +19,7 @@ class JwtUtilTests {
         // 32-byte secret for HS256
         String secret = Base64.getEncoder().encodeToString(new byte[32]);
         AppProperties props = new AppProperties(
-                Path.of("/vault"),
+                "/vault",
                 List.of(),
                 null, null, null,
                 new AppProperties.Jwt(secret, 3600000L),
@@ -66,7 +65,7 @@ class JwtUtilTests {
         // Create util with -1ms expiry (already expired)
         String secret = Base64.getEncoder().encodeToString(new byte[32]);
         AppProperties propsExpired = new AppProperties(
-                Path.of("/vault"),
+                "/vault",
                 List.of(),
                 null, null, null,
                 new AppProperties.Jwt(secret, -1L),
