@@ -8,6 +8,9 @@ spring:
     import: optional:file:./secrets.yml
   application:
     name: dps-wiki-llm
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/dps_wiki}
     username: ${SPRING_DATASOURCE_USERNAME:dps_wiki}
