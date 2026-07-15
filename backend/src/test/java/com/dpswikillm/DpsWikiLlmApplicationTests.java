@@ -3,6 +3,8 @@ package com.dpswikillm;
 import com.dpswikillm.repositories.DocumentIndexRepository;
 import com.dpswikillm.repositories.JobConnectionCandidateRepository;
 import com.dpswikillm.repositories.JobRepository;
+import com.dpswikillm.repositories.LlmPromptRepository;
+import com.dpswikillm.repositories.LoginEventRepository;
 import com.dpswikillm.repositories.OperationRepository;
 import com.dpswikillm.repositories.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -28,6 +30,12 @@ class DpsWikiLlmApplicationTests {
 
     @MockBean
     OperationRepository operationRepository;
+
+    @MockBean
+    LlmPromptRepository llmPromptRepository;
+
+    @MockBean
+    LoginEventRepository loginEventRepository;
 
     @MockBean
     UserRepository userRepository;

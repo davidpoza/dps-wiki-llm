@@ -9,7 +9,7 @@ public class VaultPathResolver {
     private final Path vaultRoot;
 
     public VaultPathResolver(AppProperties properties) {
-        this.vaultRoot = properties.vaultPath().toAbsolutePath().normalize();
+        this.vaultRoot = Path.of(properties.vaultPath()).toAbsolutePath().normalize();
     }
 
     public Path resolve(String vaultRelativePath) {

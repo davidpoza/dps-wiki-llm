@@ -11,6 +11,7 @@ import com.dpswikillm.repositories.UserRepository;
 import com.dpswikillm.security.JwtAuthFilter;
 import com.dpswikillm.security.JwtUtil;
 import com.dpswikillm.security.TotpService;
+import com.dpswikillm.services.LoginEventService;
 import com.dpswikillm.services.UserService;
 import java.util.Optional;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -57,6 +58,9 @@ class AuthControllerTests {
 
     @MockBean
     private TotpService totpService;
+
+    @MockBean
+    private LoginEventService loginEventService;
 
     @Test
     void login_validCredentials_returns200WithToken() throws Exception {

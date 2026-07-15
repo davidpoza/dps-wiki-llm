@@ -115,7 +115,7 @@ class AnswerPipelineServiceTests {
     }
 
     private VaultPathResolver resolver() {
-        return new VaultPathResolver(new AppProperties(vault, List.of(),
+        return new VaultPathResolver(new AppProperties(vault.toString(), List.of(),
                 new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1)),
                 new AppProperties.Llm("http://localhost", "model", ""),
                 new AppProperties.Telegram("", ""), null, null, null));
