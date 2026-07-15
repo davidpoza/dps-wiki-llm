@@ -26,41 +26,69 @@ import { ThemeService } from '../services/theme.service';
           (onClick)="theme.toggle()"
         />
         <h2>{{ 'common.brand' | transloco }}</h2>
-        <form (ngSubmit)="submit()" #f="ngForm">
-          <div class="field">
-            <label for="username">{{ 'login.username' | transloco }}</label>
-            <input
-              pInputText
-              id="username"
-              [ngModel]="username()"
-              (ngModelChange)="username.set($event)"
-              name="username"
-              autocomplete="username"
-              required
+        @if (!challengeToken()) {
+          <form (ngSubmit)="submit()" #f="ngForm">
+            <div class="field">
+              <label for="username">{{ 'login.username' | transloco }}</label>
+              <input
+                pInputText
+                id="username"
+                [ngModel]="username()"
+                (ngModelChange)="username.set($event)"
+                name="username"
+                autocomplete="username"
+                required
+              />
+            </div>
+            <div class="field">
+              <label for="password">{{ 'login.password' | transloco }}</label>
+              <p-password
+                inputId="password"
+                [ngModel]="password()"
+                (ngModelChange)="password.set($event)"
+                name="password"
+                [feedback]="false"
+                [toggleMask]="true"
+                autocomplete="current-password"
+              />
+            </div>
+            @if (error()) {
+              <p class="error">{{ error() }}</p>
+            }
+            <p-button
+              type="submit"
+              [label]="'login.signIn' | transloco"
+              [loading]="loading()"
+              styleClass="w-full"
             />
-          </div>
-          <div class="field">
-            <label for="password">{{ 'login.password' | transloco }}</label>
-            <p-password
-              inputId="password"
-              [ngModel]="password()"
-              (ngModelChange)="password.set($event)"
-              name="password"
-              [feedback]="false"
-              [toggleMask]="true"
-              autocomplete="current-password"
+          </form>
+        } @else {
+          <form (ngSubmit)="submitCode()" #cf="ngForm">
+            <p class="hint">{{ 'login.twoFactorPrompt' | transloco }}</p>
+            <div class="field">
+              <label for="code">{{ 'login.twoFactorCode' | transloco }}</label>
+              <input
+                pInputText
+                id="code"
+                [ngModel]="code()"
+                (ngModelChange)="code.set($event)"
+                name="code"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                required
+              />
+            </div>
+            @if (error()) {
+              <p class="error">{{ error() }}</p>
+            }
+            <p-button
+              type="submit"
+              [label]="'login.verify' | transloco"
+              [loading]="loading()"
+              styleClass="w-full"
             />
-          </div>
-          @if (error()) {
-            <p class="error">{{ error() }}</p>
-          }
-          <p-button
-            type="submit"
-            [label]="'login.signIn' | transloco"
-            [loading]="loading()"
-            styleClass="w-full"
-          />
-        </form>
+          </form>
+        }
       </div>
     </div>
   `,
@@ -84,6 +112,7 @@ import { ThemeService } from '../services/theme.service';
     }
     :host ::ng-deep .theme-button { position: absolute; top: .75rem; right: .75rem; }
     h2 { margin-bottom: 1.5rem; text-align: center; }
+    .hint { font-size: .875rem; margin-bottom: 1rem; text-align: center; }
     .field { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
     .field label { font-size: .875rem; font-weight: 500; }
     .error { color: var(--p-red-500); font-size: .875rem; margin-bottom: .75rem; }
@@ -100,6 +129,8 @@ export class LoginComponent {
 
   readonly username = signal('');
   readonly password = signal('');
+  readonly code = signal('');
+  readonly challengeToken = signal<string | null>(null);
   readonly error = signal('');
   readonly loading = signal(false);
 
@@ -107,10 +138,32 @@ export class LoginComponent {
     this.error.set('');
     this.loading.set(true);
     try {
-      await this.auth.login(this.username(), this.password());
-      await this.router.navigateByUrl('/');
+      const result = await this.auth.login(this.username(), this.password());
+      if (result.status === '2fa-required') {
+        this.challengeToken.set(result.challengeToken);
+        this.code.set('');
+      } else {
+        await this.router.navigateByUrl('/');
+      }
     } catch {
       this.error.set(this.t.translate('login.invalidCredentials'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async submitCode(): Promise<void> {
+    const token = this.challengeToken();
+    if (!token) {
+      return;
+    }
+    this.error.set('');
+    this.loading.set(true);
+    try {
+      await this.auth.verifyTwoFactor(token, this.code());
+      await this.router.navigateByUrl('/');
+    } catch {
+      this.error.set(this.t.translate('login.invalidCode'));
     } finally {
       this.loading.set(false);
     }

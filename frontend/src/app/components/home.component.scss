@@ -26,6 +26,15 @@
 .username {
   font-size: 0.875rem;
   color: var(--app-text-muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+.username:hover {
+  text-decoration: underline;
+  color: var(--app-text);
 }
 
 h1 {

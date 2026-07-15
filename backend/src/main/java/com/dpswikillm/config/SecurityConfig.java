@@ -48,6 +48,7 @@ public class SecurityConfig {
                         // so they are declared WITHOUT the "/api" prefix here.
                         .requestMatchers(
                                 "/auth/login",
+                                "/auth/login/2fa",
                                 "/error",
                                 "/actuator/health/**",
                                 "/v3/api-docs/**",

@@ -7,13 +7,18 @@
     "home": "Home",
     "darkMode": "Dark mode",
     "lightMode": "Light mode",
-    "brand": "DPS Wiki"
+    "brand": "DPS Wiki",
+    "loading": "Loading…"
   },
   "login": {
     "username": "Username",
     "password": "Password",
     "signIn": "Sign in",
-    "invalidCredentials": "Invalid username or password"
+    "invalidCredentials": "Invalid username or password",
+    "twoFactorPrompt": "Enter the 6-digit code from your authenticator app.",
+    "twoFactorCode": "Verification code",
+    "verify": "Verify",
+    "invalidCode": "Invalid or expired code"
   },
   "home": {
     "subtitle": "Knowledge pipeline",
@@ -141,5 +146,27 @@
     "confirmUnsavedHeader": "Unsaved changes",
     "confirmUnsavedMessage": "You have unsaved changes. Discard and open the selected file?",
     "confirmUnsavedNavigate": "You have unsaved changes. Discard and navigate?"
+  },
+  "profile": {
+    "title": "Profile",
+    "subtitle": "Your account",
+    "account": "Account",
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "passwordChanged": "Password changed successfully",
+    "passwordError": "Could not change password. Check your current password.",
+    "twoFactor": "Two-factor authentication",
+    "status": "Status",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "enable2fa": "Enable 2FA",
+    "disable2fa": "Disable 2FA",
+    "scanQr": "Scan this QR code with your authenticator app, then enter the generated code.",
+    "enterCode": "Verification code",
+    "confirm": "Confirm",
+    "disableHint": "Enter a current code to disable 2FA.",
+    "invalidCode": "Invalid code",
+    "twoFactorError": "Could not start 2FA setup."
   }
 }

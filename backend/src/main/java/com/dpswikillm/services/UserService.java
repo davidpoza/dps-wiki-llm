@@ -42,6 +42,46 @@ public class UserService implements UserDetailsService {
         return userRepository.save(user);
     }
 
+    public boolean matchesPassword(String rawPassword, String encodedPassword) {
+        return passwordEncoder.matches(rawPassword, encodedPassword);
+    }
+
+    @Transactional
+    public void changePassword(String username, String newRawPassword) {
+        User user = requireUser(username);
+        user.setPasswordHash(passwordEncoder.encode(newRawPassword));
+        userRepository.save(user);
+    }
+
+    /** Stores a pending TOTP secret without activating 2FA (activation requires code confirmation). */
+    @Transactional
+    public void storeTwoFactorSecret(String username, String secret) {
+        User user = requireUser(username);
+        user.setTwoFactorSecret(secret);
+        user.setTwoFactorEnabled(false);
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public void enableTwoFactor(String username) {
+        User user = requireUser(username);
+        user.setTwoFactorEnabled(true);
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public void disableTwoFactor(String username) {
+        User user = requireUser(username);
+        user.setTwoFactorEnabled(false);
+        user.setTwoFactorSecret(null);
+        userRepository.save(user);
+    }
+
+    private User requireUser(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+    }
+
     @PostConstruct
     @Transactional
     public void seedAdmin() {

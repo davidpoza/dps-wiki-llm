@@ -7,13 +7,18 @@
     "home": "Inicio",
     "darkMode": "Modo oscuro",
     "lightMode": "Modo claro",
-    "brand": "DPS Wiki"
+    "brand": "DPS Wiki",
+    "loading": "Cargando…"
   },
   "login": {
     "username": "Usuario",
     "password": "Contraseña",
     "signIn": "Entrar",
-    "invalidCredentials": "Usuario o contraseña incorrectos"
+    "invalidCredentials": "Usuario o contraseña incorrectos",
+    "twoFactorPrompt": "Introduce el código de 6 dígitos de tu app de autenticación.",
+    "twoFactorCode": "Código de verificación",
+    "verify": "Verificar",
+    "invalidCode": "Código incorrecto o caducado"
   },
   "home": {
     "subtitle": "Pipeline de conocimiento",
@@ -141,5 +146,27 @@
     "confirmUnsavedHeader": "Cambios sin guardar",
     "confirmUnsavedMessage": "Hay cambios sin guardar. ¿Descartar y abrir el fichero seleccionado?",
     "confirmUnsavedNavigate": "Hay cambios sin guardar. ¿Descartar y navegar?"
+  },
+  "profile": {
+    "title": "Perfil",
+    "subtitle": "Tu cuenta",
+    "account": "Cuenta",
+    "changePassword": "Cambiar contraseña",
+    "currentPassword": "Contraseña actual",
+    "newPassword": "Nueva contraseña",
+    "passwordChanged": "Contraseña cambiada correctamente",
+    "passwordError": "No se pudo cambiar la contraseña. Revisa tu contraseña actual.",
+    "twoFactor": "Verificación en dos pasos",
+    "status": "Estado",
+    "enabled": "Activada",
+    "disabled": "Desactivada",
+    "enable2fa": "Activar 2FA",
+    "disable2fa": "Desactivar 2FA",
+    "scanQr": "Escanea este código QR con tu app de autenticación e introduce el código generado.",
+    "enterCode": "Código de verificación",
+    "confirm": "Confirmar",
+    "disableHint": "Introduce un código actual para desactivar 2FA.",
+    "invalidCode": "Código incorrecto",
+    "twoFactorError": "No se pudo iniciar la configuración de 2FA."
   }
 }

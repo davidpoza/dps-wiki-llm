@@ -27,7 +27,7 @@ type Tab = 'jobs' | 'ingest' | 'chat' | 'review' | 'git';
           </div>
           <div class="topbar-actions">
             @if (currentUser()) {
-              <span class="username">{{ currentUser()?.username }}</span>
+              <button type="button" class="username" (click)="goToProfile()">{{ currentUser()?.username }}</button>
             }
             <p-button
               severity="secondary"
@@ -127,6 +127,10 @@ export class HomeComponent implements OnInit {
 
   goToSettings(): void {
     this.router.navigateByUrl('/settings');
+  }
+
+  goToProfile(): void {
+    this.router.navigateByUrl('/profile');
   }
 
   logout(): void {

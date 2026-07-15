@@ -10,6 +10,7 @@ import { AppComponent } from './app/app.component';
 import { ExplorerComponent } from './app/components/explorer.component';
 import { HomeComponent } from './app/components/home.component';
 import { LoginComponent } from './app/components/login.component';
+import { ProfileComponent } from './app/components/profile.component';
 import { SettingsComponent } from './app/components/settings.component';
 import { authInterceptor } from './app/services/auth.interceptor';
 import { loadingInterceptor } from './app/services/loading.interceptor';
@@ -51,6 +52,7 @@ bootstrapApplication(AppComponent, {
       { path: '', component: HomeComponent, canActivate: [authGuard] },
       { path: 'explorer', component: ExplorerComponent, canActivate: [authGuard], canDeactivate: [unsavedChangesGuard] },
       { path: 'settings', component: SettingsComponent, canActivate: [authGuard] },
+      { path: 'profile', component: ProfileComponent, canActivate: [authGuard] },
     ]),
     provideAnimationsAsync(),
     providePrimeNG({
