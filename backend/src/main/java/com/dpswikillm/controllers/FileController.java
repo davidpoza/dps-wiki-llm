@@ -4,6 +4,8 @@ import com.dpswikillm.dto.TreeNodeDto;
 import com.dpswikillm.services.FileService;
 import java.io.UncheckedIOException;
 import java.util.List;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -117,6 +119,27 @@ public class FileController {
         } catch (FileService.FileAlreadyExistsException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         } catch (UncheckedIOException | IllegalStateException e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @GetMapping(value = "/pdf", produces = "application/pdf")
+    public ResponseEntity<byte[]> exportPdf(@RequestParam("path") String path) {
+        try {
+            byte[] pdf = fileService.exportPdf(path);
+            String filename = path.contains("/")
+                    ? path.substring(path.lastIndexOf('/') + 1)
+                    : path;
+            if (filename.endsWith(".md")) filename = filename.substring(0, filename.length() - 3);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentDisposition(
+                    ContentDisposition.attachment().filename(filename + ".pdf").build());
+            return ResponseEntity.ok().headers(headers).body(pdf);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        } catch (FileService.NoSuchFileException e) {
+            return ResponseEntity.notFound().build();
+        } catch (FileService.PdfExportException | UncheckedIOException | IllegalStateException e) {
             return ResponseEntity.internalServerError().build();
         }
     }
