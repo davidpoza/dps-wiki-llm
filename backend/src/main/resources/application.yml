@@ -8,12 +8,6 @@ spring:
     import: optional:file:./secrets.yml
   application:
     name: dps-wiki-llm
-  autoconfigure:
-    exclude:
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/dps_wiki}
     username: ${SPRING_DATASOURCE_USERNAME:dps_wiki}
@@ -31,18 +25,6 @@ spring:
     port: ${SPRING_RABBITMQ_PORT:5672}
     username: ${SPRING_RABBITMQ_USERNAME:dps_wiki}
     password: ${SPRING_RABBITMQ_PASSWORD:dps_wiki}
-  ai:
-    openai:
-      base-url: ${LLM_BASE_URL:http://localhost:11434}
-      api-key: ${LLM_API_KEY:not-set}
-      chat:
-        options:
-          model: ${LLM_MODEL:gpt-oss}
-      embedding:
-        base-url: ${EMBED_BASE_URL:http://embeddings:8080}
-        api-key: ${EMBED_API_KEY:not-set}
-        options:
-          model: ${EMBED_MODEL:multilingual-e5-small}
 
 management:
   endpoints:
