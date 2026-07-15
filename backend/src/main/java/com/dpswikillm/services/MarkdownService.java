@@ -152,9 +152,18 @@ public class MarkdownService {
             if (separator <= 0) {
                 continue;
             }
-            values.put(line.substring(0, separator).trim(), line.substring(separator + 1).trim());
+            values.put(line.substring(0, separator).trim(), unquoteYamlScalar(line.substring(separator + 1).trim()));
         }
         return values;
+    }
+
+    private static String unquoteYamlScalar(String raw) {
+        if (raw.startsWith("\"") && raw.endsWith("\"") && raw.length() >= 2) {
+            return raw.substring(1, raw.length() - 1)
+                    .replace("\\\"", "\"")
+                    .replace("\\\\", "\\");
+        }
+        return raw;
     }
 
     private void appendFrontmatter(StringBuilder out, String key, Object value) {

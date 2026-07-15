@@ -10,6 +10,16 @@ class MarkdownServiceTests {
     private final MarkdownService markdownService = new MarkdownService();
 
     @Test
+    void frontmatterIsIdempotentAcrossMultiplePasses() {
+        String first = markdownService.mergeAndRender("", "Demo", Map.of("title", "Hello: World"), null);
+        String second = markdownService.mergeAndRender(first, "Demo", Map.of("title", "Hello: World"), null);
+        String third = markdownService.mergeAndRender(second, "Demo", Map.of("title", "Hello: World"), null);
+
+        assertThat(second).isEqualTo(first);
+        assertThat(third).isEqualTo(first);
+    }
+
+    @Test
     void mergeIsIdempotentForRepeatedSectionItems() {
         String first = markdownService.mergeAndRender("", "Demo", Map.of("type", "concept"),
                 Map.of("Facts", List.of("Fact one")));
