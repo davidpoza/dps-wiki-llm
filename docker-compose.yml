@@ -36,9 +36,10 @@ services:
     environment:
       MODEL_ID: intfloat/multilingual-e5-small
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health"]
+      start_period: 600s
       interval: 15s
-      timeout: 5s
+      timeout: 10s
       retries: 20
     networks:
       - dps-wiki

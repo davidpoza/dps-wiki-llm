@@ -12,4 +12,7 @@ frontend/dist/
 *.log
 
 # Local secrets — never commit
+.env
+.env.*
+!.env.sample
 backend/secrets.yml
