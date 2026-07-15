@@ -30,6 +30,9 @@ export const payloadTooLarge = (msg = 'Payload exceeds the maximum allowed size'
 export const invalidInput = (msg = 'Invalid input') =>
   new ExtractionError('invalid_input', 400, msg);
 
+export const botProtected = (msg = 'The page is protected by bot detection (e.g. reCAPTCHA)') =>
+  new ExtractionError('bot_protected', 422, msg);
+
 // Playwright surfaces timeouts as TimeoutError; normalize to our typed error.
 export function isTimeoutError(err) {
   return err && (err.name === 'TimeoutError' || /Timeout .* exceeded/i.test(err.message ?? ''));

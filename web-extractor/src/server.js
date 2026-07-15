@@ -6,6 +6,7 @@ import { render } from './renderer.js';
 import { extractFromHtml, extractFromPdf } from './extract.js';
 import { fetchPdf, isPdfUrl } from './pdf-fetcher.js';
 import { isYoutubeUrl, fetchYoutubeTranscript, srtToMarkdown } from './youtube-fetcher.js';
+import { isPmcUrl, fetchPmcArticle } from './ncbi-fetcher.js';
 import { ExtractionError, invalidUrl, invalidInput, payloadTooLarge, emptyContent } from './errors.js';
 
 export function validateUrl(body) {
@@ -53,6 +54,11 @@ export function buildApp(opts = {}) {
         const { srtContent, title, videoUrl } = await fetchYoutubeTranscript(url);
         const markdown = srtToMarkdown(srtContent, title);
         const metadata = { source: videoUrl, title, extractionConfidence: 'high' };
+        return reply.send({ markdown, metadata });
+      }
+
+      if (isPmcUrl(url)) {
+        const { markdown, metadata } = await fetchPmcArticle(url);
         return reply.send({ markdown, metadata });
       }
 

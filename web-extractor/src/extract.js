@@ -5,7 +5,21 @@ import { gfm } from 'turndown-plugin-gfm';
 import { PDFParse, VerbosityLevel } from 'pdf-parse';
 import { config } from './config.js';
 import { extractMetadata } from './metadata.js';
-import { emptyContent } from './errors.js';
+import { emptyContent, botProtected } from './errors.js';
+
+// Heuristics to detect bot-protection interstitial pages (reCAPTCHA, Cloudflare, etc.)
+const BOT_CANONICAL_PATTERNS = [/google\.com\/recaptcha/i, /challenges\.cloudflare\.com/i];
+const BOT_TITLE_PATTERNS = [/checking your browser/i, /attention required/i, /just a moment/i];
+
+function isBotProtectionPage(metadata) {
+  if (metadata?.canonicalUrl && BOT_CANONICAL_PATTERNS.some((p) => p.test(metadata.canonicalUrl))) {
+    return true;
+  }
+  if (metadata?.title && BOT_TITLE_PATTERNS.some((p) => p.test(metadata.title))) {
+    return true;
+  }
+  return false;
+}
 
 function makeTurndown() {
   const td = new TurndownService({
@@ -54,6 +68,10 @@ export function extractFromHtml(renderedHtml, finalUrl) {
   const dom = new JSDOM(renderedHtml, { url: finalUrl });
   const doc = dom.window.document;
   const metadata = extractMetadata(doc, finalUrl);
+
+  if (isBotProtectionPage(metadata)) {
+    throw botProtected();
+  }
 
   // Readability mutates the document, so clone for isolation.
   const readerDoc = dom.window.document.cloneNode(true);
