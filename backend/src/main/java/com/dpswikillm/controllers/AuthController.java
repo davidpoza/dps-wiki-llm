@@ -3,6 +3,7 @@ package com.dpswikillm.controllers;
 import com.dpswikillm.domain.User;
 import com.dpswikillm.dto.AuthResponse;
 import com.dpswikillm.dto.ChangePasswordRequest;
+import com.dpswikillm.dto.LoginEventDto;
 import com.dpswikillm.dto.LoginRequest;
 import com.dpswikillm.dto.RegisterRequest;
 import com.dpswikillm.dto.TwoFactorChallengeResponse;
@@ -12,7 +13,9 @@ import com.dpswikillm.dto.TwoFactorSetupResponse;
 import com.dpswikillm.repositories.UserRepository;
 import com.dpswikillm.security.JwtUtil;
 import com.dpswikillm.security.TotpService;
+import com.dpswikillm.services.LoginEventService;
 import com.dpswikillm.services.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
@@ -38,21 +41,25 @@ public class AuthController {
     private final UserService userService;
     private final UserRepository userRepository;
     private final TotpService totpService;
+    private final LoginEventService loginEventService;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtUtil jwtUtil,
                           UserService userService,
                           UserRepository userRepository,
-                          TotpService totpService) {
+                          TotpService totpService,
+                          LoginEventService loginEventService) {
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
         this.userService = userService;
         this.userRepository = userRepository;
         this.totpService = totpService;
+        this.loginEventService = loginEventService;
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request,
+                                   HttpServletRequest httpRequest) {
         try {
             Authentication auth = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.username(), request.password()));
@@ -61,15 +68,18 @@ public class AuthController {
                 String challengeToken = jwtUtil.generateChallengeToken(user.getUsername());
                 return ResponseEntity.ok(TwoFactorChallengeResponse.required(challengeToken));
             }
+            loginEventService.record((User) userDetails, request.username(), httpRequest, true, null);
             return ResponseEntity.ok(buildAuthResponse(userDetails));
         } catch (BadCredentialsException | DisabledException e) {
+            loginEventService.record(null, request.username(), httpRequest, false, "BAD_CREDENTIALS");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Invalid credentials"));
         }
     }
 
     @PostMapping("/login/2fa")
-    public ResponseEntity<?> loginTwoFactor(@Valid @RequestBody TwoFactorLoginRequest request) {
+    public ResponseEntity<?> loginTwoFactor(@Valid @RequestBody TwoFactorLoginRequest request,
+                                             HttpServletRequest httpRequest) {
         if (!jwtUtil.validateToken(request.challengeToken())
                 || !JwtUtil.SCOPE_2FA.equals(jwtUtil.extractScope(request.challengeToken()))) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -79,9 +89,11 @@ public class AuthController {
         User user = userRepository.findByUsername(username).orElse(null);
         if (user == null || !user.isTwoFactorEnabled()
                 || !totpService.isValidCode(user.getTwoFactorSecret(), request.code())) {
+            loginEventService.record(user, username, httpRequest, false, "INVALID_2FA_CODE");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Invalid code"));
         }
+        loginEventService.record(user, username, httpRequest, true, null);
         return ResponseEntity.ok(buildAuthResponse(user));
     }
 
@@ -105,6 +117,14 @@ public class AuthController {
                 "roles", user.getRoleList(),
                 "twoFactorEnabled", user.isTwoFactorEnabled()
         ));
+    }
+
+    @GetMapping("/login-history")
+    public ResponseEntity<List<LoginEventDto>> loginHistory(@AuthenticationPrincipal User user) {
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(loginEventService.getHistory(user));
     }
 
     @PostMapping("/password")

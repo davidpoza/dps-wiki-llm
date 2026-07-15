@@ -167,6 +167,15 @@
     "confirm": "Confirm",
     "disableHint": "Enter a current code to disable 2FA.",
     "invalidCode": "Invalid code",
-    "twoFactorError": "Could not start 2FA setup."
+    "twoFactorError": "Could not start 2FA setup.",
+    "loginHistory": "Access history",
+    "loginHistoryDate": "Date/Time",
+    "loginHistoryIp": "IP",
+    "loginHistoryCountry": "Country",
+    "loginHistoryCity": "City",
+    "loginHistoryResult": "Result",
+    "loginHistorySuccess": "Success",
+    "loginHistoryFailed": "Failed",
+    "loginHistoryEmpty": "No login records found."
   }
 }

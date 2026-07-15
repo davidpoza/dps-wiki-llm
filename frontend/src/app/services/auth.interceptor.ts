@@ -9,7 +9,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const router = inject(Router);
   const token = auth.token();
 
-  const isLoginRequest = req.url.includes('/api/auth/login');
+  const isLoginRequest = /\/api\/auth\/login(\/2fa)?$/.test(req.url);
 
   const outgoing = (!token || isLoginRequest)
     ? req

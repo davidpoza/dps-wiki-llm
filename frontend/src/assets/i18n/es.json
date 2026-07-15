@@ -167,6 +167,15 @@
     "confirm": "Confirmar",
     "disableHint": "Introduce un código actual para desactivar 2FA.",
     "invalidCode": "Código incorrecto",
-    "twoFactorError": "No se pudo iniciar la configuración de 2FA."
+    "twoFactorError": "No se pudo iniciar la configuración de 2FA.",
+    "loginHistory": "Historial de accesos",
+    "loginHistoryDate": "Fecha/Hora",
+    "loginHistoryIp": "IP",
+    "loginHistoryCountry": "País",
+    "loginHistoryCity": "Ciudad",
+    "loginHistoryResult": "Resultado",
+    "loginHistorySuccess": "Éxito",
+    "loginHistoryFailed": "Fallido",
+    "loginHistoryEmpty": "Sin registros de acceso."
   }
 }

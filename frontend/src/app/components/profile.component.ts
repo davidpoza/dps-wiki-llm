@@ -1,17 +1,20 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { InputText } from 'primeng/inputtext';
 import { Password } from 'primeng/password';
+import { TableModule } from 'primeng/table';
+import { TagModule } from 'primeng/tag';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
-import { AuthService, TwoFactorSetup } from '../services/auth.service';
+import { AuthService, LoginEvent, TwoFactorSetup } from '../services/auth.service';
 import { ThemeService } from '../services/theme.service';
 
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [FormsModule, ButtonModule, InputText, Password, TranslocoPipe],
+  imports: [FormsModule, ButtonModule, InputText, Password, TableModule, TagModule, TranslocoPipe, DatePipe],
   template: `
     <main class="app-shell">
       <section class="workspace">
@@ -103,12 +106,50 @@ import { ThemeService } from '../services/theme.service';
             }
           }
         </section>
+
+        <section class="card">
+          <h2>{{ 'profile.loginHistory' | transloco }}</h2>
+          @if (historyLoading()) {
+            <p>{{ 'common.loading' | transloco }}</p>
+          } @else {
+            <p-table [value]="loginHistory()" [loading]="historyLoading()" styleClass="history-table">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th>{{ 'profile.loginHistoryDate' | transloco }}</th>
+                  <th>{{ 'profile.loginHistoryIp' | transloco }}</th>
+                  <th>{{ 'profile.loginHistoryCountry' | transloco }}</th>
+                  <th>{{ 'profile.loginHistoryCity' | transloco }}</th>
+                  <th>{{ 'profile.loginHistoryResult' | transloco }}</th>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-event>
+                <tr>
+                  <td>{{ event.createdAt | date:'dd/MM/yyyy HH:mm:ss' }}</td>
+                  <td>{{ event.ipAddress || '—' }}</td>
+                  <td>{{ event.country || '—' }}</td>
+                  <td>{{ event.city || '—' }}</td>
+                  <td>
+                    @if (event.success) {
+                      <p-tag severity="success" [value]="'profile.loginHistorySuccess' | transloco" />
+                    } @else {
+                      <p-tag severity="danger"
+                             [value]="('profile.loginHistoryFailed' | transloco) + (event.failureReason ? ' · ' + event.failureReason : '')" />
+                    }
+                  </td>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="emptymessage">
+                <tr><td colspan="5">{{ 'profile.loginHistoryEmpty' | transloco }}</td></tr>
+              </ng-template>
+            </p-table>
+          }
+        </section>
       </section>
     </main>
   `,
   styles: [`
     .app-shell { height: 100vh; overflow-y: auto; background: var(--app-bg); color: var(--app-text); }
-    .workspace { max-width: 640px; margin: 0 auto; padding: 1.5rem; }
+    .workspace { max-width: 860px; margin: 0 auto; padding: 1.5rem; }
     .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
     .brand h1 { margin: 0; }
     .brand p { margin: 0; font-size: .875rem; opacity: .7; }
@@ -128,6 +169,9 @@ import { ThemeService } from '../services/theme.service';
     .qr { display: block; width: 200px; height: 200px; margin: .5rem 0; }
     .secret { font-family: monospace; letter-spacing: 1px; word-break: break-all; margin-bottom: 1rem; }
     p-password, :host ::ng-deep .p-password, :host ::ng-deep .p-password input { width: 100%; }
+    :host ::ng-deep .history-table { font-size: .875rem; }
+    :host ::ng-deep .history-table th { font-weight: 600; white-space: nowrap; }
+    :host ::ng-deep .history-table td { vertical-align: middle; }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -153,8 +197,11 @@ export class ProfileComponent implements OnInit {
   readonly twoFactorLoading = signal(false);
   readonly twoFactorError = signal('');
 
+  readonly loginHistory = signal<LoginEvent[]>([]);
+  readonly historyLoading = signal(true);
+
   async ngOnInit(): Promise<void> {
-    await this.refreshStatus();
+    await Promise.all([this.refreshStatus(), this.loadHistory()]);
   }
 
   private async refreshStatus(): Promise<void> {
@@ -163,6 +210,17 @@ export class ProfileComponent implements OnInit {
       this.twoFactorEnabled.set(await this.auth.fetchTwoFactorEnabled());
     } finally {
       this.statusLoading.set(false);
+    }
+  }
+
+  private async loadHistory(): Promise<void> {
+    this.historyLoading.set(true);
+    try {
+      this.loginHistory.set(await this.auth.fetchLoginHistory());
+    } catch {
+      this.loginHistory.set([]);
+    } finally {
+      this.historyLoading.set(false);
     }
   }
 

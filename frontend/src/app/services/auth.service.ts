@@ -30,6 +30,16 @@ export interface TwoFactorSetup {
   qrDataUri: string;
 }
 
+export interface LoginEvent {
+  id: string;
+  createdAt: string;
+  ipAddress: string | null;
+  country: string | null;
+  city: string | null;
+  success: boolean;
+  failureReason: string | null;
+}
+
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 
@@ -96,6 +106,10 @@ export class AuthService {
 
   async disableTwoFactor(code: string): Promise<void> {
     await firstValueFrom(this.http.post('/api/auth/2fa/disable', { code }));
+  }
+
+  fetchLoginHistory(): Promise<LoginEvent[]> {
+    return firstValueFrom(this.http.get<LoginEvent[]>('/api/auth/login-history'));
   }
 
   private storeSession(res: AuthResponse): void {
