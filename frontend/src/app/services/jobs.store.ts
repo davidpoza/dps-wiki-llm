@@ -1,5 +1,5 @@
 import { inject, Injectable, OnDestroy, signal } from '@angular/core';
-import { JobState, JobStatus, SseJobEvent } from '../types';
+import { JobState, JobStatus, ScanActivity, SseJobEvent } from '../types';
 import { ApiService, JobSummary } from './api.service';
 import { AuthService } from './auth.service';
 
@@ -94,6 +94,16 @@ export class JobsStore implements OnDestroy {
 
       if (event.step === 'file' && event.path) {
         next.files = [...existing.files, { path: event.path, action: event.action ?? 'read' }];
+      } else if (event.step?.endsWith('-scan') && event.message) {
+        let currentActivity: ScanActivity | null = null;
+        try {
+          const prog = JSON.parse(event.result ?? '{}') as { current?: number; total?: number };
+          const percent = prog.total ? Math.round(((prog.current ?? 0) / prog.total) * 100) : 0;
+          currentActivity = { path: event.message, percent };
+        } catch {
+          currentActivity = { path: event.message, percent: 0 };
+        }
+        next.currentActivity = currentActivity;
       } else if (event.message) {
         next.phases = [...existing.phases, { step: event.step, message: event.message }];
       }
@@ -111,6 +121,15 @@ export class JobsStore implements OnDestroy {
 
     if (this.isTerminal(status)) {
       this.refetchJob(event.jobId);
+      const jobId = event.jobId;
+      setTimeout(() => {
+        this.jobs.update(map => {
+          const m = new Map(map);
+          const j = m.get(jobId);
+          if (j) m.set(jobId, { ...j, currentActivity: null });
+          return m;
+        });
+      }, 1500);
     }
   }
 
@@ -123,7 +142,6 @@ export class JobsStore implements OnDestroy {
           if (existing) {
             updated.set(jobId, {
               ...existing,
-              status: job.status as JobStatus,
               result: job.result ?? existing.result,
               error: job.error ?? existing.error,
             });

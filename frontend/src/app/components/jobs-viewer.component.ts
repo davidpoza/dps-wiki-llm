@@ -51,6 +51,14 @@ const PAGE_SIZE = 10;
               </div>
             }
 
+            @if (job.currentActivity) {
+              <div class="scan-activity">
+                <span class="scan-label">scanning</span>
+                <span class="scan-path">{{ job.currentActivity.path }}</span>
+                <span class="scan-percent">({{ job.currentActivity.percent }}%)</span>
+              </div>
+            }
+
             @if (job.files.length > 0) {
               <div class="files">
                 <div class="files-title">{{ 'jobs.files' | transloco }}</div>
@@ -118,6 +126,10 @@ const PAGE_SIZE = 10;
     .file-path { font-family: monospace; }
     .job-error { color: var(--app-error-text); font-size: 0.85rem; padding: 6px; background: var(--app-error-bg); border-radius: 4px; }
     .review-notice { color: var(--app-warning-text); font-size: 0.85rem; padding: 6px; background: var(--app-warning-bg); border-radius: 4px; }
+    .scan-activity { display: flex; gap: 8px; align-items: baseline; font-size: 0.8rem; }
+    .scan-label { color: var(--app-text-muted); font-weight: 500; min-width: 60px; }
+    .scan-path { font-family: monospace; color: var(--app-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .scan-percent { color: var(--app-text-muted); white-space: nowrap; }
   `]
 })
 export class JobsViewerComponent {

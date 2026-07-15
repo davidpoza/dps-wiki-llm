@@ -37,6 +37,11 @@ export interface SseJobEvent {
   result?: string;
 }
 
+export interface ScanActivity {
+  path: string;
+  percent: number;
+}
+
 export interface JobState {
   id: string;
   type: string;
@@ -44,6 +49,7 @@ export interface JobState {
   queuePosition?: number;
   phases: JobPhase[];
   files: JobFileEvent[];
+  currentActivity?: ScanActivity | null;
   result?: string;
   error?: string;
   createdAt?: string;
