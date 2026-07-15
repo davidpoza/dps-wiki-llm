@@ -145,21 +145,31 @@ export class ApiService {
         ? `/api/settings/reindex?token=${encodeURIComponent(token)}`
         : '/api/settings/reindex';
       const es = new EventSource(url);
+      let completed = false;
+
       es.addEventListener('progress', (e: MessageEvent) => {
         observer.next(JSON.parse(e.data) as ReindexProgress);
       });
       es.addEventListener('done', (e: MessageEvent) => {
+        completed = true;
         observer.next(JSON.parse(e.data) as ReindexProgress);
-        observer.complete();
         es.close();
+        observer.complete();
       });
       es.addEventListener('error', (e: MessageEvent) => {
-        const data = (e as MessageEvent).data
-          ? (JSON.parse((e as MessageEvent).data) as { message: string })
+        completed = true;
+        const data = e.data
+          ? (JSON.parse(e.data) as { message: string })
           : { message: 'Error desconocido' };
-        observer.error(new Error(data.message));
         es.close();
+        observer.error(new Error(data.message));
       });
+      es.onerror = () => {
+        es.close();
+        if (!completed) {
+          observer.error(new Error('Error de conexión'));
+        }
+      };
       return () => es.close();
     });
   }
