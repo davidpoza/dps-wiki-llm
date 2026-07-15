@@ -1,3 +1,6 @@
+server:
+  port: 8090
+
 spring:
   datasource:
     url: jdbc:postgresql://172.17.0.1:5432/dps_wiki
@@ -5,7 +8,7 @@ spring:
     host: 172.17.0.1
 
 app:
-  vault-path: /home/coder/vault
+  vault-path: ../vault
   extractor:
     base-url: http://172.17.0.1:3000
   embeddings:
