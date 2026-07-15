@@ -1,0 +1,20 @@
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+  rabbitmq:
+    ports:
+      - "5672:5672"
+  web-extractor:
+    ports:
+      - "3000:3000"
+  embeddings:
+    ports:
+      - "8080:8080"
+  backend:
+    ports:
+      - "8090:8080"
+    environment:
+      CORS_ALLOWED_ORIGINS: "http://localhost:4200,http://localhost:4201,http://localhost:8080,http://localhost:8090"
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin

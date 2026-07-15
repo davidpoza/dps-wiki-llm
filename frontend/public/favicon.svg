@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DPS Wiki LLM">
+  <rect width="64" height="64" rx="14" fill="#18212f"/>
+  <path d="M18 14h22l8 8v28H18z" fill="#f6f7f9"/>
+  <path d="M40 14v9h8z" fill="#dbeafe"/>
+  <path d="M24 29h16M24 36h13M24 43h10" stroke="#5d6878" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="22" cy="22" r="5" fill="#3b82f6"/>
+  <circle cx="43" cy="34" r="5" fill="#16a34a"/>
+  <circle cx="30" cy="49" r="5" fill="#f59e0b"/>
+  <path d="M25.8 24.7 39.2 31.3M41 38.6 32 45.4" stroke="#93c5fd" stroke-width="3" stroke-linecap="round"/>
+</svg>

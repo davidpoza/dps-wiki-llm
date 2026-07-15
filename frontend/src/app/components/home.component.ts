@@ -1,0 +1,140 @@
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Router } from '@angular/router';
+import { ButtonModule } from 'primeng/button';
+import { TranslocoPipe } from '@jsverse/transloco';
+import { ChatComponent } from './chat.component';
+import { GitHistoryComponent } from './git-history.component';
+import { IngestComponent } from './ingest.component';
+import { JobsViewerComponent } from './jobs-viewer.component';
+import { ReviewComponent } from './review.component';
+import { AuthService } from '../services/auth.service';
+import { JobsStore } from '../services/jobs.store';
+import { ThemeService } from '../services/theme.service';
+
+type Tab = 'jobs' | 'ingest' | 'chat' | 'review' | 'git';
+
+@Component({
+  selector: 'app-home',
+  standalone: true,
+  imports: [ButtonModule, ChatComponent, GitHistoryComponent, IngestComponent, JobsViewerComponent, ReviewComponent, TranslocoPipe],
+  template: `
+    <main class="app-shell">
+      <section class="workspace">
+        <header class="topbar">
+          <div class="brand">
+            <h1>{{ 'common.brand' | transloco }}</h1>
+            <p>{{ 'home.subtitle' | transloco }}</p>
+          </div>
+          <div class="topbar-actions">
+            @if (currentUser()) {
+              <button type="button" class="username" (click)="goToProfile()">{{ currentUser()?.username }}</button>
+            }
+            <p-button
+              severity="secondary"
+              [icon]="theme.isDark() ? 'pi pi-sun' : 'pi pi-moon'"
+              [rounded]="true"
+              [text]="true"
+              size="small"
+              [title]="theme.isDark() ? ('common.lightMode' | transloco) : ('common.darkMode' | transloco)"
+              (onClick)="theme.toggle()"
+            />
+            <p-button
+              severity="secondary"
+              [label]="'home.explorer' | transloco"
+              size="small"
+              (onClick)="goToExplorer()"
+            />
+            <p-button
+              severity="secondary"
+              label="Configuración"
+              size="small"
+              (onClick)="goToSettings()"
+            />
+            <p-button
+              severity="secondary"
+              [label]="'common.signOut' | transloco"
+              size="small"
+              (onClick)="logout()"
+            />
+          </div>
+        </header>
+
+        <nav class="tabs">
+          @for (tab of tabDefs; track tab.id) {
+            <button class="tab-btn" [class.active]="activeTab() === tab.id" (click)="activeTab.set(tab.id)">
+              {{ tab.labelKey | transloco }}
+              @if (tab.id === 'review' && reviewCount() > 0) {
+                <span class="badge">{{ reviewCount() }}</span>
+              }
+            </button>
+          }
+        </nav>
+
+        <div class="tab-content">
+          @switch (activeTab()) {
+            @case ('jobs') {
+              <app-jobs-viewer />
+            }
+            @case ('ingest') {
+              <app-ingest />
+            }
+            @case ('chat') {
+              <app-chat />
+            }
+            @case ('review') {
+              <app-review />
+            }
+            @case ('git') {
+              <app-git-history />
+            }
+          }
+        </div>
+      </section>
+    </main>
+  `,
+  styleUrl: './home.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class HomeComponent implements OnInit {
+  private readonly store = inject(JobsStore);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+  readonly theme = inject(ThemeService);
+
+  readonly currentUser = this.auth.currentUser;
+
+  readonly activeTab = signal<Tab>('jobs');
+
+  readonly tabDefs: Array<{ id: Tab; labelKey: string }> = [
+    { id: 'jobs', labelKey: 'home.tabs.jobs' },
+    { id: 'ingest', labelKey: 'home.tabs.ingest' },
+    { id: 'chat', labelKey: 'home.tabs.chat' },
+    { id: 'review', labelKey: 'home.tabs.review' },
+    { id: 'git', labelKey: 'home.tabs.git' },
+  ];
+
+  readonly reviewCount = computed(() =>
+    [...this.store.jobs().values()].filter(j => j.status === 'AWAITING_REVIEW').length
+  );
+
+  ngOnInit(): void {
+    this.store.connect();
+  }
+
+  goToExplorer(): void {
+    this.router.navigateByUrl('/explorer');
+  }
+
+  goToSettings(): void {
+    this.router.navigateByUrl('/settings');
+  }
+
+  goToProfile(): void {
+    this.router.navigateByUrl('/profile');
+  }
+
+  logout(): void {
+    this.auth.logout();
+    this.router.navigateByUrl('/login');
+  }
+}

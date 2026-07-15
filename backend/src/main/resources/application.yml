@@ -1,0 +1,87 @@
+server:
+  port: 8080
+
+spring:
+  profiles:
+    default: local
+  config:
+    import: optional:file:./secrets.yml
+  application:
+    name: dps-wiki-llm
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/dps_wiki}
+    username: ${SPRING_DATASOURCE_USERNAME:dps_wiki}
+    password: ${SPRING_DATASOURCE_PASSWORD:dps_wiki}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    placeholders:
+      embed_dimension: ${EMBED_DIMENSION:384}
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:dps_wiki}
+    password: ${SPRING_RABBITMQ_PASSWORD:dps_wiki}
+  ai:
+    openai:
+      base-url: ${LLM_BASE_URL:http://localhost:11434}
+      api-key: ${LLM_API_KEY:not-set}
+      chat:
+        options:
+          model: ${LLM_MODEL:gpt-oss}
+      embedding:
+        base-url: ${EMBED_BASE_URL:http://embeddings:8080}
+        api-key: ${EMBED_API_KEY:not-set}
+        options:
+          model: ${EMBED_MODEL:multilingual-e5-small}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  vault-path: ${VAULT_PATH:/vault}
+  cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200,http://localhost:8080}
+  git:
+    user-name: ${GIT_USER_NAME:dps-wiki-llm}
+    user-email: ${GIT_USER_EMAIL:dps-wiki-llm@example.local}
+  llm:
+    base-url: ${LLM_BASE_URL:http://localhost:11434/v1}
+    model: ${LLM_MODEL:gpt-oss}
+    api-key: ${LLM_API_KEY:}
+  embeddings:
+    base-url: ${EMBED_BASE_URL:http://embeddings:8080}
+    model: ${EMBED_MODEL:multilingual-e5-small}
+    api-key: ${EMBED_API_KEY:}
+    dimension: ${EMBED_DIMENSION:384}
+    health-timeout: 3s
+  telegram:
+    token: ${TELEGRAM_BOT_TOKEN:}
+    allowed-chat-id: ${TELEGRAM_ALLOWED_CHAT_ID:}
+  jwt:
+    secret: ${JWT_SECRET:dGVzdC1kZXYtand0LXNlY3JldC1kby1ub3QtdXNlLWluLXByb2R1Y3Rpb24=}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  admin:
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:admin}
+  extractor:
+    base-url: ${EXTRACTOR_BASE_URL:http://web-extractor:3000}
+    timeout: ${EXTRACTOR_TIMEOUT:45s}
+
+logging:
+  level:
+    root: ${LOG_LEVEL:INFO}

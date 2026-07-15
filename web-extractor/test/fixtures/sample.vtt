@@ -1,0 +1,28 @@
+WEBVTT
+Kind: captions
+Language: en
+
+00:00:00.000 --> 00:00:03.000
+Hello world, this is a test video.
+
+00:00:03.200 --> 00:00:06.000
+It covers web content extraction.
+
+00:00:06.100 --> 00:00:09.000
+Each sentence is on
+its own cue.
+
+00:00:11.000 --> 00:00:14.000
+<c>Tags</c> and timestamps are removed.
+
+00:00:14.100 --> 00:00:17.000
+<00:00:14.500><c>This</c> line has inline timing cues.
+
+00:00:20.000 --> 00:00:23.000
+Consecutive identical lines are deduplicated.
+
+00:00:23.000 --> 00:00:26.000
+Consecutive identical lines are deduplicated.
+
+00:00:26.100 --> 00:00:29.000
+Final line after a long pause.

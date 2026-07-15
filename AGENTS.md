@@ -55,14 +55,13 @@ vault/
 │   ├── topics/
 │   ├── sources/
 │   ├── analyses/
-│   ├── projects/    ← user-managed only, excluded from all automation
+│   ├── projects/    ← user-managed only; ingestion automation must not mutate it
 │   └── indexes/
 ├── outputs/
 ├── state/
-│   ├── kb.db                ← SQLite FTS index
-│   └── semantic/            ← vector index (gitignored, local only)
-│       ├── manifest.json
-│       └── notes/
+│   ├── runtime/
+│   │   └── idempotency-keys.json
+│   └── change-log/
 └── INDEX.md
 ```
 
@@ -73,27 +72,25 @@ vault/
 raw/ -> event layer
 
 [PROCESSING]
-n8n + LLM + Node scripts
+Spring Boot backend + RabbitMQ job queues + LLM API (OpenAI-compatible)
 
 [STATE]
 wiki/ -> durable knowledge graph in markdown form
 
 [INDEX — lexical]
-SQLite FTS5 in state/kb.db
-  reindex.ts   → build
-  search.ts    → query (BM25)
+PostgreSQL pg_trgm / ILIKE over documents table (path/title/body)
+  FileLookupService → manual file lookup and review support
 
 [INDEX — semantic]
-ONNX vector index in state/semantic/  (gitignored, local only)
-  embed-index.ts     → build / incremental update
-  semantic-search.ts → query (cosine similarity)
+pgvector HNSW index in document_embeddings table
+  EmbeddingIndexService  → build / incremental update
+  SemanticSearchService  → query (cosine similarity)
 
-[QUERY — hybrid]
-hybrid-search.ts
-  → FTS leg + semantic leg in parallel
-  → min-max normalise each leg
-  → finalScore = 0.6 × semantic + 0.4 × lexical
-  → answer-run.ts / ingest-run.ts
+[QUERY — semantic]
+SemanticSearchService
+  → embed query via TEI sidecar (multilingual-e5-small)
+  → top-k cosine distance over HNSW index
+  → AnswerPipelineService / ConnectionDiscoveryService
 ```
 
 ---
@@ -102,23 +99,28 @@ hybrid-search.ts
 
 This system is designed to run with:
 
-- self-hosted `n8n` as the orchestrator
-- Node.js scripts for deterministic local operations
-- SQLite FTS5 for lexical retrieval
-- a local ONNX vector index for semantic retrieval (built by `embed-index.ts`, never committed to git)
-- a vault mounted locally, even if the canonical storage is WebDAV-backed
+- Spring Boot 3.3 (Java 21) backend as the orchestrator
+- Angular 21 frontend, built and served by nginx in the `frontend` container
+- JWT authentication with optional TOTP 2FA
+- RabbitMQ job queues: `wiki-write-jobs` and `answer-jobs`
+- PostgreSQL 17 + pgvector for semantic retrieval and document indexing
+- TEI sidecar serving `multilingual-e5-small` (384 dims) for embeddings
+- `web-extractor` microservice (Node + Playwright, embedded Chromium): renders URLs in a real browser and returns structured markdown + metadata for `POST /extract`. `RawIntakeService.ingestUrl` calls it and writes YAML frontmatter to `raw/web/**`
+- Telegram long-polling bot for remote interaction (optional)
+- A vault directory mounted into the backend container
 
 The intended execution model is:
 
 ```text
-n8n trigger/workflow
--> Node.js script
--> local vault mutation or index query
--> structured result back to n8n
+REST API or Telegram bot
+-> enqueue job (RabbitMQ)
+-> Spring service (IngestPipelineService / AnswerPipelineService)
+-> vault mutation or semantic query
+-> SSE progress events → frontend / Telegram reply
 ```
 
-Do not treat `n8n` as the place where all business logic should live.
-Use `n8n` for orchestration and scheduling, and keep fragile or stateful operations inside explicit scripts.
+Keep business logic inside Spring services, not in controllers. Controllers are thin routing layers.
+The backend servlet context path is `/api`; controllers declare paths relative to that context.
 
 ---
 
@@ -153,53 +155,55 @@ If this rule is violated, the likely outcomes are:
 
 Trigger:
 
-- file-system events on `raw/**`
+- REST upload or URL submission through `JobController`
+- Telegram `/ingest <url>` through `WikiBotService`
+- manual enqueue with a payload reference under `raw/**`
 
 Pipeline:
 
 ```text
-raw event
--> ingest-source.ts
--> idempotency / duplicate check
--> LLM ingestion prompt   (may produce concept/entity/analysis updates; may update existing topics; NEVER creates new topic files)
--> structured JSON plan
--> guardrail-plan.ts      (validate path constraints, idempotency keys)
--> resolve-terms.ts       (term resolution: match concepts against existing topics via embedding;
-                           convert matched terms to topic updates; dedup concept creates vs disk)
-[transaction checkpoint: git HEAD + idempotency-keys snapshot]
--> apply-update.ts
--> reindex.ts
--> commit.ts
-[on any failure: git reset --hard <pre-run-sha> → restore idempotency-keys → reindex]
+raw payload reference
+-> RawIntakeService (for URL/upload) writes raw/inbox/** or raw/web/**
+-> JobQueueService enqueues INGEST on wiki-write-jobs
+-> IngestPipelineService
+   -> transaction checkpoint: git HEAD + state/runtime/idempotency-keys.json snapshot
+   -> SourceNormalizer
+   -> SourceNoteLlmService
+   -> SourceNotePlanner baseline MutationPlan for wiki/sources/**
+   -> MutationApplier
+   -> RootIndexService updates INDEX.md
+   -> ReindexService replaces PostgreSQL documents rows from wiki/**
+   -> EmbeddingIndexService incrementally refreshes pgvector embeddings
+   -> LlmMutationPlanService requests optional concept/entity/analysis/topic updates
+   -> MutationGuardrailService validates path constraints, topic rules, idempotency, and source backlinks
+   -> ConnectionDiscoveryService persists LLM and semantic connection candidates
+   -> GuidedReviewService applies accepted candidates immediately in unattended mode, or later in validated mode
+   -> GitService commits the operation
+[on any failure: git reset --hard <pre-run-sha> → restore idempotency ledger]
 ```
 
 **Topic creation rule:** Topics are created exclusively by the user under `wiki/topics/`.
-No pipeline step may produce a `create` action for a topic path — `apply-update.ts` enforces this with a hard guard that throws on any such attempt.
+No pipeline step may produce a `create` action for a topic path — `MutationGuardrailService` rejects it and `MutationApplier` also enforces a hard guard that throws on any such attempt.
 Automation MAY update existing topic files (add Related links, add grounded context sections) but NEVER creates new ones.
-A concept term is redirected to a topic `update` when cosine similarity ≥ `TOPIC_MATCH_THRESHOLD` (default 0.72).
-The auto-created note types are `wiki/sources/` (by the baseline pipeline) and `wiki/concepts/`, `wiki/entities/`, `wiki/analyses/` (by the LLM planner).
+The auto-created note types are `wiki/sources/` (by the baseline pipeline) and `wiki/concepts/`, `wiki/entities/`, `wiki/analyses/` (by the LLM planner after guardrails).
 
 ### 2. Answer Flow
 
 ```text
-user query  [+ optional retrieval_mode: fts | semantic | hybrid]
--> hybrid-search.ts (default when semantic index exists)
-   or search.ts (fallback / explicit fts mode)
-   or semantic-search.ts (explicit semantic mode)
--> top-k candidate documents
--> answer-context.ts  (markdown read + context packet)
+user query
+-> JobQueueService enqueues ANSWER on answer-jobs
+-> AnswerPipelineService
+-> SemanticSearchService
+-> OpenAiCompatibleEmbeddingClient embeds the query via TEI sidecar
+-> JdbcDocumentIndexRepository queries pgvector HNSW over document_embeddings
+-> top-k candidate documents with bounded context packet
 -> LLM answer synthesis
--> answer-record.ts   (output artifact)
--> feedback-record.ts (validate proposal, no wiki mutation)
+-> write outputs/answer-<jobId>.md
 -> response
 ```
 
 The answer step should not update the wiki directly.
-First produce the answer, then run feedback evaluation.
-
-`retrieval_mode` defaults to `"hybrid"` in `answer-run.ts`.
-If the semantic index (`state/semantic/manifest.json`) does not exist, the mode
-falls back to `"fts"` automatically — no error, no configuration change required.
+The current implementation uses semantic retrieval only for answers. Lexical lookup exists separately through `FileLookupService` and `/api/files/lookup` for file search and manual review workflows.
 
 ### 3. Feedback Loop
 
@@ -209,20 +213,21 @@ significant answer or output
 -> compare against current wiki state
 -> classify each candidate
 -> persistence decision
--> if approved: apply-update.ts
--> reindex.ts
--> commit.ts
+-> if approved: MutationApplier
+-> ReindexService
+-> EmbeddingIndexService
+-> GitService commit
 ```
 
 Core rule:
 
 ```text
-feedback evaluation is mandatory
+feedback evaluation should be deliberate
 wiki propagation is conditional
 ```
 
 This keeps the system powerful without making it noisy.
-Every meaningful output should be reviewed for reusable knowledge, but most outputs should not blindly mutate the wiki.
+Meaningful outputs should be reviewed for reusable knowledge, but outputs should not blindly mutate the wiki.
 
 Persistence decisions:
 
@@ -232,21 +237,24 @@ Persistence decisions:
 
 ### 4. Maintenance Flow
 
-Triggers:
+Maintenance is an intended workflow, not a fully implemented scheduled subsystem in the current Spring app.
+
+Expected triggers:
 
 - weekly cron
 - monthly cron
 - manual repair runs
 
-Pipeline:
+Expected pipeline:
 
 ```text
 scheduled or manual maintenance
--> lint.ts or health-check.ts
+-> structural/traceability checks over wiki/**
 -> structured findings
--> optional apply-update.ts
--> reindex.ts
--> commit.ts
+-> optional MutationApplier
+-> ReindexService
+-> EmbeddingIndexService
+-> GitService commit
 ```
 
 Maintenance checks:
@@ -284,7 +292,7 @@ Maintenance checks:
 - should not become the primary location of raw facts
 - **created exclusively by the user** — no automation may ever create new topic files under `wiki/topics/`
 - automation may and should update existing topic files: adding Related links, adding grounded context, pruning weak links
-- any `create` action targeting `wiki/topics/` is rejected at every layer: LLM prompt rules, `guardrail-plan.ts`, `resolve-terms.ts`, and the hard guard in `apply-update.ts`
+- any `create` action targeting `wiki/topics/` is rejected by LLM prompt rules, `MutationGuardrailService`, and the hard guard in `MutationApplier`
 
 #### `source`
 
@@ -584,10 +592,11 @@ The system is failing when:
 When operating on this repository, agents should:
 
 - preserve the `raw/` versus `wiki/` separation
-- preserve the `n8n -> script -> vault/index` execution model
+- preserve the `REST/Telegram → RabbitMQ → Spring service → vault/pgvector` execution model
 - favor small, explicit changes over sweeping rewrites
 - use the templates above when creating new notes
 - keep source traceability intact
+- do not create or update `wiki/projects/**` from ingestion or connection automation
 - treat `wiki/` as curated state, not a chat log
 - avoid inventing structure that cannot be maintained
 - prefer granular notes over large category monoliths
@@ -599,4 +608,5 @@ When uncertain:
 - prefer adding an open question over forcing a conclusion
 - prefer a new source note over an overconfident synthesis
 
-For JSON contracts, script contracts, indexing model, environment variables, and operational details, see [`docs/architecture.md`](docs/architecture.md).
+For setup, service ports, environment variables, and API paths, see [`README.md`](README.md).
+For historical notes and lower-level architecture details, see [`docs/architecture.md`](docs/architecture.md), but verify it against the Spring implementation before treating it as authoritative.

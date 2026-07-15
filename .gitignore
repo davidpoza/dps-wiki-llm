@@ -1,3 +1,15 @@
 node_modules/
 dist/
 state/semantic/
+backend/target/**
+BOOT-INF
+
+# Angular build cache & output
+frontend/.angular/
+frontend/dist/
+
+# Runtime logs
+*.log
+
+# Local secrets — never commit
+backend/secrets.yml
