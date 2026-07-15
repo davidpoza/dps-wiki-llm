@@ -13,9 +13,13 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class FileService {
+
+    private static final Logger log = LoggerFactory.getLogger(FileService.class);
 
     private final VaultPathResolver pathResolver;
     private final GitService gitService;
@@ -183,6 +187,38 @@ public class FileService {
         gitCommit(List.of(relativePath), "create: " + resolved.getFileName());
     }
 
+    public byte[] exportPdf(String relativePath) {
+        Path input = resolveAndValidate(relativePath);
+        if (!Files.exists(input)) throw new NoSuchFileException(relativePath);
+        Path output = null;
+        try {
+            output = Files.createTempFile("wiki-pdf-", ".pdf");
+            ProcessBuilder pb = new ProcessBuilder(
+                    "pandoc", input.toString(),
+                    "--pdf-engine=weasyprint",
+                    "-o", output.toString()
+            );
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            String stderr = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            int exit = process.waitFor();
+            if (exit != 0) {
+                log.error("pandoc failed (exit {}): {}", exit, stderr);
+                throw new PdfExportException("pandoc exited with code " + exit);
+            }
+            return Files.readAllBytes(output);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("PDF export interrupted", e);
+        } finally {
+            if (output != null) {
+                try { Files.deleteIfExists(output); } catch (IOException ignored) {}
+            }
+        }
+    }
+
     private void gitCommit(List<String> paths, String message) {
         try {
             gitService.commitFileChanges(paths, message);
@@ -206,5 +242,9 @@ public class FileService {
 
     public static final class FileAlreadyExistsException extends RuntimeException {
         public FileAlreadyExistsException(String path) { super(path); }
+    }
+
+    public static final class PdfExportException extends RuntimeException {
+        public PdfExportException(String msg) { super(msg); }
     }
 }

@@ -39,6 +39,31 @@ interface PromptState extends Prompt {
           </div>
         </header>
 
+        <section class="settings-section reindex-section">
+          <h2>Índice del Vault</h2>
+          <p class="section-desc">Regenera el índice de documentos del vault. Úsalo si los ficheros han cambiado externamente y la búsqueda no refleja los cambios.</p>
+          <div class="reindex-row">
+            <p-button
+              label="Reindexar"
+              size="small"
+              [loading]="reindexing()"
+              [disabled]="reindexing()"
+              (onClick)="startReindex()"
+            />
+            @if (reindexing()) {
+              <span class="reindex-progress">
+                Ficheros procesados {{ reindexProcessed() }}/{{ reindexTotal() }}
+              </span>
+            }
+            @if (reindexDone()) {
+              <span class="feedback success">Reindexación completada ({{ reindexTotal() }} ficheros)</span>
+            }
+            @if (reindexError()) {
+              <span class="feedback error">Error en la reindexación</span>
+            }
+          </div>
+        </section>
+
         <section class="settings-section">
           <h2>Prompts del LLM</h2>
           <p class="section-desc">Textos que se envían como instrucciones de sistema al modelo de lenguaje. Los cambios son efectivos de inmediato.</p>
@@ -94,9 +119,12 @@ interface PromptState extends Prompt {
       width: min(900px, calc(100vw - 32px));
       margin: 0 auto;
       padding: 20px 0 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
     }
     .topbar {
-      margin-bottom: 24px;
+      margin-bottom: 4px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -110,7 +138,9 @@ interface PromptState extends Prompt {
     h2 { margin: 0 0 6px; font-size: 1.1rem; }
     p { margin: 4px 0 0; color: var(--app-text-muted); font-size: 0.875rem; }
     .settings-section { background: var(--app-surface); border-radius: 10px; padding: 24px; box-shadow: var(--app-shadow); }
-    .section-desc { margin-bottom: 20px; }
+    .section-desc { margin-bottom: 16px; }
+    .reindex-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .reindex-progress { font-size: 0.875rem; color: var(--app-text-muted); }
     .prompts-list { display: flex; flex-direction: column; gap: 20px; }
     .prompt-card { border: 1px solid var(--app-border); border-radius: 8px; padding: 16px; }
     .prompt-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
@@ -136,6 +166,12 @@ export class SettingsComponent implements OnInit {
   readonly loading = signal(true);
   readonly prompts = signal<PromptState[]>([]);
 
+  readonly reindexing = signal(false);
+  readonly reindexProcessed = signal(0);
+  readonly reindexTotal = signal(0);
+  readonly reindexDone = signal(false);
+  readonly reindexError = signal<string | null>(null);
+
   ngOnInit(): void {
     this.api.getPrompts().subscribe({
       next: (data) => {
@@ -144,6 +180,30 @@ export class SettingsComponent implements OnInit {
       },
       error: () => {
         this.loading.set(false);
+      }
+    });
+  }
+
+  startReindex(): void {
+    this.reindexing.set(true);
+    this.reindexDone.set(false);
+    this.reindexError.set(null);
+    this.reindexProcessed.set(0);
+    this.reindexTotal.set(0);
+
+    this.api.reindex().subscribe({
+      next: (progress) => {
+        this.reindexProcessed.set(progress.processed);
+        this.reindexTotal.set(progress.total);
+      },
+      complete: () => {
+        this.reindexing.set(false);
+        this.reindexDone.set(true);
+        setTimeout(() => this.reindexDone.set(false), 5000);
+      },
+      error: (err: Error) => {
+        this.reindexing.set(false);
+        this.reindexError.set(err.message ?? 'Error desconocido');
       }
     });
   }

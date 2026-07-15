@@ -131,6 +131,11 @@ import { UnsavedChangesAware } from '../unsaved-changes.guard';
                 [disabled]="!isDirty()"
                 (onClick)="save()"
               />
+              <p-button
+                [label]="'explorer.generatePdf' | transloco"
+                size="small"
+                (onClick)="generatePdf()"
+              />
             </div>
             @if (frontmatterEntries().length > 0) {
               <div class="frontmatter-panel">
@@ -1236,6 +1241,27 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
       },
       error: () =>
         this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorSave') }),
+    });
+  }
+
+  generatePdf(): void {
+    const path = this.selectedPath();
+    if (!path) return;
+    this.fileService.exportPdf(path).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const name = this.selectedLabel().replace(/\.md$/i, '');
+        a.download = name + '.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.messageService.add({
+        severity: 'error',
+        summary: this.t.translate('common.error'),
+        detail: this.t.translate('explorer.toastErrorPdf'),
+      }),
     });
   }
 

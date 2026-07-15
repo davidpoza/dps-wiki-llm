@@ -1,7 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, Observer } from 'rxjs';
 import { Commit, JobMode } from '../types';
+import { AuthService } from './auth.service';
 
 export interface EnqueueResponse {
   jobId: string;
@@ -64,9 +65,15 @@ export interface JobSummary {
   affectedPaths?: string[];
 }
 
+export interface ReindexProgress {
+  processed: number;
+  total: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthService);
 
   enqueueAnswer(question: string): Observable<EnqueueResponse> {
     return this.http.post<EnqueueResponse>('/api/answer', { question });
@@ -129,5 +136,31 @@ export class ApiService {
 
   updatePrompt(key: string, text: string): Observable<Prompt> {
     return this.http.put<Prompt>(`/api/settings/prompts/${key}`, { text });
+  }
+
+  reindex(): Observable<ReindexProgress> {
+    return new Observable((observer: Observer<ReindexProgress>) => {
+      const token = this.auth.token();
+      const url = token
+        ? `/api/settings/reindex?token=${encodeURIComponent(token)}`
+        : '/api/settings/reindex';
+      const es = new EventSource(url);
+      es.addEventListener('progress', (e: MessageEvent) => {
+        observer.next(JSON.parse(e.data) as ReindexProgress);
+      });
+      es.addEventListener('done', (e: MessageEvent) => {
+        observer.next(JSON.parse(e.data) as ReindexProgress);
+        observer.complete();
+        es.close();
+      });
+      es.addEventListener('error', (e: MessageEvent) => {
+        const data = (e as MessageEvent).data
+          ? (JSON.parse((e as MessageEvent).data) as { message: string })
+          : { message: 'Error desconocido' };
+        observer.error(new Error(data.message));
+        es.close();
+      });
+      return () => es.close();
+    });
   }
 }

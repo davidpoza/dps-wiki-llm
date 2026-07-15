@@ -44,4 +44,8 @@ export class FileService {
   createDirectory(path: string): Observable<void> {
     return this.http.post<void>('/api/files/directory', null, { params: { path } });
   }
+
+  exportPdf(path: string): Observable<Blob> {
+    return this.http.get('/api/files/pdf', { params: { path }, responseType: 'blob' });
+  }
 }
