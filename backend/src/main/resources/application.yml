@@ -2,8 +2,6 @@ server:
   port: 8080
 
 spring:
-  profiles:
-    default: local
   config:
     import: optional:classpath:secrets.yml
   application:
