@@ -94,7 +94,6 @@ services:
       VAULT_PATH: /vault
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:4200}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      SPRING_PROFILES_ACTIVE: ""
     volumes:
       - .:/vault
     depends_on:
