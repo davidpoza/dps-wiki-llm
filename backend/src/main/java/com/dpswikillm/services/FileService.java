@@ -46,6 +46,7 @@ public class FileService {
         try (var stream = Files.list(dir).sorted(Comparator.comparing(p -> p.getFileName().toString().toLowerCase()))) {
             for (Path entry : (Iterable<Path>) stream::iterator) {
                 String name = entry.getFileName().toString();
+                if (name.startsWith(".")) continue;
                 String relativePath = root.relativize(entry).toString().replace('\\', '/');
                 if (Files.isDirectory(entry)) {
                     List<TreeNodeDto> children = buildChildren(entry, root);

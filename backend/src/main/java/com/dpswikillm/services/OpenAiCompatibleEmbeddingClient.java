@@ -22,6 +22,8 @@ public class OpenAiCompatibleEmbeddingClient implements EmbeddingClient {
 
     // multilingual-e5-small max sequence ~512 tokens ≈ 2000 chars; truncate to stay safe
     private static final int MAX_CHARS = 2000;
+    // TEI server hard limit per request
+    private static final int MAX_BATCH_SIZE = 32;
 
     @Override
     public List<float[]> embedPassages(List<String> texts) {
@@ -37,8 +39,19 @@ public class OpenAiCompatibleEmbeddingClient implements EmbeddingClient {
         return text.length() > MAX_CHARS ? text.substring(0, MAX_CHARS) : text;
     }
 
-    @SuppressWarnings("unchecked")
     private List<float[]> embed(List<String> inputs) {
+        if (inputs.size() <= MAX_BATCH_SIZE) {
+            return embedBatch(inputs);
+        }
+        List<float[]> all = new ArrayList<>(inputs.size());
+        for (int i = 0; i < inputs.size(); i += MAX_BATCH_SIZE) {
+            all.addAll(embedBatch(inputs.subList(i, Math.min(i + MAX_BATCH_SIZE, inputs.size()))));
+        }
+        return all;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<float[]> embedBatch(List<String> inputs) {
         return retrying.execute(() -> {
             try {
                 // Use TEI native /embed endpoint — supports truncate:true unlike /embeddings (OpenAI-compat)
