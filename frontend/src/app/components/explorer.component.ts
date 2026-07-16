@@ -17,11 +17,12 @@ import { Router } from '@angular/router';
 import { Editor, defaultValueCtx, editorViewOptionsCtx, rootCtx } from '@milkdown/core';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { commonmark } from '@milkdown/preset-commonmark';
+import { gfm } from '@milkdown/preset-gfm';
 import { replaceAll } from '@milkdown/utils';
 import { createWikilinkPlugin, WikilinkCoords } from './wikilink.plugin';
 import { createMarkdownLinkPlugin } from './markdown-link.plugin';
 import { createMarkdownImagePlugin } from './markdown-image.plugin';
-import { createLivePreviewPlugin } from './live-preview.plugin';
+import { createLivePreviewPlugin, insertTableAtCursor } from './live-preview.plugin';
 import type { EditorView } from '@milkdown/prose/view';
 import { TreeNode, ConfirmationService, MessageService, MenuItem } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -124,18 +125,41 @@ import { UnsavedChangesAware } from '../unsaved-changes.guard';
         <section class="editor-panel">
           @if (selectedPath()) {
             <div class="editor-header">
-              <span class="file-title">{{ selectedLabel() }}{{ isDirty() ? ' *' : '' }}</span>
-              <p-button
-                [label]="'explorer.save' | transloco"
-                size="small"
-                [disabled]="!isDirty()"
-                (onClick)="save()"
-              />
-              <p-button
-                [label]="'explorer.generatePdf' | transloco"
-                size="small"
-                (onClick)="generatePdf()"
-              />
+              <div class="editor-title">
+                <span class="file-title">{{ selectedLabel() }}</span>
+                @if (isDirty()) {
+                  <span class="dirty-dot" title="Unsaved changes">●</span>
+                }
+              </div>
+              <div class="editor-actions">
+                <div class="toolbar-group">
+                  <p-button
+                    icon="pi pi-table"
+                    label="Tabla"
+                    size="small"
+                    severity="secondary"
+                    [text]="true"
+                    (onClick)="insertTable()"
+                    title="Insertar tabla"
+                  />
+                </div>
+                <div class="actions-divider"></div>
+                <div class="doc-actions">
+                  <p-button
+                    [label]="'explorer.save' | transloco"
+                    size="small"
+                    [disabled]="!isDirty()"
+                    (onClick)="save()"
+                  />
+                  <p-button
+                    icon="pi pi-file-pdf"
+                    [label]="'explorer.generatePdf' | transloco"
+                    size="small"
+                    severity="secondary"
+                    (onClick)="generatePdf()"
+                  />
+                </div>
+              </div>
             </div>
             @if (frontmatterEntries().length > 0) {
               <div class="frontmatter-panel">
@@ -496,13 +520,57 @@ import { UnsavedChangesAware } from '../unsaved-changes.guard';
     }
     .editor-header {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      padding: 8px 16px;
+      justify-content: space-between;
+      padding: 6px 12px;
       border-bottom: 1px solid var(--app-border);
       background: var(--app-surface);
+      gap: 12px;
+      min-height: 44px;
     }
-    .file-title { font-size: 0.9rem; font-weight: 500; }
+    .editor-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .file-title {
+      font-size: 0.875rem;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--app-text);
+    }
+    .dirty-dot {
+      color: var(--p-primary-color, #10b981);
+      font-size: 0.6rem;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .editor-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .actions-divider {
+      width: 1px;
+      height: 18px;
+      background: var(--app-border);
+      margin: 0 6px;
+      flex-shrink: 0;
+    }
+    .doc-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
     .milkdown-container {
       flex: 1;
       overflow-y: auto;
@@ -576,6 +644,28 @@ import { UnsavedChangesAware } from '../unsaved-changes.guard';
       border: none;
       border-top: 2px solid var(--app-border);
       margin: 1.5em 0;
+    }
+    :host ::ng-deep .milkdown table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1em 0;
+      overflow-x: auto;
+      display: block;
+    }
+    :host ::ng-deep .milkdown table th,
+    :host ::ng-deep .milkdown table td {
+      border: 1px solid var(--app-border);
+      padding: 0.45em 0.75em;
+      text-align: left;
+      vertical-align: top;
+    }
+    :host ::ng-deep .milkdown table thead th {
+      background: var(--app-surface-subtle);
+      font-weight: 600;
+      color: var(--app-text);
+    }
+    :host ::ng-deep .milkdown table tbody tr:nth-child(even) {
+      background: var(--app-surface-hover);
     }
     .frontmatter-panel {
       background: var(--app-surface-subtle);
@@ -963,6 +1053,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
         });
       })
       .use(commonmark)
+      .use(gfm)
       .use(listener)
       .use(createMarkdownImagePlugin())
       .use(createMarkdownLinkPlugin())
@@ -1223,6 +1314,14 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
         this.allowDiscardOnDeactivate = true;
         action();
       },
+    });
+  }
+
+  insertTable(): void {
+    if (!this.editor) return;
+    this.editor.action(ctx => {
+      const view = (ctx as any).get('editorView') as EditorView;
+      if (view) insertTableAtCursor(view);
     });
   }
 
