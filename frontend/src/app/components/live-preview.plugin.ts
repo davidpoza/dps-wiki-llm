@@ -2,6 +2,7 @@ import { $prose } from '@milkdown/utils';
 import { NodeSelection, Plugin, PluginKey, TextSelection } from '@milkdown/prose/state';
 import type { Mark, Node as PMNode, Schema } from '@milkdown/prose/model';
 import type { EditorState, Transaction } from '@milkdown/prose/state';
+import type { EditorView } from '@milkdown/prose/view';
 
 const key = new PluginKey<LPState>('live-preview');
 const META_KEY = 'lp-meta';
@@ -13,7 +14,7 @@ interface LPState {
     from: number;
     to: number;
     originalRaw: string;
-    mode: 'mark' | 'block';
+    mode: 'mark' | 'block' | 'table';
   } | null;
 }
 
@@ -118,6 +119,80 @@ function isImageParsed(p: ParsedMark | ParsedImage): p is ParsedImage {
   return 'src' in p;
 }
 
+// ─── Table serializer ─────────────────────────────────────────────────────────
+
+export function serializeTableToMarkdown(node: PMNode): string {
+  const rows: string[] = [];
+  let colCount = 0;
+
+  node.forEach(rowNode => {
+    const cells: string[] = [];
+    rowNode.forEach(cellNode => {
+      cells.push(cellNode.textContent.replace(/\|/g, '\\|'));
+    });
+    if (rowNode.type.name === 'table_header_row') {
+      colCount = cells.length;
+      rows.push('| ' + cells.join(' | ') + ' |');
+      rows.push('| ' + Array(colCount).fill('---').join(' | ') + ' |');
+    } else {
+      rows.push('| ' + cells.join(' | ') + ' |');
+    }
+  });
+
+  return rows.join('\n');
+}
+
+// ─── Table parser ─────────────────────────────────────────────────────────────
+
+export function parseMarkdownToTable(raw: string, schema: Schema): PMNode | null {
+  const lines = raw.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length < 3) return null;
+
+  const headerLine = lines[0];
+  const sepLine = lines[1];
+  const dataLines = lines.slice(2);
+
+  if (!/^\|[-| :]+\|$/.test(sepLine)) return null;
+
+  const parseRow = (line: string): string[] =>
+    line.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+
+  const headerCells = parseRow(headerLine);
+  const colCount = headerCells.length;
+
+  const tableType      = schema.nodes['table'];
+  const headerRowType  = schema.nodes['table_header_row'];
+  const rowType        = schema.nodes['table_row'];
+  const headerType     = schema.nodes['table_header'];
+  const cellType       = schema.nodes['table_cell'];
+
+  if (!tableType || !headerRowType || !rowType || !headerType || !cellType) return null;
+
+  const paragraphType = schema.nodes['paragraph'];
+  if (!paragraphType) return null;
+
+  const makeCell = (type: typeof headerType, text: string): PMNode => {
+    const content = text.length > 0 ? [paragraphType.create({}, [schema.text(text)])] : [paragraphType.create({})];
+    return type.create({}, content);
+  };
+
+  const headerRow = headerRowType.create(
+    {},
+    headerCells.map(c => makeCell(headerType, c)),
+  );
+
+  const dataRows = dataLines.map(line => {
+    const cells = parseRow(line);
+    const paddedCells = Array.from({ length: colCount }, (_, i) => cells[i] ?? '');
+    return rowType.create(
+      {},
+      paddedCells.map(c => makeCell(cellType, c)),
+    );
+  });
+
+  return tableType.create({}, [headerRow, ...dataRows]);
+}
+
 // ─── Cursor detection ─────────────────────────────────────────────────────────
 
 interface MarkRange  { from: number; to: number; mark: Mark; text: string }
@@ -178,6 +253,25 @@ function findImageAtCursor(state: EditorState): ImageRange | null {
   return null;
 }
 
+interface TableRange { from: number; to: number; node: PMNode }
+
+function findTableAtCursor(state: EditorState): TableRange | null {
+  const sel = state.selection;
+  const pos =
+    sel instanceof TextSelection && sel.$cursor ? sel.$cursor.pos :
+    sel instanceof NodeSelection ? sel.from : -1;
+  if (pos < 0) return null;
+
+  const $pos = state.doc.resolve(pos);
+  for (let depth = $pos.depth; depth >= 0; depth--) {
+    const node = $pos.node(depth);
+    if (node.type.name === 'table') {
+      return { from: $pos.before(depth), to: $pos.after(depth), node };
+    }
+  }
+  return null;
+}
+
 function findBlockAtCursor(state: EditorState): BlockRange | null {
   const sel = state.selection;
 
@@ -209,7 +303,7 @@ export function createLivePreviewPlugin() {
         init: (): LPState => ({ expanded: null }),
         apply: (tr, prev): LPState => {
           const meta = tr.getMeta(META_KEY) as
-            | { type: 'expand'; from: number; to: number; originalRaw: string; mode: 'mark' | 'block' }
+            | { type: 'expand'; from: number; to: number; originalRaw: string; mode: 'mark' | 'block' | 'table' }
             | { type: 'collapse' }
             | undefined;
 
@@ -291,6 +385,17 @@ export function createLivePreviewPlugin() {
                   ? tr.replaceWith(from, to, schema.text(mText, [mark]))
                   : tr.delete(from, to);
               }
+            }
+          } else if (mode === 'table') {
+            // Table collapse: code_block → table node
+            const safeFrom = Math.min(from, newState.doc.content.size);
+            const safeTo   = Math.min(to, newState.doc.content.size);
+            if (rawText.length > 0) {
+              const parsedTable = parseMarkdownToTable(rawText, schema);
+              if (parsedTable && safeFrom < safeTo) {
+                tr = tr.replaceWith(safeFrom, safeTo, parsedTable);
+              }
+              // If parse failed, leave as code_block
             }
           } else {
             // Block collapse
@@ -387,8 +492,113 @@ export function createLivePreviewPlugin() {
           return tr;
         }
 
+        // ── Check for table nodes ────────────────────────────────────────
+        const tableRange = findTableAtCursor(newState);
+        if (tableRange) {
+          const { from, to, node } = tableRange;
+          const rawText = serializeTableToMarkdown(node);
+
+          const codeBlockType = schema.nodes['code_block'];
+          if (!codeBlockType) return null;
+
+          const codeNode = rawText.length > 0
+            ? codeBlockType.create({ language: '' }, schema.text(rawText))
+            : codeBlockType.create({ language: '' });
+          const tr = newState.tr.replaceWith(from, to, codeNode);
+          tr.setSelection(TextSelection.create(tr.doc, from + 1));
+          tr.setMeta(META_KEY, {
+            type: 'expand',
+            from,
+            to: from + codeNode.nodeSize,
+            originalRaw: rawText,
+            mode: 'table',
+          });
+          tr.setMeta('addToHistory', false);
+          return tr;
+        }
+
         return null;
+      },
+
+      props: {
+        handlePaste(view, event) {
+          const sel = view.state.selection;
+          if (sel instanceof TextSelection && sel.$cursor?.parent.type.name === 'code_block') return false;
+          const text = (event as ClipboardEvent).clipboardData?.getData('text/plain') ?? '';
+          const tableNode = parseMarkdownToTable(text.trim(), view.state.schema);
+          if (!tableNode) return false;
+          const from = sel.from;
+          const tr = view.state.tr.replaceSelectionWith(tableNode);
+          const afterPos = from + tableNode.nodeSize;
+          try { tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(afterPos, tr.doc.content.size)))); } catch { /* noop */ }
+          view.dispatch(tr);
+          return true;
+        },
+
+        handleKeyDown(view, event) {
+          if ((event as KeyboardEvent).key !== 'Enter') return false;
+          const { state } = view;
+          const sel = state.selection;
+          if (!(sel instanceof TextSelection) || !sel.$cursor) return false;
+          const $c = sel.$cursor;
+          if ($c.parent.type.name !== 'paragraph') return false;
+
+          const sepText = $c.parent.textContent.trim();
+          if (!/^\|[-| :]+\|$/.test(sepText)) return false;
+
+          const sepFrom = $c.before($c.depth);
+          const sepTo = $c.after($c.depth);
+          if (sepFrom <= 1) return false;
+
+          // Resolve AT sepFrom (the gap between the two sibling nodes) to get nodeBefore = prev paragraph
+          const $atSep = state.doc.resolve(sepFrom);
+          const prevNode = $atSep.nodeBefore;
+          if (!prevNode || prevNode.type.name !== 'paragraph') return false;
+
+          const headerText = prevNode.textContent.trim();
+          if (!/^\|.+\|$/.test(headerText)) return false;
+
+          const colCount = headerText.replace(/^\||\|$/g, '').split('|').length;
+          const emptyRow = Array(colCount).fill('|  ').join('') + '|';
+          const tableNode = parseMarkdownToTable(`${headerText}\n${sepText}\n${emptyRow}`, state.schema);
+          if (!tableNode) return false;
+
+          const prevFrom = sepFrom - prevNode.nodeSize;
+          const tr = state.tr.replaceWith(prevFrom, sepTo, tableNode);
+          const afterPos = prevFrom + tableNode.nodeSize;
+          try { tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(afterPos, tr.doc.content.size)))); } catch { /* noop */ }
+          view.dispatch(tr);
+          return true;
+        },
       },
     })
   );
+}
+
+// ─── Insert table command ─────────────────────────────────────────────────────
+
+export function insertTableAtCursor(view: EditorView): void {
+  const { state } = view;
+  const schema = state.schema;
+
+  const tableType     = schema.nodes['table'];
+  const headerRowType = schema.nodes['table_header_row'];
+  const rowType       = schema.nodes['table_row'];
+  const headerType    = schema.nodes['table_header'];
+  const cellType      = schema.nodes['table_cell'];
+  const paraType      = schema.nodes['paragraph'];
+
+  if (!tableType || !headerRowType || !rowType || !headerType || !cellType || !paraType) return;
+
+  const makeCell = (type: typeof headerType) => type.create({}, [paraType.create({})]);
+  const headerRow = headerRowType.create({}, [makeCell(headerType), makeCell(headerType)]);
+  const dataRow   = rowType.create({}, [makeCell(cellType), makeCell(cellType)]);
+  const tableNode = tableType.create({}, [headerRow, dataRow]);
+
+  const from = state.selection.from;
+  const tr = state.tr.replaceSelectionWith(tableNode);
+  const afterPos = from + tableNode.nodeSize;
+  try { tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(afterPos, tr.doc.content.size)))); } catch { /* noop */ }
+  view.dispatch(tr);
+  view.focus();
 }

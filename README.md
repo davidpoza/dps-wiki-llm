@@ -45,6 +45,17 @@ docker compose up --build
 
 Most API endpoints require a JWT from `POST /api/auth/login`. Health and OpenAPI endpoints are public.
 
+## Development
+
+To run the backend locally (with the infrastructure services already up via `docker compose up -d postgres rabbitmq embeddings web-extractor`):
+
+```bash
+cd backend
+mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dspring.docker.compose.enabled=false -Dspring.profiles.active=local"
+```
+
+The `local` profile (`application-local.yml`) sets `server.port=8090` and points datasource/rabbitmq to `172.17.0.1` so the app doesn't conflict with the containerised stack. Without this profile the app starts on port 8080 (production default).
+
 ## Architecture
 
 ### Services (docker-compose)
