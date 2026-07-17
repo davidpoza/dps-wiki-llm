@@ -1,17 +1,17 @@
 export type JobMode = 'unattended' | 'validated';
 
-export interface CommitFileStat {
+export interface SnapshotFileStat {
   path: string;
   added: number;
   deleted: number;
 }
 
-export interface Commit {
-  sha: string;
-  author: string;
-  date: string;
+export interface Snapshot {
+  id: string;
+  operationType: string;
   message: string;
-  files: CommitFileStat[];
+  createdAt: string;
+  files: SnapshotFileStat[];
 }
 export type JobStatus = 'QUEUED' | 'STARTED' | 'PROGRESS' | 'AWAITING_REVIEW' | 'COMPLETED' | 'FAILED' | 'REVERTED' | 'CANCELLED';
 

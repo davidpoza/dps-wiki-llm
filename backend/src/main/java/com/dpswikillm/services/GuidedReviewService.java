@@ -10,7 +10,7 @@ import com.dpswikillm.domain.MutationActionType;
 import com.dpswikillm.domain.MutationPlan;
 import com.dpswikillm.domain.MutationResult;
 import com.dpswikillm.domain.Operation;
-import com.dpswikillm.domain.OperationCommitRequest;
+import com.dpswikillm.domain.Snapshot;
 import com.dpswikillm.dto.ReviewRequest;
 import com.dpswikillm.repositories.JobConnectionCandidateRepository;
 import com.dpswikillm.repositories.JobRepository;
@@ -33,7 +33,7 @@ public class GuidedReviewService {
     private final MutationApplier mutationApplier;
     private final ReindexService reindexService;
     private final EmbeddingIndexService embeddingIndexService;
-    private final GitService gitService;
+    private final SnapshotService snapshotService;
     private final JobLifecycleService lifecycleService;
     private final ObjectMapper objectMapper;
 
@@ -43,7 +43,7 @@ public class GuidedReviewService {
                                MutationApplier mutationApplier,
                                ReindexService reindexService,
                                EmbeddingIndexService embeddingIndexService,
-                               GitService gitService,
+                               SnapshotService snapshotService,
                                JobLifecycleService lifecycleService,
                                ObjectMapper objectMapper) {
         this.jobRepository = jobRepository;
@@ -52,7 +52,7 @@ public class GuidedReviewService {
         this.mutationApplier = mutationApplier;
         this.reindexService = reindexService;
         this.embeddingIndexService = embeddingIndexService;
-        this.gitService = gitService;
+        this.snapshotService = snapshotService;
         this.lifecycleService = lifecycleService;
         this.objectMapper = objectMapper;
     }
@@ -129,9 +129,21 @@ public class GuidedReviewService {
         }
 
         lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "review-apply", "Applying accepted connection candidates");
+
+        // Capture before state for all target paths and idempotency ledger
+        Snapshot snapshot = resolveSnapshot(job);
+        for (JobConnectionCandidate candidate : accepted) {
+            snapshotService.captureFile(snapshot, candidate.getTargetPath());
+        }
+        snapshotService.captureFile(snapshot, "state/runtime/idempotency-keys.json");
+
         MutationResult result = mutationApplier.apply(new MutationPlan(planId, actions));
         reindexService.reindexWiki();
         embeddingIndexService.embedIncremental();
+
+        for (String p : result.created()) snapshotService.recordAfter(snapshot, p);
+        for (String p : result.updated()) snapshotService.recordAfter(snapshot, p);
+        snapshotService.recordAfter(snapshot, "state/runtime/idempotency-keys.json");
 
         if (commitImmediately) {
             List<String> changed = new ArrayList<>();
@@ -139,27 +151,26 @@ public class GuidedReviewService {
             changed.addAll(result.updated());
             if (!changed.isEmpty()) {
                 changed.add("state/runtime/idempotency-keys.json");
-                var commit = gitService.commitOperation(new OperationCommitRequest(
-                        "guided-review",
-                        job.getId().toString(),
-                        "Apply guided ingestion review",
-                        changed,
-                        Map.of("accepted", accepted.size())));
-                job.setCommitRange(appendRange(job, commit.commitRange()));
                 job.setAffectedPaths(toJson(appendAffectedPaths(job, changed)));
                 jobRepository.save(job);
-                recordOperation(job, result, commit.commitSha());
+                recordOperation(job, result, snapshot.getId().toString());
             }
-
+            snapshot.setMessage("Apply guided ingestion review");
+            snapshotService.finalizeSnapshot(snapshot, job);
             lifecycleService.transition(job.getId(), JobStatus.COMPLETED, "completed", "Guided review completed");
         }
 
         return result;
     }
 
-    private String appendRange(Job job, String commitRange) {
-        String existing = job.getCommitRange();
-        return existing == null || existing.isBlank() ? commitRange : existing + "," + commitRange;
+    private Snapshot resolveSnapshot(Job job) {
+        if (job.getSnapshotId() != null) {
+            return snapshotService.findById(job.getSnapshotId());
+        }
+        Snapshot snapshot = snapshotService.beginSnapshot(job.getId().toString(), "guided-review", null);
+        job.setSnapshotId(snapshot.getId());
+        jobRepository.save(job);
+        return snapshot;
     }
 
     private List<String> appendAffectedPaths(Job job, List<String> changed) {
@@ -187,12 +198,12 @@ public class GuidedReviewService {
         }
     }
 
-    private void recordOperation(Job job, MutationResult result, String commitSha) {
+    private void recordOperation(Job job, MutationResult result, String snapshotId) {
         Operation operation = new Operation();
         operation.setJobId(job.getId());
         operation.setType("guided-review");
         operation.setStatus("COMPLETED");
-        operation.setCommitSha(commitSha);
+        operation.setCommitSha(snapshotId);
         operation.setAffectedNoteCount(result.created().size() + result.updated().size());
         operation.setCompletedAt(Instant.now());
         operationRepository.save(operation);

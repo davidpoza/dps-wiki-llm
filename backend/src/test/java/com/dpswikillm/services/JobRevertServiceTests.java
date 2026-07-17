@@ -3,18 +3,16 @@ package com.dpswikillm.services;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.dpswikillm.config.AppProperties;
-import com.dpswikillm.config.GitProperties;
 import com.dpswikillm.domain.DocumentRecord;
 import com.dpswikillm.domain.Job;
 import com.dpswikillm.domain.JobMode;
 import com.dpswikillm.domain.JobStatus;
 import com.dpswikillm.domain.JobType;
-import com.dpswikillm.domain.OperationCommitRequest;
 import com.dpswikillm.domain.SearchResult;
+import com.dpswikillm.domain.Snapshot;
 import com.dpswikillm.repositories.DocumentIndexRepository;
 import com.dpswikillm.repositories.JobRepository;
 import com.dpswikillm.repositories.OperationRepository;
@@ -39,82 +37,78 @@ class JobRevertServiceTests {
     @TempDir
     Path vault;
 
+    private SnapshotServiceTests.FakeSnapshotRepository snapshotRepo;
+    private SnapshotServiceTests.FakeSnapshotFileRepository snapshotFileRepo;
+    private SnapshotService snapshotService;
+
     @BeforeEach
-    void initGit() throws Exception {
-        git("init");
-        git("config", "user.name", "Test User");
-        git("config", "user.email", "test@example.local");
-        Files.writeString(vault.resolve("README.md"), "initial\n", StandardCharsets.UTF_8);
-        git("add", "README.md");
-        git("commit", "-m", "initial");
+    void setUp() {
+        snapshotRepo = new SnapshotServiceTests.FakeSnapshotRepository();
+        snapshotFileRepo = new SnapshotServiceTests.FakeSnapshotFileRepository();
+        JobRepository jobRepo = mock(JobRepository.class);
+        when(jobRepo.save(any(Job.class))).thenAnswer(inv -> inv.getArgument(0));
+        snapshotService = new SnapshotService(snapshotRepo, snapshotFileRepo, resolver(), jobRepo);
     }
 
     @Test
-    void cleanRevertCreatesAuditableInverseCommitAndReindexes() throws Exception {
-        GitService gitService = gitService();
-        String preHead = gitService.getHead().orElseThrow();
+    void cleanRevertViaSnapshotReindexes() throws Exception {
         Files.createDirectories(vault.resolve("wiki/concepts"));
         Files.writeString(vault.resolve("wiki/concepts/revert-me.md"), "# Revert Me\n", StandardCharsets.UTF_8);
-        var originalCommit = gitService.commitOperation(new OperationCommitRequest(
-                "ingest-baseline",
-                "target",
-                "Create note",
-                List.of("wiki/concepts/revert-me.md"),
-                Map.of()));
+
+        Snapshot originalSnapshot = snapshotService.beginSnapshot("target", "ingest", "Create note");
+        snapshotService.captureFile(originalSnapshot, "wiki/concepts/revert-me.md");
+        Files.delete(vault.resolve("wiki/concepts/revert-me.md"));
+        snapshotService.recordAfter(originalSnapshot, "wiki/concepts/revert-me.md");
 
         Job target = job(UUID.randomUUID(), JobType.INGEST, JobStatus.COMPLETED);
-        target.setPreGitSha(preHead);
-        target.setCommitRange(originalCommit.commitRange());
-        target.setAffectedPaths("[\"wiki/concepts/revert-me.md\"]");
         ReflectionTestUtils.setField(target, "createdAt", Instant.parse("2026-07-08T00:00:00Z"));
+        target.setAffectedPaths("[\"wiki/concepts/revert-me.md\"]");
+        target.setSnapshotId(originalSnapshot.getId());
+        snapshotService.finalizeSnapshot(originalSnapshot, target);
+
         Job revertJob = job(UUID.randomUUID(), JobType.REVERT, JobStatus.STARTED);
         revertJob.setPayloadRef(target.getId().toString());
 
-        FakeRepository documentRepository = new FakeRepository();
-        service(target, revertJob, List.of(), documentRepository, gitService).revert(revertJob);
+        FakeDocumentRepository docRepo = new FakeDocumentRepository();
+        service(target, revertJob, List.of(), docRepo).revert(revertJob);
 
-        assertThat(Files.exists(vault.resolve("wiki/concepts/revert-me.md"))).isFalse();
-        assertThat(documentRepository.documents).isEmpty();
+        assertThat(Files.exists(vault.resolve("wiki/concepts/revert-me.md"))).isTrue();
+        assertThat(Files.readString(vault.resolve("wiki/concepts/revert-me.md"))).isEqualTo("# Revert Me\n");
         assertThat(target.getStatus()).isEqualTo(JobStatus.REVERTED);
-        assertThat(revertJob.getCommitRange()).isNotBlank();
-        assertThat(revertJob.getAffectedPaths()).contains("wiki/concepts/revert-me.md", "state/change-log/");
-        assertThat(gitService.getHead().orElseThrow()).isNotEqualTo(originalCommit.commitSha());
-        assertThat(git("status", "--short")).isBlank();
+        assertThat(revertJob.getSnapshotId()).isNotNull();
     }
 
     @Test
-    void laterJobTouchingSamePathBlocksRevertBeforeGitChanges() throws Exception {
-        GitService gitService = gitService();
+    void laterJobConflictBlocksRevert() throws Exception {
         Files.createDirectories(vault.resolve("wiki/concepts"));
         Files.writeString(vault.resolve("wiki/concepts/revert-me.md"), "# Revert Me\n", StandardCharsets.UTF_8);
-        var originalCommit = gitService.commitOperation(new OperationCommitRequest(
-                "ingest-baseline",
-                "target",
-                "Create note",
-                List.of("wiki/concepts/revert-me.md"),
-                Map.of()));
-        String headBeforeRevert = gitService.getHead().orElseThrow();
+
+        Snapshot originalSnapshot = snapshotService.beginSnapshot("target", "ingest", "Create note");
+        snapshotService.captureFile(originalSnapshot, "wiki/concepts/revert-me.md");
+        snapshotService.recordAfter(originalSnapshot, "wiki/concepts/revert-me.md");
 
         Job target = job(UUID.randomUUID(), JobType.INGEST, JobStatus.COMPLETED);
-        target.setCommitRange(originalCommit.commitRange());
-        target.setAffectedPaths("[\"wiki/concepts/revert-me.md\"]");
         ReflectionTestUtils.setField(target, "createdAt", Instant.parse("2026-07-08T00:00:00Z"));
+        target.setAffectedPaths("[\"wiki/concepts/revert-me.md\"]");
+        target.setSnapshotId(originalSnapshot.getId());
+        snapshotService.finalizeSnapshot(originalSnapshot, target);
+
         Job later = job(UUID.randomUUID(), JobType.INGEST, JobStatus.COMPLETED);
         later.setAffectedPaths("[\"wiki/concepts/revert-me.md\"]");
         ReflectionTestUtils.setField(later, "createdAt", Instant.parse("2026-07-08T00:01:00Z"));
+
         Job revertJob = job(UUID.randomUUID(), JobType.REVERT, JobStatus.STARTED);
         revertJob.setPayloadRef(target.getId().toString());
 
-        service(target, revertJob, List.of(later), new FakeRepository(), gitService).revert(revertJob);
+        service(target, revertJob, List.of(later), new FakeDocumentRepository()).revert(revertJob);
 
         assertThat(target.getStatus()).isEqualTo(JobStatus.COMPLETED);
         assertThat(revertJob.getStatus()).isEqualTo(JobStatus.FAILED);
-        assertThat(gitService.getHead()).contains(headBeforeRevert);
         assertThat(Files.exists(vault.resolve("wiki/concepts/revert-me.md"))).isTrue();
     }
 
     private JobRevertService service(Job target, Job revertJob, List<Job> laterJobs,
-                                     FakeRepository documentRepository, GitService gitService) {
+                                     DocumentIndexRepository documentRepository) {
         JobRepository jobRepository = mock(JobRepository.class);
         when(jobRepository.findById(target.getId())).thenReturn(Optional.of(target));
         when(jobRepository.findById(revertJob.getId())).thenReturn(Optional.of(revertJob));
@@ -124,18 +118,14 @@ class JobRevertServiceTests {
         when(operationRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         JobLifecycleService lifecycleService = new JobLifecycleService(jobRepository, mock(JobEventService.class));
 
-        JobRevertService service = new JobRevertService(
+        return new JobRevertService(
                 jobRepository,
                 operationRepository,
-                gitService,
+                snapshotService,
                 new ReindexService(resolver(), new MarkdownService(), documentRepository),
                 new EmbeddingIndexService(documentRepository, new StubEmbeddingClient(), properties()),
                 lifecycleService,
                 new ObjectMapper());
-        if (laterJobs.isEmpty()) {
-            verify(operationRepository, org.mockito.Mockito.never()).save(any());
-        }
-        return service;
     }
 
     private Job job(UUID id, JobType type, JobStatus status) {
@@ -145,10 +135,6 @@ class JobRevertServiceTests {
         job.setMode(JobMode.unattended);
         job.transitionTo(status);
         return job;
-    }
-
-    private GitService gitService() {
-        return new GitService(resolver(), new GitProperties("Test User", "test@example.local"));
     }
 
     private VaultPathResolver resolver() {
@@ -162,67 +148,20 @@ class JobRevertServiceTests {
                 new AppProperties.Telegram("", ""), null, null, null);
     }
 
-    private String git(String... args) throws Exception {
-        ArrayList<String> command = new ArrayList<>();
-        command.add("git");
-        command.addAll(List.of(args));
-        Process process = new ProcessBuilder(command).directory(vault.toFile()).redirectErrorStream(true).start();
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        if (process.waitFor() != 0) {
-            throw new IllegalStateException(output);
-        }
-        return output.trim();
-    }
-
     private static class StubEmbeddingClient implements EmbeddingClient {
-        @Override
-        public List<float[]> embedPassages(List<String> texts) {
-            return texts.stream().map(text -> new float[] {1, 0}).toList();
-        }
-
-        @Override
-        public float[] embedQuery(String text) {
-            return new float[] {1, 0};
-        }
+        @Override public List<float[]> embedPassages(List<String> texts) { return texts.stream().map(t -> new float[]{1, 0}).toList(); }
+        @Override public float[] embedQuery(String text) { return new float[]{1, 0}; }
     }
 
-    private static class FakeRepository implements DocumentIndexRepository {
+    private static class FakeDocumentRepository implements DocumentIndexRepository {
         List<DocumentRecord> documents = new ArrayList<>();
         Map<UUID, String> hashes = new LinkedHashMap<>();
-
-        @Override
-        public void replaceDocuments(List<DocumentRecord> documents) {
-            this.documents = new ArrayList<>(documents);
-        }
-
-        @Override
-        public List<DocumentRecord> findAllDocuments() {
-            return documents;
-        }
-
-        @Override
-        public Map<UUID, String> findEmbeddingHashes(String model) {
-            return hashes;
-        }
-
-        @Override
-        public void upsertEmbedding(UUID documentId, String model, int dimension, float[] embedding, String normalizedTextHash) {
-            hashes.put(documentId, normalizedTextHash);
-        }
-
-        @Override
-        public void pruneEmbeddingsNotIn(String model, List<UUID> documentIds) {
-            hashes.keySet().removeIf(id -> !documentIds.contains(id));
-        }
-
-        @Override
-        public List<SearchResult> semanticSearch(float[] queryVector, int limit) {
-            return List.of();
-        }
-
-        @Override
-        public List<SearchResult> lexicalLookup(String query, int limit) {
-            return List.of();
-        }
+        @Override public void replaceDocuments(List<DocumentRecord> docs) { this.documents = new ArrayList<>(docs); }
+        @Override public List<DocumentRecord> findAllDocuments() { return documents; }
+        @Override public Map<UUID, String> findEmbeddingHashes(String model) { return hashes; }
+        @Override public void upsertEmbedding(UUID id, String model, int dim, float[] emb, String hash) { hashes.put(id, hash); }
+        @Override public void pruneEmbeddingsNotIn(String model, List<UUID> ids) { hashes.keySet().removeIf(id -> !ids.contains(id)); }
+        @Override public List<SearchResult> semanticSearch(float[] q, int limit) { return List.of(); }
+        @Override public List<SearchResult> lexicalLookup(String q, int limit) { return List.of(); }
     }
 }

@@ -6,6 +6,8 @@ import com.dpswikillm.repositories.JobRepository;
 import com.dpswikillm.repositories.LlmPromptRepository;
 import com.dpswikillm.repositories.LoginEventRepository;
 import com.dpswikillm.repositories.OperationRepository;
+import com.dpswikillm.repositories.SnapshotFileRepository;
+import com.dpswikillm.repositories.SnapshotRepository;
 import com.dpswikillm.repositories.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -39,6 +41,12 @@ class DpsWikiLlmApplicationTests {
 
     @MockBean
     UserRepository userRepository;
+
+    @MockBean
+    SnapshotRepository snapshotRepository;
+
+    @MockBean
+    SnapshotFileRepository snapshotFileRepository;
 
     @MockBean
     RabbitTemplate rabbitTemplate;

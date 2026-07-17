@@ -32,6 +32,7 @@ public class Job {
     private Integer queuePosition;
     private String preGitSha;
     private String commitRange;
+    private UUID snapshotId;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
@@ -116,6 +117,14 @@ public class Job {
 
     public void setCommitRange(String commitRange) {
         this.commitRange = commitRange;
+    }
+
+    public UUID getSnapshotId() {
+        return snapshotId;
+    }
+
+    public void setSnapshotId(UUID snapshotId) {
+        this.snapshotId = snapshotId;
     }
 
     public void setAffectedPaths(String affectedPaths) {

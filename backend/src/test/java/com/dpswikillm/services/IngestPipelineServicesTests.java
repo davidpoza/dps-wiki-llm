@@ -11,9 +11,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.dpswikillm.config.AppProperties;
-import com.dpswikillm.config.GitProperties;
 import com.dpswikillm.domain.ConnectionCandidateDecision;
 import com.dpswikillm.domain.ConnectionCandidateSource;
+import com.dpswikillm.domain.DocumentRecord;
 import com.dpswikillm.domain.Job;
 import com.dpswikillm.domain.JobConnectionCandidate;
 import com.dpswikillm.domain.JobMode;
@@ -23,9 +23,9 @@ import com.dpswikillm.domain.MutationAction;
 import com.dpswikillm.domain.MutationActionType;
 import com.dpswikillm.domain.MutationPlan;
 import com.dpswikillm.domain.MutationResult;
+import com.dpswikillm.domain.SearchResult;
 import com.dpswikillm.dto.ReviewCandidateDecision;
 import com.dpswikillm.dto.ReviewRequest;
-import com.dpswikillm.domain.SearchResult;
 import com.dpswikillm.dto.ChatMessage;
 import com.dpswikillm.repositories.DocumentIndexRepository;
 import com.dpswikillm.repositories.JobConnectionCandidateRepository;
@@ -52,14 +52,17 @@ class IngestPipelineServicesTests {
     @TempDir
     Path vault;
 
+    private SnapshotServiceTests.FakeSnapshotRepository snapshotRepo;
+    private SnapshotServiceTests.FakeSnapshotFileRepository snapshotFileRepo;
+    private SnapshotService snapshotService;
+
     @BeforeEach
-    void initGit() throws Exception {
-        git("init");
-        git("config", "user.name", "Test User");
-        git("config", "user.email", "test@example.local");
-        Files.writeString(vault.resolve("README.md"), "initial\n");
-        git("add", "README.md");
-        git("commit", "-m", "initial");
+    void setUp() {
+        snapshotRepo = new SnapshotServiceTests.FakeSnapshotRepository();
+        snapshotFileRepo = new SnapshotServiceTests.FakeSnapshotFileRepository();
+        JobRepository jobRepo = mock(JobRepository.class);
+        when(jobRepo.save(any(Job.class))).thenAnswer(inv -> inv.getArgument(0));
+        snapshotService = new SnapshotService(snapshotRepo, snapshotFileRepo, resolver(), jobRepo);
     }
 
     @Test
@@ -109,12 +112,9 @@ class IngestPipelineServicesTests {
     }
 
     @Test
-    void ingestPipelineCreatesBaselineSourceNoteAndCommit() throws Exception {
+    void ingestPipelineCreatesBaselineSourceNote() throws Exception {
         Files.createDirectories(vault.resolve("raw/inbox"));
         Files.writeString(vault.resolve("raw/inbox/input.md"), "# Fixture\n\nA grounded fact.");
-        git("add", "raw/inbox/input.md");
-        git("commit", "-m", "raw fixture");
-        String before = git("rev-parse", "HEAD");
 
         IngestPipelineService pipeline = pipeline();
         Job job = new Job();
@@ -130,17 +130,13 @@ class IngestPipelineServicesTests {
                 .filter(Files::isRegularFile)
                 .toList()).hasSize(1);
         assertThat(Files.readString(vault.resolve("INDEX.md"))).contains("Fixture");
-        assertThat(git("rev-parse", "HEAD")).isNotEqualTo(before);
-        assertThat(git("rev-list", "--count", before + "..HEAD")).isEqualTo("1");
+        assertThat(job.getSnapshotId()).isNotNull();
     }
 
     @Test
     void ingestPipelineFailureRollsBackPartialVaultWrites() throws Exception {
         Files.createDirectories(vault.resolve("raw/inbox"));
         Files.writeString(vault.resolve("raw/inbox/input.md"), "# Fixture\n\nA grounded fact.");
-        git("add", "raw/inbox/input.md");
-        git("commit", "-m", "raw fixture");
-        String before = git("rev-parse", "HEAD");
 
         IngestPipelineService pipeline = pipeline(new FailingEmbeddingClient());
         Job job = new Job();
@@ -151,16 +147,14 @@ class IngestPipelineServicesTests {
 
         assertThatThrownBy(() -> pipeline.run(job)).isInstanceOf(RuntimeException.class);
 
-        assertThat(git("rev-parse", "HEAD")).isEqualTo(before);
         assertThat(Files.exists(vault.resolve("wiki"))).isFalse();
+        assertThat(job.getSnapshotId()).isNull();
     }
 
     @Test
     void validatedIngestPausesForGuidedReviewCandidates() throws Exception {
         Files.createDirectories(vault.resolve("raw/inbox"));
         Files.writeString(vault.resolve("raw/inbox/input.md"), "# Fixture\n\nA grounded fact.");
-        git("add", "raw/inbox/input.md");
-        git("commit", "-m", "raw fixture");
 
         JobConnectionCandidate candidate = candidate("wiki/concepts/existing.md", "wiki/sources/fixture.md");
         ConnectionDiscoveryService discovery = mock(ConnectionDiscoveryService.class);
@@ -185,8 +179,6 @@ class IngestPipelineServicesTests {
     void unattendedIngestAutoAppliesAcceptedCandidates() throws Exception {
         Files.createDirectories(vault.resolve("raw/inbox"));
         Files.writeString(vault.resolve("raw/inbox/input.md"), "# Fixture\n\nA grounded fact.");
-        git("add", "raw/inbox/input.md");
-        git("commit", "-m", "raw fixture");
 
         JobConnectionCandidate candidate = candidate("wiki/concepts/existing.md", "wiki/sources/fixture.md");
         ConnectionDiscoveryService discovery = mock(ConnectionDiscoveryService.class);
@@ -209,7 +201,7 @@ class IngestPipelineServicesTests {
     }
 
     @Test
-    void unattendedIngestWithConnectionsProducesExactlyOneCommit() throws Exception {
+    void unattendedIngestWithConnectionsFinalizesSnapshot() throws Exception {
         Files.createDirectories(vault.resolve("raw/inbox"));
         Files.createDirectories(vault.resolve("wiki/concepts"));
         Files.writeString(vault.resolve("raw/inbox/input.md"), "# Fixture\n\nA grounded fact.");
@@ -224,9 +216,6 @@ class IngestPipelineServicesTests {
                 ## Summary
                 An existing concept.
                 """);
-        git("add", ".");
-        git("commit", "-m", "raw and concept fixtures");
-        String before = git("rev-parse", "HEAD");
 
         JobConnectionCandidate candidate = candidate("wiki/concepts/existing.md", "wiki/sources/fixture.md");
         ReflectionTestUtils.setField(candidate, "id", UUID.randomUUID());
@@ -234,7 +223,7 @@ class IngestPipelineServicesTests {
         when(discovery.discoverAndPersist(any(), any(), anyString(), any())).thenReturn(List.of(candidate));
 
         VaultPathResolver resolver = resolver();
-        FakeRepository documentRepository = new FakeRepository();
+        FakeDocumentRepository documentRepository = new FakeDocumentRepository();
         JobRepository jobRepository = mock(JobRepository.class);
         when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(jobRepository.findById(any())).thenAnswer(invocation -> {
@@ -254,7 +243,7 @@ class IngestPipelineServicesTests {
                 jobRepository, candidateRepository, operationRepository,
                 new MutationApplier(resolver, new MarkdownService(), new ObjectMapper()),
                 reindex, embeddings,
-                new GitService(resolver, new GitProperties("Test User", "test@example.local")),
+                snapshotService,
                 lifecycle, new ObjectMapper());
 
         LlmClient llm = new SequencedLlmClient();
@@ -269,7 +258,7 @@ class IngestPipelineServicesTests {
                 new MutationApplier(resolver, new MarkdownService(), new ObjectMapper()),
                 new RootIndexService(resolver),
                 reindex, embeddings,
-                new GitService(resolver, new GitProperties("Test User", "test@example.local")),
+                snapshotService,
                 resolver, lifecycle, jobRepository, discovery, realGuidedReview,
                 new ObjectMapper().findAndRegisterModules());
 
@@ -282,7 +271,9 @@ class IngestPipelineServicesTests {
 
         pipeline.run(job);
 
-        assertThat(git("rev-list", "--count", before + "..HEAD")).isEqualTo("1");
+        assertThat(job.getSnapshotId()).isNotNull();
+        assertThat(snapshotRepo.findById(job.getSnapshotId()).map(com.dpswikillm.domain.Snapshot::getStatus))
+                .contains("COMPLETE");
     }
 
     @Test
@@ -315,8 +306,6 @@ class IngestPipelineServicesTests {
                 Existing manual target.
                 """);
         Files.writeString(vault.resolve("wiki/sources/source.md"), "# Source\n\n## Summary\nGrounding.\n");
-        git("add", "wiki");
-        git("commit", "-m", "wiki fixture");
 
         UUID jobId = UUID.randomUUID();
         Job job = new Job();
@@ -337,7 +326,7 @@ class IngestPipelineServicesTests {
         when(candidateRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         OperationRepository operationRepository = mock(OperationRepository.class);
         when(operationRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        FakeRepository documentRepository = new FakeRepository();
+        FakeDocumentRepository documentRepository = new FakeDocumentRepository();
         ReindexService reindex = new ReindexService(resolver(), new MarkdownService(), documentRepository);
         EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, new StubEmbeddingClient(), properties());
 
@@ -348,7 +337,7 @@ class IngestPipelineServicesTests {
                 new MutationApplier(resolver(), new MarkdownService(), new ObjectMapper()),
                 reindex,
                 embeddings,
-                new GitService(resolver(), new GitProperties("Test User", "test@example.local")),
+                snapshotService,
                 mock(JobLifecycleService.class),
                 new ObjectMapper());
 
@@ -386,7 +375,7 @@ class IngestPipelineServicesTests {
     private PipelineHarness pipeline(EmbeddingClient embeddingClient, ConnectionDiscoveryService discovery,
                                      GuidedReviewService guidedReview) {
         VaultPathResolver resolver = resolver();
-        FakeRepository documentRepository = new FakeRepository();
+        FakeDocumentRepository documentRepository = new FakeDocumentRepository();
         JobRepository jobRepository = mock(JobRepository.class);
         when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
         JobLifecycleService lifecycle = mock(JobLifecycleService.class);
@@ -409,7 +398,7 @@ class IngestPipelineServicesTests {
                 new RootIndexService(resolver),
                 reindex,
                 embeddings,
-                new GitService(resolver, new GitProperties("Test User", "test@example.local")),
+                snapshotService,
                 resolver,
                 lifecycle,
                 jobRepository,
@@ -451,21 +440,8 @@ class IngestPipelineServicesTests {
                 new AppProperties.Telegram("", ""), null, null, null);
     }
 
-    private String git(String... args) throws Exception {
-        ArrayList<String> command = new ArrayList<>();
-        command.add("git");
-        command.addAll(List.of(args));
-        Process process = new ProcessBuilder(command).directory(vault.toFile()).redirectErrorStream(true).start();
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        if (process.waitFor() != 0) {
-            throw new IllegalStateException(output);
-        }
-        return output.trim();
-    }
-
     private static class SequencedLlmClient implements LlmClient {
         int calls;
-
         @Override
         public String chat(List<ChatMessage> messages) {
             calls += 1;
@@ -477,67 +453,25 @@ class IngestPipelineServicesTests {
     }
 
     private static class StubEmbeddingClient implements EmbeddingClient {
-        @Override
-        public List<float[]> embedPassages(List<String> texts) {
-            return texts.stream().map(text -> new float[] {1, 0}).toList();
-        }
-
-        @Override
-        public float[] embedQuery(String text) {
-            return new float[] {1, 0};
-        }
+        @Override public List<float[]> embedPassages(List<String> texts) { return texts.stream().map(t -> new float[]{1, 0}).toList(); }
+        @Override public float[] embedQuery(String text) { return new float[]{1, 0}; }
     }
 
     private static class FailingEmbeddingClient implements EmbeddingClient {
-        @Override
-        public List<float[]> embedPassages(List<String> texts) {
-            throw new RuntimeException("embedding failed");
-        }
-
-        @Override
-        public float[] embedQuery(String text) {
-            throw new RuntimeException("embedding failed");
-        }
+        @Override public List<float[]> embedPassages(List<String> texts) { throw new RuntimeException("embedding failed"); }
+        @Override public float[] embedQuery(String text) { throw new RuntimeException("embedding failed"); }
     }
 
-    private static class FakeRepository implements DocumentIndexRepository {
-        List<com.dpswikillm.domain.DocumentRecord> documents = new ArrayList<>();
+    private static class FakeDocumentRepository implements DocumentIndexRepository {
+        List<DocumentRecord> documents = new ArrayList<>();
         Map<UUID, String> hashes = new LinkedHashMap<>();
-
-        @Override
-        public void replaceDocuments(List<com.dpswikillm.domain.DocumentRecord> documents) {
-            this.documents = new ArrayList<>(documents);
-        }
-
-        @Override
-        public List<com.dpswikillm.domain.DocumentRecord> findAllDocuments() {
-            return documents;
-        }
-
-        @Override
-        public Map<UUID, String> findEmbeddingHashes(String model) {
-            return hashes;
-        }
-
-        @Override
-        public void upsertEmbedding(UUID documentId, String model, int dimension, float[] embedding, String normalizedTextHash) {
-            hashes.put(documentId, normalizedTextHash);
-        }
-
-        @Override
-        public void pruneEmbeddingsNotIn(String model, List<UUID> documentIds) {
-            hashes.keySet().removeIf(id -> !documentIds.contains(id));
-        }
-
-        @Override
-        public List<SearchResult> semanticSearch(float[] queryVector, int limit) {
-            return List.of();
-        }
-
-        @Override
-        public List<SearchResult> lexicalLookup(String query, int limit) {
-            return List.of();
-        }
+        @Override public void replaceDocuments(List<DocumentRecord> docs) { this.documents = new ArrayList<>(docs); }
+        @Override public List<DocumentRecord> findAllDocuments() { return documents; }
+        @Override public Map<UUID, String> findEmbeddingHashes(String model) { return hashes; }
+        @Override public void upsertEmbedding(UUID id, String model, int dim, float[] emb, String hash) { hashes.put(id, hash); }
+        @Override public void pruneEmbeddingsNotIn(String model, List<UUID> ids) { hashes.keySet().removeIf(id -> !ids.contains(id)); }
+        @Override public List<SearchResult> semanticSearch(float[] q, int limit) { return List.of(); }
+        @Override public List<SearchResult> lexicalLookup(String q, int limit) { return List.of(); }
     }
 
     private record PipelineHarness(IngestPipelineService pipeline, JobLifecycleService lifecycle) {}
