@@ -195,6 +195,7 @@ public class FileService {
                     "-o", output.toString()
             );
             pb.environment().put("TMPDIR", "/tmp");
+            pb.directory(new java.io.File("/tmp"));
             pb.redirectErrorStream(true);
             Process process = pb.start();
             String stderr = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
