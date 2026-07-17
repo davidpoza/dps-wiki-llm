@@ -194,6 +194,7 @@ public class FileService {
                     "--pdf-engine=weasyprint",
                     "-o", output.toString()
             );
+            pb.environment().put("TMPDIR", "/tmp");
             pb.redirectErrorStream(true);
             Process process = pb.start();
             String stderr = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
