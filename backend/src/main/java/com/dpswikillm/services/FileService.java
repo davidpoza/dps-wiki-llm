@@ -1,5 +1,6 @@
 package com.dpswikillm.services;
 
+import com.dpswikillm.domain.Snapshot;
 import com.dpswikillm.dto.TreeNodeDto;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -12,6 +13,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,11 +24,11 @@ public class FileService {
     private static final Logger log = LoggerFactory.getLogger(FileService.class);
 
     private final VaultPathResolver pathResolver;
-    private final GitService gitService;
+    private final SnapshotService snapshotService;
 
-    public FileService(VaultPathResolver pathResolver, GitService gitService) {
+    public FileService(VaultPathResolver pathResolver, SnapshotService snapshotService) {
         this.pathResolver = pathResolver;
-        this.gitService = gitService;
+        this.snapshotService = snapshotService;
     }
 
     public List<TreeNodeDto> getTree() {
@@ -70,12 +72,16 @@ public class FileService {
 
     public void saveContent(String relativePath, String content) {
         Path resolved = resolveAndValidate(relativePath);
+        Snapshot snapshot = snapshotService.beginSnapshot(null, "manual-save", relativePath);
         try {
+            snapshotService.captureFile(snapshot, relativePath);
             Files.writeString(resolved, content, StandardCharsets.UTF_8);
+            snapshotService.recordAfter(snapshot, relativePath);
+            snapshotService.finalizeSnapshot(snapshot, null);
         } catch (IOException e) {
+            snapshotService.deleteSnapshot(snapshot.getId());
             throw new UncheckedIOException(e);
         }
-        gitCommit(List.of(relativePath), "edit: " + resolved.getFileName());
     }
 
     public void deleteFile(String relativePath) {
@@ -89,7 +95,6 @@ public class FileService {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        gitCommit(List.of(relativePath), "delete: " + filename);
     }
 
     public void renameFile(String relativePath, String newName) {
@@ -116,8 +121,6 @@ public class FileService {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        String newRelPath = pathResolver.vaultRoot().relativize(target).toString().replace('\\', '/');
-        gitCommit(List.of(relativePath, newRelPath), "rename: " + oldName + " to " + newName);
     }
 
     public void moveFile(String relativePath, String targetDirRelPath) {
@@ -151,8 +154,6 @@ public class FileService {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        String dest = normalizedDir.isEmpty() ? "/" : normalizedDir;
-        gitCommit(List.of(relativePath, newRelPath), "move: " + filename + " to " + dest);
     }
 
     public void createDirectory(String relativePath) {
@@ -162,14 +163,9 @@ public class FileService {
         }
         try {
             Files.createDirectories(resolved);
-            Path gitkeep = resolved.resolve(".gitkeep");
-            Files.createFile(gitkeep);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        String gitkeepRel = pathResolver.vaultRoot().relativize(resolved.resolve(".gitkeep"))
-                .toString().replace('\\', '/');
-        gitCommit(List.of(gitkeepRel), "mkdir: " + resolved.getFileName());
     }
 
     public void createFile(String relativePath) {
@@ -185,7 +181,6 @@ public class FileService {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        gitCommit(List.of(relativePath), "create: " + resolved.getFileName());
     }
 
     public byte[] exportPdf(String relativePath) {
@@ -217,17 +212,6 @@ public class FileService {
             if (output != null) {
                 try { Files.deleteIfExists(output); } catch (IOException ignored) {}
             }
-        }
-    }
-
-    private void gitCommit(List<String> paths, String message) {
-        try {
-            gitService.commitFileChanges(paths, message);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Git commit interrupted", e);
         }
     }
 

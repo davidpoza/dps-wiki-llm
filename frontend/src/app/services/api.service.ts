@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable, Observer } from 'rxjs';
-import { Commit, JobMode } from '../types';
+import { Snapshot, JobMode } from '../types';
 import { AuthService } from './auth.service';
 
 export interface EnqueueResponse {
@@ -118,16 +118,16 @@ export class ApiService {
     return this.http.get<FileSearchResult[]>('/api/files/lookup', { params: { q, limit: String(limit) } });
   }
 
-  getGitLog(limit = 50): Observable<Commit[]> {
-    return this.http.get<Commit[]>('/api/git/log', { params: { limit: String(limit) } });
+  getSnapshotHistory(limit = 50): Observable<Snapshot[]> {
+    return this.http.get<Snapshot[]>('/api/snapshots', { params: { limit: String(limit) } });
   }
 
-  resetToCommit(sha: string): Observable<{ sha: string }> {
-    return this.http.post<{ sha: string }>('/api/git/reset', { sha });
+  resetToSnapshot(id: string): Observable<{ snapshotId: string }> {
+    return this.http.post<{ snapshotId: string }>(`/api/snapshots/${id}/reset`, {});
   }
 
-  getFileDiff(sha: string, path: string): Observable<string> {
-    return this.http.get('/api/git/diff', { params: { sha, path }, responseType: 'text' });
+  getFileDiff(id: string, path: string): Observable<string> {
+    return this.http.get(`/api/snapshots/${id}/diff`, { params: { path }, responseType: 'text' });
   }
 
   getPrompts(): Observable<Prompt[]> {

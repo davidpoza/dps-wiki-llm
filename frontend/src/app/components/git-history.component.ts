@@ -5,7 +5,7 @@ import { ConfirmationService } from 'primeng/api';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { PaginatorModule, PaginatorState } from 'primeng/paginator';
 import { ApiService } from '../services/api.service';
-import { Commit } from '../types';
+import { Snapshot } from '../types';
 
 const PAGE_SIZE = 20;
 
@@ -31,39 +31,39 @@ const PAGE_SIZE = 20;
         <p class="loading">{{ 'git.loading' | transloco }}</p>
       }
 
-      @if (!loading() && commits().length === 0 && !error()) {
+      @if (!loading() && snapshots().length === 0 && !error()) {
         <p class="empty">{{ 'git.empty' | transloco }}</p>
       }
 
       <div class="commit-list">
-        @for (commit of page(); track commit.sha) {
+        @for (snapshot of page(); track snapshot.id) {
           <div class="commit-card">
             <div class="commit-meta">
-              <code class="commit-sha">{{ commit.sha.slice(0, 7) }}</code>
-              <span class="commit-author">{{ commit.author }}</span>
-              <span class="commit-date">{{ formatDate(commit.date) }}</span>
+              <code class="commit-sha">{{ snapshot.id.slice(0, 8) }}</code>
+              <span class="commit-author">{{ snapshot.operationType }}</span>
+              <span class="commit-date">{{ formatDate(snapshot.createdAt) }}</span>
             </div>
-            <p class="commit-message">{{ commit.message }}</p>
-            @if (commit.files.length > 0) {
+            <p class="commit-message">{{ snapshot.message }}</p>
+            @if (snapshot.files.length > 0) {
               <details class="commit-files">
-                <summary>{{ 'git.filesModified' | transloco: { count: commit.files.length } }}</summary>
+                <summary>{{ 'git.filesModified' | transloco: { count: snapshot.files.length } }}</summary>
                 <ul>
-                  @for (file of commit.files; track file.path) {
+                  @for (file of snapshot.files; track file.path) {
                     <li>
                       <span class="file-path">{{ file.path }}</span>
                       <span class="stat-added">+{{ file.added }}</span>
                       <span class="stat-deleted">-{{ file.deleted }}</span>
                       <button
                         class="diff-btn"
-                        (click)="toggleDiff(commit.sha, file.path)"
-                      >{{ isDiffOpen(commit.sha, file.path) ? ('git.hideDiff' | transloco) : ('git.showDiff' | transloco) }}</button>
+                        (click)="toggleDiff(snapshot.id, file.path)"
+                      >{{ isDiffOpen(snapshot.id, file.path) ? ('git.hideDiff' | transloco) : ('git.showDiff' | transloco) }}</button>
                     </li>
-                    @if (isDiffOpen(commit.sha, file.path)) {
+                    @if (isDiffOpen(snapshot.id, file.path)) {
                       <li class="diff-container">
-                        @if (isDiffLoading(commit.sha, file.path)) {
+                        @if (isDiffLoading(snapshot.id, file.path)) {
                           <span class="diff-loading">{{ 'git.loadingDiff' | transloco }}</span>
                         } @else {
-                          <pre class="diff-pre">@for (line of getDiffLines(commit.sha, file.path); track $index) {
+                          <pre class="diff-pre">@for (line of getDiffLines(snapshot.id, file.path); track $index) {
 <span [ngClass]="lineClass(line)">{{ line }}</span>
 }</pre>
                         }
@@ -73,17 +73,17 @@ const PAGE_SIZE = 20;
                 </ul>
               </details>
             }
-            <button class="reset-btn" (click)="resetTo(commit)">
+            <button class="reset-btn" (click)="resetTo(snapshot)">
               {{ 'git.revertTo' | transloco }}
             </button>
           </div>
         }
       </div>
 
-      @if (commits().length > pageSize) {
+      @if (snapshots().length > pageSize) {
         <p-paginator
           [rows]="pageSize"
-          [totalRecords]="commits().length"
+          [totalRecords]="snapshots().length"
           [first]="first()"
           (onPageChange)="onPage($event)"
         />
@@ -129,13 +129,13 @@ export class GitHistoryComponent implements OnInit {
   private readonly t = inject(TranslocoService);
   private readonly confirmationService = inject(ConfirmationService);
 
-  readonly commits = signal<Commit[]>([]);
+  readonly snapshots = signal<Snapshot[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
 
   readonly pageSize = PAGE_SIZE;
   readonly first = signal(0);
-  readonly page = computed(() => this.commits().slice(this.first(), this.first() + this.pageSize));
+  readonly page = computed(() => this.snapshots().slice(this.first(), this.first() + this.pageSize));
 
   private readonly openDiffs = new Map<string, string[]>();
   private readonly loadingDiffs = new Set<string>();
@@ -153,9 +153,9 @@ export class GitHistoryComponent implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     this.first.set(0);
-    this.api.getGitLog().subscribe({
-      next: commits => {
-        this.commits.set(commits);
+    this.api.getSnapshotHistory().subscribe({
+      next: snapshots => {
+        this.snapshots.set(snapshots);
         this.loading.set(false);
       },
       error: () => {
@@ -165,27 +165,27 @@ export class GitHistoryComponent implements OnInit {
     });
   }
 
-  private diffKey(sha: string, path: string): string {
-    return `${sha}::${path}`;
+  private diffKey(id: string, path: string): string {
+    return `${id}::${path}`;
   }
 
-  isDiffOpen(sha: string, path: string): boolean {
+  isDiffOpen(id: string, path: string): boolean {
     this.diffVersion();
-    return this.openDiffs.has(this.diffKey(sha, path));
+    return this.openDiffs.has(this.diffKey(id, path));
   }
 
-  isDiffLoading(sha: string, path: string): boolean {
+  isDiffLoading(id: string, path: string): boolean {
     this.diffVersion();
-    return this.loadingDiffs.has(this.diffKey(sha, path));
+    return this.loadingDiffs.has(this.diffKey(id, path));
   }
 
-  getDiffLines(sha: string, path: string): string[] {
+  getDiffLines(id: string, path: string): string[] {
     this.diffVersion();
-    return this.openDiffs.get(this.diffKey(sha, path)) ?? [];
+    return this.openDiffs.get(this.diffKey(id, path)) ?? [];
   }
 
-  toggleDiff(sha: string, path: string): void {
-    const key = this.diffKey(sha, path);
+  toggleDiff(id: string, path: string): void {
+    const key = this.diffKey(id, path);
     if (this.openDiffs.has(key)) {
       this.openDiffs.delete(key);
       this.diffVersion.update(v => v + 1);
@@ -193,7 +193,7 @@ export class GitHistoryComponent implements OnInit {
     }
     this.loadingDiffs.add(key);
     this.diffVersion.update(v => v + 1);
-    this.api.getFileDiff(sha, path).subscribe({
+    this.api.getFileDiff(id, path).subscribe({
       next: raw => {
         this.openDiffs.set(key, raw.split('\n'));
         this.loadingDiffs.delete(key);
@@ -215,18 +215,18 @@ export class GitHistoryComponent implements OnInit {
     return '';
   }
 
-  resetTo(commit: Commit): void {
+  resetTo(snapshot: Snapshot): void {
     this.confirmationService.confirm({
       header: this.t.translate('git.revertConfirmHeader'),
       message: this.t.translate('git.revertConfirmMessage', {
-        sha: commit.sha.slice(0, 7),
-        message: commit.message,
+        sha: snapshot.id.slice(0, 8),
+        message: snapshot.message,
       }),
       icon: 'pi pi-exclamation-triangle',
       accept: () => {
-        this.api.resetToCommit(commit.sha).subscribe({
+        this.api.resetToSnapshot(snapshot.id).subscribe({
           next: () => this.load(),
-          error: () => this.error.set(this.t.translate('git.errorRevert', { sha: commit.sha.slice(0, 7) })),
+          error: () => this.error.set(this.t.translate('git.errorRevert', { sha: snapshot.id.slice(0, 8) })),
         });
       },
     });

@@ -28,7 +28,7 @@
       "ingest": "Ingesta",
       "chat": "Chat",
       "review": "Revisión",
-      "git": "Historial Git"
+      "git": "Historial de cambios"
     }
   },
   "chat": {
@@ -71,20 +71,20 @@
     "loadCandidates": "Cargar candidatos"
   },
   "git": {
-    "title": "Historial Git",
+    "title": "Historial de cambios",
     "refresh": "Actualizar",
     "loading": "Cargando historial...",
-    "empty": "No hay commits en el repositorio.",
+    "empty": "No hay cambios registrados aún.",
     "filesModified": "{{ count }} fichero(s) modificado(s)",
     "showDiff": "Ver diff",
     "hideDiff": "Ocultar diff",
     "loadingDiff": "Cargando diff...",
-    "revertTo": "Revertir a este commit",
+    "revertTo": "Revertir este cambio",
     "revertConfirmHeader": "Confirmar reversión",
-    "revertConfirmMessage": "¿Revertir el repositorio al commit {{ sha }}?\n\n\"{{ message }}\"\n\nEsta operación es destructiva e irreversible.",
-    "errorLoadHistory": "Error al cargar el historial de commits.",
+    "revertConfirmMessage": "¿Revertir los cambios de \"{{ message }}\"?\n\nEsta operación es destructiva e irreversible.",
+    "errorLoadHistory": "Error al cargar el historial de cambios.",
     "errorLoadDiff": "Error al cargar el diff.",
-    "errorRevert": "Error al revertir al commit {{ sha }}."
+    "errorRevert": "Error al revertir el cambio."
   },
   "explorer": {
     "subtitle": "Explorador",

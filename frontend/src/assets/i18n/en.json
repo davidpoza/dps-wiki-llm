@@ -28,7 +28,7 @@
       "ingest": "Ingest",
       "chat": "Chat",
       "review": "Review",
-      "git": "Git History"
+      "git": "Changes History"
     }
   },
   "chat": {
@@ -71,20 +71,20 @@
     "loadCandidates": "Load Candidates"
   },
   "git": {
-    "title": "Git History",
+    "title": "Changes History",
     "refresh": "Refresh",
     "loading": "Loading history...",
-    "empty": "No commits in the repository.",
+    "empty": "No changes recorded yet.",
     "filesModified": "{{ count }} file(s) modified",
     "showDiff": "Show diff",
     "hideDiff": "Hide diff",
     "loadingDiff": "Loading diff...",
-    "revertTo": "Revert to this commit",
+    "revertTo": "Revert this change",
     "revertConfirmHeader": "Confirm revert",
-    "revertConfirmMessage": "Revert repository to commit {{ sha }}?\n\n\"{{ message }}\"\n\nThis operation is destructive and irreversible.",
-    "errorLoadHistory": "Error loading commit history.",
+    "revertConfirmMessage": "Revert changes from \"{{ message }}\"?\n\nThis operation is destructive and irreversible.",
+    "errorLoadHistory": "Error loading change history.",
     "errorLoadDiff": "Error loading diff.",
-    "errorRevert": "Error reverting to commit {{ sha }}."
+    "errorRevert": "Error reverting change."
   },
   "explorer": {
     "subtitle": "Explorer",
