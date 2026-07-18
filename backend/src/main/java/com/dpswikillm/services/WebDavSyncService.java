@@ -86,19 +86,28 @@ public class WebDavSyncService {
             log.warn("WebDAV baseline init: could not fetch remote ETags ({}), proceeding without", e.getMessage());
         }
 
-        int initialized = 0;
-        int processed = 0;
+        // Load existing baselines in one query
+        Map<String, VaultFileSync> existing = baselineRepository.findAll().stream()
+                .collect(Collectors.toMap(VaultFileSync::getPath, b -> b));
+
+        int initialized = 0, backfilled = 0, processed = 0;
         for (String path : localPaths) {
             processed++;
-            if (baselineRepository.findById(path).isEmpty()) {
+            VaultFileSync row = existing.get(path);
+            if (row == null) {
                 String content = readLocal(path);
                 upsertBaseline(path, sha256(content), remoteEtags.get(path), true, false, null);
                 initialized++;
+            } else if (row.getRemoteEtag() == null && remoteEtags.containsKey(path)) {
+                // Backfill ETag for existing baselines so the sync fast-path activates immediately.
+                row.setRemoteEtag(remoteEtags.get(path));
+                baselineRepository.save(row);
+                backfilled++;
             }
             log.info("WebDAV baseline init: {}/{} — {}", processed, total, path);
         }
-        log.info("WebDAV baseline init: done — {} new baselines created, {} already existed",
-                initialized, total - initialized);
+        log.info("WebDAV baseline init: done — {} new, {} etag-backfilled, {} already up-to-date",
+                initialized, backfilled, total - initialized - backfilled);
     }
 
     // ---------------------------------------------------------------------
@@ -178,11 +187,15 @@ public class WebDavSyncService {
         Map<String, WebDavClient.RemoteEntry> remoteByPath = remoteEntries.stream()
                 .collect(Collectors.toMap(WebDavClient.RemoteEntry::path, e -> e, (a, b) -> a));
 
+        // Load all baselines upfront to avoid N individual DB queries in the loop.
+        Map<String, VaultFileSync> allBaselines = baselineRepository.findAll().stream()
+                .collect(Collectors.toMap(VaultFileSync::getPath, b -> b));
+
         Set<String> localPaths = listLocalMarkdown();
         Set<String> allPaths = new TreeSet<>();
         allPaths.addAll(localPaths);
         allPaths.addAll(remoteByPath.keySet());
-        allPaths.addAll(baselineRepository.findAll().stream().map(VaultFileSync::getPath).toList());
+        allPaths.addAll(allBaselines.keySet());
 
         List<String> pulled = new ArrayList<>();
         List<String> deleted = new ArrayList<>();
@@ -198,31 +211,41 @@ public class WebDavSyncService {
                 onProgress.accept(new SyncProgressDto(processed, total, path));
             }
 
-            VaultFileSync baseline = baselineRepository.findById(path).orElse(null);
+            VaultFileSync baseline = allBaselines.get(path);
             String syncedHash = baseline != null ? baseline.getSyncedHash() : null;
             String syncedEtag = baseline != null ? baseline.getRemoteEtag() : null;
 
             boolean localExists = localPaths.contains(path);
-            String localContent = localExists ? readLocal(path) : null;
-            String localHash = localContent != null ? sha256(localContent) : null;
-            boolean localChanged = !Objects.equals(localHash, syncedHash);
-
             WebDavClient.RemoteEntry remote = remoteByPath.get(path);
             String currentRemoteEtag = remote != null ? remote.etag() : null;
 
-            // ETag fast-path: skip the HTTP GET when we know remote hasn't changed.
-            // Requires both stored and current ETags to be non-null (servers that don't
-            // return ETags always fall back to fetching content).
+            // ETag fast-path: remote unchanged when both stored and current ETags are non-null and equal.
+            // Servers that don't return ETags always fall back to fetching content (conservative).
             boolean remoteEtagUnchanged = syncedEtag != null
                     && currentRemoteEtag != null
                     && Objects.equals(currentRemoteEtag, syncedEtag);
 
-            // Fast-path: nothing changed on either side — update ETag if it drifted and skip.
-            if (!localChanged && remoteEtagUnchanged) {
+            // Use file mtime to detect local changes without reading content.
+            // If the file hasn't been touched since the last sync, we trust the stored hash.
+            boolean localMayHaveChanged = true;
+            if (baseline != null && baseline.getUpdatedAt() != null && localExists) {
+                try {
+                    Instant mtime = Files.getLastModifiedTime(pathResolver.resolve(path)).toInstant();
+                    localMayHaveChanged = mtime.isAfter(baseline.getUpdatedAt());
+                } catch (IOException ignored) {}
+            }
+
+            // Fast-path: nothing changed on either side.
+            if (!localMayHaveChanged && remoteEtagUnchanged) {
                 continue;
             }
 
-            // Determine remote content: fetch only when the ETag says it changed.
+            // Read local content lazily — only when we can't skip via mtime + ETag.
+            String localContent = localExists ? readLocal(path) : null;
+            String localHash = localContent != null ? sha256(localContent) : null;
+            boolean localChanged = !Objects.equals(localHash, syncedHash);
+
+            // Determine remote content: fetch only when ETag says it changed.
             String remoteContent;
             String remoteHash;
             if (remote == null) {
