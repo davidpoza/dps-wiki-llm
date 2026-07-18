@@ -77,13 +77,22 @@ public class WebDavSyncService {
         Set<String> localPaths = listLocalMarkdown();
         int total = localPaths.size();
         log.info("WebDAV baseline init: scanning {} local files", total);
+
+        // Fetch remote ETags once so subsequent syncs can use the ETag fast-path immediately.
+        Map<String, String> remoteEtags = new java.util.HashMap<>();
+        try {
+            webDavClient.list().forEach(e -> remoteEtags.put(e.path(), e.etag()));
+        } catch (IOException e) {
+            log.warn("WebDAV baseline init: could not fetch remote ETags ({}), proceeding without", e.getMessage());
+        }
+
         int initialized = 0;
         int processed = 0;
         for (String path : localPaths) {
             processed++;
             if (baselineRepository.findById(path).isEmpty()) {
                 String content = readLocal(path);
-                upsertBaseline(path, sha256(content), null, true, false, null);
+                upsertBaseline(path, sha256(content), remoteEtags.get(path), true, false, null);
                 initialized++;
             }
             log.info("WebDAV baseline init: {}/{} — {}", processed, total, path);
@@ -104,7 +113,12 @@ public class WebDavSyncService {
         String normalized = pathResolver.normalizeRelativePath(relPath);
         try {
             webDavClient.put(normalized, content);
-            upsertBaseline(normalized, sha256(content), null, true, false, null);
+            // Fetch the ETag after PUT so subsequent syncs can skip this file via the fast-path.
+            String etag = null;
+            try {
+                etag = webDavClient.getEtag(normalized);
+            } catch (IOException ignored) {}
+            upsertBaseline(normalized, sha256(content), etag, true, false, null);
         } catch (IOException e) {
             markNotReplicated(normalized);
             throw new WebDavReplicationException("Failed to replicate " + normalized + " to WebDAV", e);
@@ -183,33 +197,66 @@ public class WebDavSyncService {
             if (onProgress != null) {
                 onProgress.accept(new SyncProgressDto(processed, total, path));
             }
-            boolean localExists = localPaths.contains(path);
-            String localContent = localExists ? readLocal(path) : null;
-            String localHash = localContent != null ? sha256(localContent) : null;
-
-            WebDavClient.RemoteEntry remote = remoteByPath.get(path);
-            String remoteContent = remote != null ? fetchRemote(path) : null;
-            String remoteHash = remoteContent != null ? sha256(remoteContent) : null;
 
             VaultFileSync baseline = baselineRepository.findById(path).orElse(null);
             String syncedHash = baseline != null ? baseline.getSyncedHash() : null;
+            String syncedEtag = baseline != null ? baseline.getRemoteEtag() : null;
+
+            boolean localExists = localPaths.contains(path);
+            String localContent = localExists ? readLocal(path) : null;
+            String localHash = localContent != null ? sha256(localContent) : null;
+            boolean localChanged = !Objects.equals(localHash, syncedHash);
+
+            WebDavClient.RemoteEntry remote = remoteByPath.get(path);
+            String currentRemoteEtag = remote != null ? remote.etag() : null;
+
+            // ETag fast-path: skip the HTTP GET when we know remote hasn't changed.
+            // Requires both stored and current ETags to be non-null (servers that don't
+            // return ETags always fall back to fetching content).
+            boolean remoteEtagUnchanged = syncedEtag != null
+                    && currentRemoteEtag != null
+                    && Objects.equals(currentRemoteEtag, syncedEtag);
+
+            // Fast-path: nothing changed on either side — update ETag if it drifted and skip.
+            if (!localChanged && remoteEtagUnchanged) {
+                continue;
+            }
+
+            // Determine remote content: fetch only when the ETag says it changed.
+            String remoteContent;
+            String remoteHash;
+            if (remote == null) {
+                remoteContent = null;
+                remoteHash = null;
+            } else if (remoteEtagUnchanged && syncedHash != null) {
+                // Remote is still at syncedHash — no download needed.
+                remoteContent = null;
+                remoteHash = syncedHash;
+            } else {
+                remoteContent = fetchRemote(path);
+                remoteHash = remoteContent != null ? sha256(remoteContent) : null;
+            }
 
             if (Objects.equals(localHash, remoteHash)) {
                 // Already identical (or converged independently); refresh the baseline.
                 if (localHash == null) {
                     baselineRepository.deleteById(path);
                 } else {
-                    upsertBaseline(path, localHash, remote != null ? remote.etag() : null, true, false, null);
+                    upsertBaseline(path, localHash, currentRemoteEtag, true, false, null);
                 }
                 continue;
             }
 
-            boolean localChanged = !Objects.equals(localHash, syncedHash);
             boolean remoteChanged = !Objects.equals(remoteHash, syncedHash);
 
             if (remoteChanged && !localChanged) {
                 if (pullSnapshot == null) {
                     pullSnapshot = snapshotService.beginSnapshot(null, "webdav-sync", "WebDAV sync", "WEBDAV_PULL");
+                }
+                // Ensure we have the actual content before applying.
+                if (remoteContent == null && remote != null) {
+                    remoteContent = fetchRemote(path);
+                    remoteHash = remoteContent != null ? sha256(remoteContent) : null;
                 }
                 applyRemote(pullSnapshot, path, remoteContent, remote, remoteHash, pulled, deleted);
             } else if (localChanged && !remoteChanged) {
@@ -225,7 +272,11 @@ public class WebDavSyncService {
                 // Otherwise it was already pushed on save; nothing to do.
             } else {
                 // Both sides changed since the last sync -> conflict; do not overwrite either side.
-                upsertConflict(path, remote != null ? remote.etag() : null, remoteContent);
+                // Ensure we have remote content to store in the conflict record.
+                if (remoteContent == null && remote != null) {
+                    remoteContent = fetchRemote(path);
+                }
+                upsertConflict(path, currentRemoteEtag, remoteContent);
                 conflicts.add(path);
             }
         }
