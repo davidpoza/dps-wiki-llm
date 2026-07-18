@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -87,6 +86,9 @@ public class SnapshotService {
             return f;
         });
         sf.setContentAfter(contentAfter);
+        int[] stats = diffStats(sf.getContentBefore(), contentAfter);
+        sf.setLinesAdded(stats[0]);
+        sf.setLinesDeleted(stats[1]);
         snapshotFileRepository.save(sf);
     }
 
@@ -106,30 +108,15 @@ public class SnapshotService {
         snapshotRepository.deleteById(snapshotId);
     }
 
-    /**
-     * Returns the change history as a flat, reverse-chronological stream of per-file
-     * change entries. Entries with no textual change (before == after) are omitted.
-     */
-    public List<FileHistoryEntryDto> getFileHistory(int limit) {
-        List<Snapshot> snapshots = snapshotRepository.findByStatusOrderByCreatedAtDesc(
-                "COMPLETE", PageRequest.of(0, Math.max(limit, 1)));
-        List<FileHistoryEntryDto> entries = new ArrayList<>();
-        for (Snapshot snapshot : snapshots) {
-            for (SnapshotFile file : snapshotFileRepository.findBySnapshotId(snapshot.getId())) {
-                int[] counts = diffStats(file.getContentBefore(), file.getContentAfter());
-                if (counts[0] == 0 && counts[1] == 0) {
-                    continue;
-                }
-                entries.add(new FileHistoryEntryDto(
-                        file.getId(),
-                        file.getPath(),
-                        snapshot.getSource(),
-                        counts[0],
-                        counts[1],
-                        snapshot.getCreatedAt().toString()));
-            }
-        }
-        return entries.stream().limit(limit).toList();
+    /** Returns a page of change history entries, reverse-chronological, excluding no-op entries. */
+    public com.dpswikillm.dto.HistoryPageDto getFileHistory(int page, int size) {
+        org.springframework.data.domain.Page<FileHistoryEntryDto> result =
+                snapshotFileRepository.findHistoryPaged(PageRequest.of(page, size));
+        return new com.dpswikillm.dto.HistoryPageDto(
+                result.getContent(),
+                result.getTotalElements(),
+                result.getNumber(),
+                result.getSize());
     }
 
     /** Unified diff for an individual per-file change entry (identified by its snapshot-file id). */

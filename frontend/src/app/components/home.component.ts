@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { ChatComponent } from './chat.component';
@@ -61,7 +62,7 @@ type Tab = 'jobs' | 'ingest' | 'chat' | 'review' | 'git';
 
         <nav class="tabs">
           @for (tab of tabDefs; track tab.id) {
-            <button class="tab-btn" [class.active]="activeTab() === tab.id" (click)="activeTab.set(tab.id)">
+            <button class="tab-btn" [class.active]="activeTab() === tab.id" (click)="switchTab(tab.id)">
               {{ tab.labelKey | transloco }}
               @if (tab.id === 'review' && reviewCount() > 0) {
                 <span class="badge">{{ reviewCount() }}</span>
@@ -99,6 +100,8 @@ export class HomeComponent implements OnInit {
   private readonly store = inject(JobsStore);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
   readonly theme = inject(ThemeService);
 
   readonly currentUser = this.auth.currentUser;
@@ -119,6 +122,16 @@ export class HomeComponent implements OnInit {
 
   ngOnInit(): void {
     this.store.connect();
+    this.route.url.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(segments => {
+      const tab = segments[0]?.path as Tab | undefined;
+      if (tab && this.tabDefs.some(t => t.id === tab)) {
+        this.activeTab.set(tab);
+      }
+    });
+  }
+
+  switchTab(tab: Tab): void {
+    this.router.navigate([tab]);
   }
 
   goToExplorer(): void {

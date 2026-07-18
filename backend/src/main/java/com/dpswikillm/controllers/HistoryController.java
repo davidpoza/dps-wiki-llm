@@ -1,8 +1,7 @@
 package com.dpswikillm.controllers;
 
-import com.dpswikillm.dto.FileHistoryEntryDto;
+import com.dpswikillm.dto.HistoryPageDto;
 import com.dpswikillm.services.SnapshotService;
-import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 import org.springframework.http.MediaType;
@@ -28,8 +27,10 @@ public class HistoryController {
     }
 
     @GetMapping
-    public ResponseEntity<List<FileHistoryEntryDto>> getHistory(@RequestParam(defaultValue = "50") int limit) {
-        return ResponseEntity.ok(snapshotService.getFileHistory(limit));
+    public ResponseEntity<HistoryPageDto> getHistory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(snapshotService.getFileHistory(page, Math.min(size, 100)));
     }
 
     @GetMapping(value = "/{changeId}/diff", produces = MediaType.TEXT_PLAIN_VALUE)

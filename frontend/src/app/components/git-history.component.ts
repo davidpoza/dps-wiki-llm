@@ -7,6 +7,7 @@ import { ApiService, SyncEvent } from '../services/api.service';
 import { Conflict, FileHistoryEntry, SyncResult } from '../types';
 
 const PAGE_SIZE = 20;
+const FIRST_PAGE = 0;
 
 @Component({
   selector: 'app-git-history',
@@ -76,11 +77,11 @@ const PAGE_SIZE = 20;
         }
       </div>
 
-      @if (entries().length > pageSize) {
+      @if (totalElements() > pageSize) {
         <p-paginator
           [rows]="pageSize"
-          [totalRecords]="entries().length"
-          [first]="first()"
+          [totalRecords]="totalElements()"
+          [first]="currentPage() * pageSize"
           (onPageChange)="onPage($event)"
         />
       }
@@ -174,12 +175,13 @@ export class GitHistoryComponent implements OnInit {
   private readonly t = inject(TranslocoService);
 
   readonly entries = signal<FileHistoryEntry[]>([]);
+  readonly totalElements = signal(0);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
 
   readonly pageSize = PAGE_SIZE;
-  readonly first = signal(0);
-  readonly page = computed(() => this.entries().slice(this.first(), this.first() + this.pageSize));
+  readonly currentPage = signal(FIRST_PAGE);
+  readonly page = computed(() => this.entries());
 
   readonly syncing = signal(false);
   readonly syncMessage = signal<string | null>(null);
@@ -198,16 +200,23 @@ export class GitHistoryComponent implements OnInit {
   }
 
   onPage(e: PaginatorState): void {
-    this.first.set(e.first ?? 0);
+    const newPage = Math.floor((e.first ?? 0) / this.pageSize);
+    this.currentPage.set(newPage);
+    this.loadPage(newPage);
   }
 
   load(): void {
+    this.currentPage.set(FIRST_PAGE);
+    this.loadPage(FIRST_PAGE);
+  }
+
+  private loadPage(page: number): void {
     this.loading.set(true);
     this.error.set(null);
-    this.first.set(0);
-    this.api.getHistory().subscribe({
-      next: entries => {
-        this.entries.set(entries);
+    this.api.getHistory(page, this.pageSize).subscribe({
+      next: result => {
+        this.entries.set(result.content);
+        this.totalElements.set(result.totalElements);
         this.loading.set(false);
       },
       error: () => {
