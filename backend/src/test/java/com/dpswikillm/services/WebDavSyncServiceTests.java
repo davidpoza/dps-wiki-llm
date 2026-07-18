@@ -349,7 +349,7 @@ class WebDavSyncServiceTests {
                 return List.of();
             }
             return remote.entrySet().stream()
-                    .map(e -> new RemoteEntry(e.getKey(), WebDavSyncService.sha256(e.getValue())))
+                    .map(e -> new RemoteEntry(e.getKey(), WebDavSyncService.sha256(e.getValue()), null))
                     .toList();
         }
     }
