@@ -7,6 +7,7 @@ import { providePrimeNG } from 'primeng/config';
 import Aura from '@primeuix/themes/aura';
 import { provideTransloco, Translation, TranslocoLoader, TranslocoService } from '@jsverse/transloco';
 import { AppComponent } from './app/app.component';
+import { DocumentViewerComponent } from './app/components/document-viewer.component';
 import { ExplorerComponent } from './app/components/explorer.component';
 import { HomeComponent } from './app/components/home.component';
 import { LoginComponent } from './app/components/login.component';
@@ -51,6 +52,8 @@ bootstrapApplication(AppComponent, {
       { path: 'login', component: LoginComponent },
       { path: '', component: HomeComponent, canActivate: [authGuard] },
       { path: 'explorer', component: ExplorerComponent, canActivate: [authGuard], canDeactivate: [unsavedChangesGuard] },
+      { path: 'explorer/**', component: ExplorerComponent, canActivate: [authGuard], canDeactivate: [unsavedChangesGuard] },
+      { path: 'viewer/**', component: DocumentViewerComponent, canActivate: [authGuard] },
       { path: 'settings', component: SettingsComponent, canActivate: [authGuard] },
       { path: 'profile', component: ProfileComponent, canActivate: [authGuard] },
     ]),

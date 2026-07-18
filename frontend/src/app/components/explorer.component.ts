@@ -4,16 +4,20 @@ import {
   ChangeDetectorRef,
   Component,
   computed,
+  DestroyRef,
   ElementRef,
   HostListener,
   inject,
   OnDestroy,
+  OnInit,
   signal,
   ViewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NgClass, SlicePipe } from '@angular/common';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { skip } from 'rxjs/operators';
 import { Editor, defaultValueCtx, editorViewOptionsCtx, rootCtx } from '@milkdown/core';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { history } from '@milkdown/plugin-history';
@@ -812,12 +816,14 @@ import { FileVersion } from '../types';
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChangesAware {
+export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, UnsavedChangesAware {
   @ViewChild('editorContainer') editorContainer!: ElementRef<HTMLDivElement>;
 
   private readonly fileService = inject(FileService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly messageService = inject(MessageService);
   private readonly confirmationService = inject(ConfirmationService);
   private readonly cdr = inject(ChangeDetectorRef);
@@ -894,10 +900,28 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
   private resizeStartX = 0;
   private resizeStartWidth = 0;
   private allowDiscardOnDeactivate = false;
+  private navigatingFromTree = false;
+
+  ngOnInit(): void {
+    this.route.url.pipe(
+      skip(1),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(segments => {
+      if (this.navigatingFromTree) {
+        this.navigatingFromTree = false;
+        return;
+      }
+      const filePath = segments.slice(1).map(s => s.path).join('/');
+      if (filePath) this.loadFileByPath(filePath);
+    });
+  }
 
   ngAfterViewInit(): void {
     this.loadTree();
-    this.initEditor();
+    this.initEditor().then(() => {
+      const filePath = this.getFilePathFromRoute();
+      if (filePath) this.loadFileByPath(filePath);
+    });
   }
 
   ngOnDestroy(): void {
@@ -909,6 +933,11 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
     this.treeSubscription = this.fileService.getTree().subscribe({
       next: nodes => {
         this.treeNodes.set(nodes);
+        const currentPath = this.selectedPath();
+        if (currentPath) {
+          const node = this.allFiles().find(n => n.data === currentPath);
+          if (node) this.selectedNode = node;
+        }
         this.cdr.markForCheck();
       },
       error: () =>
@@ -969,6 +998,8 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
           const newPath = dir + newName;
           this.selectedPath.set(newPath);
           this.selectedLabel.set(newName);
+          const segments = newPath.split('/');
+          this.router.navigate(['explorer', ...segments]);
         }
         this.reloadTree();
         this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryRenamed'), detail: this.t.translate('explorer.toastSuccessRenamed', { name: newName }) });
@@ -999,7 +1030,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
       next: () => {
         this.reloadTree();
         const newNode: TreeNode = { label: name, data: newPath, leaf: true };
-        this.loadFile(newNode);
+        this.openFile(newNode);
         this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryCreated'), detail: this.t.translate('explorer.toastSuccessFileCreated', { name }) });
       },
       error: err => {
@@ -1059,6 +1090,8 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
         const newPath = targetDir ? targetDir + '/' + filename : filename;
         if (this.selectedPath() === (node.data as string)) {
           this.selectedPath.set(newPath);
+          const segments = newPath.split('/');
+          this.router.navigate(['explorer', ...segments]);
         }
         this.reloadTree();
         const dest = targetDir || '/';
@@ -1099,8 +1132,8 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
     });
   }
 
-  private initEditor(): void {
-    Editor.make()
+  private initEditor(): Promise<void> {
+    return Editor.make()
       .config(ctx => {
         ctx.set(rootCtx, this.editorContainer.nativeElement);
         ctx.set(defaultValueCtx, '');
@@ -1141,6 +1174,45 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
       });
   }
 
+  private getFilePathFromRoute(): string | null {
+    const segments = this.route.snapshot.url;
+    if (segments.length <= 1) return null;
+    return segments.slice(1).map(s => s.path).join('/');
+  }
+
+  private loadFileByPath(path: string): void {
+    const label = path.split('/').pop() ?? path;
+    this.fileService.getContent(path).subscribe({
+      next: rawContent => {
+        const parsed = this.parseFrontmatter(rawContent);
+        this.selectedPath.set(path);
+        this.selectedLabel.set(label);
+        this.isDirty.set(false);
+        this.rawFileContent = rawContent;
+        this.frontmatter.set(parsed.data);
+        this.editingFrontmatter.set(false);
+        this.frontmatterYamlError.set(false);
+        this.currentMarkdown = parsed.content;
+        if (this.editor) {
+          this.isLoading = true;
+          this.editor.action(replaceAll(parsed.content));
+        }
+        const node = this.allFiles().find(n => n.data === path);
+        if (node) this.selectedNode = node;
+        this.cdr.markForCheck();
+      },
+      error: () =>
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorLoadTree') }),
+    });
+  }
+
+  private openFile(node: TreeNode): void {
+    this.navigatingFromTree = true;
+    this.loadFile(node);
+    const segments = (node.data as string).split('/');
+    this.router.navigate(['explorer', ...segments]);
+  }
+
   onNodeContextMenuSelect(event: { node: TreeNode }): void {
     const node = event.node;
     this.contextMenuNode.set(node);
@@ -1163,17 +1235,19 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
     if (!node.leaf) return;
 
     if (this.isDirty()) {
+      const previousNode = this.selectedNode;
       this.confirmationService.confirm({
         message: this.t.translate('explorer.confirmUnsavedMessage'),
         header: this.t.translate('explorer.confirmUnsavedHeader'),
         icon: 'pi pi-exclamation-triangle',
-        accept: () => this.loadFile(node),
+        accept: () => this.openFile(node),
         reject: () => {
-          this.selectedNode = null;
+          this.selectedNode = previousNode;
+          this.cdr.markForCheck();
         },
       });
     } else {
-      this.loadFile(node);
+      this.openFile(node);
     }
   }
 
@@ -1272,11 +1346,11 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
         message: this.t.translate('explorer.confirmUnsavedNavigate'),
         header: this.t.translate('explorer.confirmUnsavedHeader'),
         icon: 'pi pi-exclamation-triangle',
-        accept: () => this.loadFile(file),
+        accept: () => this.openFile(file),
         reject: () => {},
       });
     } else {
-      this.loadFile(file);
+      this.openFile(file);
     }
   }
 
@@ -1317,11 +1391,11 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
         message: this.t.translate('explorer.confirmUnsavedMessage'),
         header: this.t.translate('explorer.confirmUnsavedHeader'),
         icon: 'pi pi-exclamation-triangle',
-        accept: () => this.loadFile(node),
+        accept: () => this.openFile(node),
         reject: () => {},
       });
     } else {
-      this.loadFile(node);
+      this.openFile(node);
     }
   }
 
