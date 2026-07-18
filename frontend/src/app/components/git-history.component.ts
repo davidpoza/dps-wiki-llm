@@ -3,7 +3,7 @@ import { NgClass } from '@angular/common';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { DialogModule } from 'primeng/dialog';
 import { PaginatorModule, PaginatorState } from 'primeng/paginator';
-import { ApiService } from '../services/api.service';
+import { ApiService, SyncEvent } from '../services/api.service';
 import { Conflict, FileHistoryEntry, SyncResult } from '../types';
 
 const PAGE_SIZE = 20;
@@ -24,6 +24,13 @@ const PAGE_SIZE = 20;
           <button class="refresh-btn" (click)="load()">{{ 'git.refresh' | transloco }}</button>
         </div>
       </div>
+
+      @if (syncing() && syncTotal() > 0) {
+        <div class="sync-progress-wrap">
+          <div class="sync-progress-bar" [style.width.%]="(syncProcessed() / syncTotal()) * 100"></div>
+          <span class="sync-progress-label">{{ syncProcessed() }}/{{ syncTotal() }}</span>
+        </div>
+      }
 
       @if (syncMessage()) {
         <p class="sync-msg" [class.error]="syncIsError()">{{ syncMessage() }}</p>
@@ -124,6 +131,9 @@ const PAGE_SIZE = 20;
     .sync-btn, .refresh-btn { padding: 0.25rem 0.75rem; cursor: pointer; border: 1px solid var(--app-border-strong); border-radius: 4px; background: var(--app-surface-muted); color: var(--app-text); }
     .sync-btn { background: var(--app-primary-soft); color: var(--app-primary); font-weight: 500; }
     .sync-btn:disabled { opacity: 0.6; cursor: default; }
+    .sync-progress-wrap { position: relative; height: 20px; background: var(--app-border); border-radius: 10px; overflow: hidden; margin-bottom: 0.5rem; }
+    .sync-progress-bar { height: 100%; background: var(--app-primary); border-radius: 10px; transition: width 0.15s ease; }
+    .sync-progress-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 600; color: var(--app-text); }
     .sync-msg { font-size: 0.85rem; color: var(--app-text-muted); }
     .sync-msg.error { color: var(--app-error-text); }
     .error-msg { color: var(--app-error-text); }
@@ -174,6 +184,8 @@ export class GitHistoryComponent implements OnInit {
   readonly syncing = signal(false);
   readonly syncMessage = signal<string | null>(null);
   readonly syncIsError = signal(false);
+  readonly syncProcessed = signal(0);
+  readonly syncTotal = signal(0);
   readonly conflicts = signal<Conflict[]>([]);
   readonly showConflicts = signal(false);
 
@@ -209,25 +221,33 @@ export class GitHistoryComponent implements OnInit {
     this.syncing.set(true);
     this.syncMessage.set(null);
     this.syncIsError.set(false);
+    this.syncProcessed.set(0);
+    this.syncTotal.set(0);
     this.api.syncWebdav().subscribe({
-      next: (result: SyncResult) => {
-        this.syncing.set(false);
-        this.syncIsError.set(false);
-        this.syncMessage.set(this.t.translate('sync.summary', {
-          pulled: result.pulled.length,
-          deleted: result.deleted.length,
-          conflicts: result.conflicts.length,
-        }));
-        this.load();
-        if (result.conflicts.length > 0) {
-          this.loadConflicts();
+      next: (event: SyncEvent) => {
+        if (event.type === 'progress') {
+          this.syncProcessed.set(event.processed);
+          this.syncTotal.set(event.total);
+        } else {
+          const result: SyncResult = event.result;
+          this.syncing.set(false);
+          this.syncIsError.set(false);
+          this.syncMessage.set(this.t.translate('sync.summary', {
+            pulled: result.pulled.length,
+            deleted: result.deleted.length,
+            conflicts: result.conflicts.length,
+          }));
+          this.load();
+          if (result.conflicts.length > 0) {
+            this.loadConflicts();
+          }
         }
       },
-      error: err => {
+      error: (err: { code?: string; message?: string }) => {
         this.syncing.set(false);
         this.syncIsError.set(true);
         this.syncMessage.set(
-          err.status === 409
+          err.code === 'not_configured'
             ? this.t.translate('sync.notConfigured')
             : this.t.translate('sync.error'));
       }

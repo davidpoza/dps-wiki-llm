@@ -5,16 +5,20 @@ import com.dpswikillm.dto.ConflictResolveRequest;
 import com.dpswikillm.services.WebDavNotConfiguredException;
 import com.dpswikillm.services.WebDavReplicationException;
 import com.dpswikillm.services.WebDavSyncService;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.concurrent.CompletableFuture;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/webdav")
@@ -26,15 +30,33 @@ public class WebDavController {
         this.webDavSyncService = webDavSyncService;
     }
 
-    @PostMapping("/sync")
-    public ResponseEntity<?> sync() {
-        try {
-            return ResponseEntity.ok(webDavSyncService.sync());
-        } catch (WebDavNotConfiguredException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "not_configured"));
-        } catch (WebDavReplicationException e) {
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("error", e.getMessage()));
-        }
+    @GetMapping(value = "/sync", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter sync() {
+        SseEmitter emitter = new SseEmitter(0L);
+        CompletableFuture.runAsync(() -> {
+            try {
+                var result = webDavSyncService.sync(progress -> {
+                    try {
+                        emitter.send(SseEmitter.event().name("progress").data(progress));
+                    } catch (IOException | IllegalStateException ex) {
+                        throw new IllegalStateException("SSE send failed", ex);
+                    }
+                });
+                emitter.send(SseEmitter.event().name("done").data(result));
+                emitter.complete();
+            } catch (WebDavNotConfiguredException e) {
+                try {
+                    emitter.send(SseEmitter.event().name("error").data(Map.of("code", "not_configured")));
+                } catch (IOException | IllegalStateException ignored) {}
+                emitter.complete();
+            } catch (Exception ex) {
+                try {
+                    emitter.send(SseEmitter.event().name("error").data(Map.of("message", ex.getMessage())));
+                } catch (IOException | IllegalStateException ignored) {}
+                emitter.complete();
+            }
+        });
+        return emitter;
     }
 
     @GetMapping("/conflicts")

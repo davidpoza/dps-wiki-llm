@@ -3,6 +3,7 @@ package com.dpswikillm.services;
 import com.dpswikillm.domain.Snapshot;
 import com.dpswikillm.domain.VaultFileSync;
 import com.dpswikillm.dto.ConflictDto;
+import com.dpswikillm.dto.SyncProgressDto;
 import com.dpswikillm.dto.SyncResultDto;
 import com.dpswikillm.repositories.VaultFileSyncRepository;
 import java.io.IOException;
@@ -22,6 +23,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -146,6 +148,10 @@ public class WebDavSyncService {
     // ---------------------------------------------------------------------
 
     public SyncResultDto sync() {
+        return sync(null);
+    }
+
+    public SyncResultDto sync(Consumer<SyncProgressDto> onProgress) {
         if (!webDavClient.isEnabled()) {
             throw new WebDavNotConfiguredException();
         }
@@ -169,7 +175,14 @@ public class WebDavSyncService {
         List<String> conflicts = new ArrayList<>();
         Snapshot pullSnapshot = null;
 
+        int total = allPaths.size();
+        int processed = 0;
+
         for (String path : allPaths) {
+            processed++;
+            if (onProgress != null) {
+                onProgress.accept(new SyncProgressDto(processed, total, path));
+            }
             boolean localExists = localPaths.contains(path);
             String localContent = localExists ? readLocal(path) : null;
             String localHash = localContent != null ? sha256(localContent) : null;
