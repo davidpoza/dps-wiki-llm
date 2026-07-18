@@ -38,6 +38,9 @@ importers:
       '@milkdown/ctx':
         specifier: ^7.21.3
         version: 7.21.3
+      '@milkdown/plugin-history':
+        specifier: ^7.21.3
+        version: 7.21.3
       '@milkdown/plugin-listener':
         specifier: ^7.21.3
         version: 7.21.3
@@ -779,6 +782,9 @@ packages:
 
   '@milkdown/exception@7.21.3':
     resolution: {integrity: sha512-+Mne/hJ8Wjfdl4dCG5+Sm+BXWK5StacyP4pcQkCvPw/sBbNAP9eTF7+TC/KRJw/b5Bz60wqztbNkSlDuqd2fSQ==}
+
+  '@milkdown/plugin-history@7.21.3':
+    resolution: {integrity: sha512-cKjljylNaxgumLYGEfmbsWXDvI05MiX4ob9W+O+s4cBMj3R8k6sAgsfbk3Xri4FWhlvMsMqa7Y3YuFt7LVYmfQ==}
 
   '@milkdown/plugin-listener@7.21.3':
     resolution: {integrity: sha512-0lPngmnSjug+F8tcVIlvfxdU6kyqU+5nOG4T2P0Sv2JFHQdIKh2wu9Ns34BE/FyHC/eEPp/WqY0X2+7I8y/njQ==}
@@ -3552,6 +3558,15 @@ snapshots:
       '@milkdown/exception': 7.21.3
 
   '@milkdown/exception@7.21.3': {}
+
+  '@milkdown/plugin-history@7.21.3':
+    dependencies:
+      '@milkdown/core': 7.21.3
+      '@milkdown/ctx': 7.21.3
+      '@milkdown/prose': 7.21.3
+      '@milkdown/utils': 7.21.3
+    transitivePeerDependencies:
+      - supports-color
 
   '@milkdown/plugin-listener@7.21.3':
     dependencies:

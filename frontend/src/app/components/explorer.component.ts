@@ -11,11 +11,12 @@ import {
   signal,
   ViewChild,
 } from '@angular/core';
-import { SlicePipe } from '@angular/common';
+import { NgClass, SlicePipe } from '@angular/common';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { Router } from '@angular/router';
 import { Editor, defaultValueCtx, editorViewOptionsCtx, rootCtx } from '@milkdown/core';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
+import { history } from '@milkdown/plugin-history';
 import { commonmark } from '@milkdown/preset-commonmark';
 import { gfm } from '@milkdown/preset-gfm';
 import { replaceAll } from '@milkdown/utils';
@@ -40,11 +41,12 @@ import { AuthService } from '../services/auth.service';
 import { FileService } from '../services/file.service';
 import { ThemeService } from '../services/theme.service';
 import { UnsavedChangesAware } from '../unsaved-changes.guard';
+import { FileVersion } from '../types';
 
 @Component({
   selector: 'app-explorer',
   standalone: true,
-  imports: [TreeModule, ButtonModule, ContextMenuModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe, TranslocoPipe],
+  imports: [TreeModule, ButtonModule, ContextMenuModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe, NgClass, TranslocoPipe],
   providers: [MessageService, ConfirmationService],
   template: `
     <p-toast />
@@ -150,6 +152,13 @@ import { UnsavedChangesAware } from '../unsaved-changes.guard';
                     size="small"
                     [disabled]="!isDirty()"
                     (onClick)="save()"
+                  />
+                  <p-button
+                    icon="pi pi-history"
+                    [label]="'versions.button' | transloco"
+                    size="small"
+                    severity="secondary"
+                    (onClick)="openVersions()"
                   />
                   <p-button
                     icon="pi pi-file-pdf"
@@ -361,6 +370,41 @@ import { UnsavedChangesAware } from '../unsaved-changes.guard';
       <ng-template pTemplate="footer">
         <p-button [label]="'common.cancel' | transloco" severity="secondary" size="small" (onClick)="showMoveDialog.set(false)" />
         <p-button [label]="'explorer.moveHere' | transloco" size="small" (onClick)="confirmMove()" />
+      </ng-template>
+    </p-dialog>
+
+    <p-dialog
+      [header]="'versions.header' | transloco"
+      [(visible)]="showVersions"
+      [modal]="true"
+      [draggable]="false"
+      [style]="{ width: '860px' }"
+    >
+      <div class="versions-layout">
+        <div class="versions-list">
+          @if (versions().length === 0) {
+            <p class="hint">{{ 'versions.empty' | transloco }}</p>
+          }
+          @for (v of versions(); track v.versionId) {
+            <div class="version-item" [class.active]="previewVersionId() === v.versionId" (click)="selectVersion(v)">
+              <span class="v-date">{{ formatDate(v.createdAt) }}</span>
+              <span class="v-source" [ngClass]="sourceClass(v.source)">{{ sourceLabel(v.source) }}</span>
+            </div>
+          }
+        </div>
+        <div class="versions-preview">
+          @if (previewVersionId()) {
+            <pre class="version-diff">@for (line of previewDiffLines(); track $index) {
+<span [ngClass]="diffLineClass(line)">{{ line }}</span>
+}</pre>
+          } @else {
+            <p class="hint">{{ 'versions.selectHint' | transloco }}</p>
+          }
+        </div>
+      </div>
+      <ng-template pTemplate="footer">
+        <p-button [label]="'common.cancel' | transloco" severity="secondary" size="small" (onClick)="showVersions.set(false)" />
+        <p-button [label]="'versions.restore' | transloco" size="small" [disabled]="!previewVersionId()" (onClick)="restoreVersion()" />
       </ng-template>
     </p-dialog>
   `,
@@ -749,6 +793,22 @@ import { UnsavedChangesAware } from '../unsaved-changes.guard';
     }
     .move-root-item:hover { background: var(--app-surface-subtle); }
     .move-root-item.selected { background: var(--app-primary-soft); font-weight: 600; color: var(--app-primary); }
+    .versions-layout { display: flex; gap: 12px; height: 460px; }
+    .versions-list { width: 240px; flex-shrink: 0; overflow-y: auto; border: 1px solid var(--app-border); border-radius: 6px; }
+    .version-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--app-border); font-size: 0.8rem; }
+    .version-item:hover { background: var(--app-surface-subtle); }
+    .version-item.active { background: var(--app-primary-soft); }
+    .v-date { color: var(--app-text); }
+    .v-source { font-size: 0.7rem; font-weight: 600; padding: 0.05rem 0.4rem; border-radius: 10px; align-self: flex-start; text-transform: uppercase; letter-spacing: 0.03em; }
+    .source-local { background: #dbeafe; color: #1e40af; }
+    .source-job { background: #ede9fe; color: #6d28d9; }
+    .source-webdav { background: #dcfce7; color: #166534; }
+    .versions-preview { flex: 1; min-width: 0; overflow: auto; border: 1px solid var(--app-border); border-radius: 6px; }
+    .version-diff { margin: 0; font-size: 0.75rem; line-height: 1.45; background: #1e1e1e; color: #d4d4d4; padding: 0.6rem; white-space: normal; overflow-x: auto; min-height: 100%; }
+    .version-diff span { display: block; white-space: pre; }
+    .version-diff .line-add { background: #1a3a1a; color: #7ee787; }
+    .version-diff .line-del { background: #3a1a1a; color: #ff7b72; }
+    .versions-preview .hint, .versions-list .hint { padding: 16px; color: var(--app-text-muted); font-size: 0.85rem; }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -788,6 +848,11 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
   readonly createDirName = signal('');
   readonly showMoveDialog = signal(false);
   readonly moveTargetDir = signal<TreeNode | null>(null);
+  readonly showVersions = signal(false);
+  readonly versions = signal<FileVersion[]>([]);
+  readonly previewVersionId = signal<string | null>(null);
+  readonly previewDiffLines = signal<string[]>([]);
+  private previewContent = '';
   readonly dirTreeNodes = computed(() => {
     const filterDirs = (nodes: TreeNode[]): TreeNode[] =>
       nodes.filter(n => !n.leaf).map(n => ({ ...n, children: filterDirs(n.children ?? []) }));
@@ -822,6 +887,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
   private editor: Editor | null = null;
   private editorView: EditorView | null = null;
   private currentMarkdown = '';
+  private rawFileContent = '';
   private isLoading = false;
   private treeSubscription: Subscription | null = null;
   protected isResizing = false;
@@ -1039,7 +1105,8 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
         ctx.set(rootCtx, this.editorContainer.nativeElement);
         ctx.set(defaultValueCtx, '');
         ctx.set(editorViewOptionsCtx, { attributes: { spellcheck: 'false' } });
-        ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
+        ctx.get(listenerCtx).markdownUpdated((_ctx, rawMarkdown) => {
+          const markdown = rawMarkdown.replace(/\\\[\\\[([^\]]*)\\\]\\\]/g, '[[$1]]');
           if (this.isLoading) {
             this.isLoading = false;
             this.currentMarkdown = markdown;
@@ -1054,6 +1121,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
       })
       .use(commonmark)
       .use(gfm)
+      .use(history)
       .use(listener)
       .use(createMarkdownImagePlugin())
       .use(createMarkdownLinkPlugin())
@@ -1133,6 +1201,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
         this.selectedPath.set(path);
         this.selectedLabel.set(node.label ?? path);
         this.isDirty.set(false);
+        this.rawFileContent = rawContent;
         this.frontmatter.set(parsed.data);
         this.editingFrontmatter.set(false);
         this.frontmatterYamlError.set(false);
@@ -1335,12 +1404,144 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
     this.fileService.saveContent(path, fullContent).subscribe({
       next: () => {
         this.isDirty.set(false);
+        this.rawFileContent = fullContent;
         this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryGuardado'), detail: this.t.translate('explorer.toastSuccessSaved') });
         this.cdr.markForCheck();
       },
-      error: () =>
-        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorSave') }),
+      error: (err) => {
+        if (err?.status === HttpStatusCode.BadGateway) {
+          // Saved locally + recorded in history, but not replicated to WebDAV.
+          this.isDirty.set(false);
+          this.messageService.add({ severity: 'warn', summary: this.t.translate('explorer.toastSummaryGuardado'), detail: this.t.translate('explorer.toastSavedNotReplicated') });
+          this.cdr.markForCheck();
+        } else {
+          this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorSave') });
+        }
+      },
     });
+  }
+
+  openVersions(): void {
+    const path = this.selectedPath();
+    if (!path) return;
+    this.previewVersionId.set(null);
+    this.previewDiffLines.set([]);
+    this.previewContent = '';
+    this.versions.set([]);
+    this.showVersions.set(true);
+    this.fileService.getVersions(path).subscribe({
+      next: versions => {
+        this.versions.set(versions);
+        this.cdr.markForCheck();
+      },
+      error: () =>
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('versions.errorLoad') }),
+    });
+  }
+
+  selectVersion(version: FileVersion): void {
+    const path = this.selectedPath();
+    if (!path) return;
+    this.fileService.getVersionContent(path, version.versionId).subscribe({
+      next: rawContent => {
+        const content = rawContent.replace(/\\\[\\\[([^\]]*)\\\]\\\]/g, '[[$1]]');
+        this.previewVersionId.set(version.versionId);
+        this.previewContent = content;
+        this.previewDiffLines.set(this.lineDiff(this.rawFileContent, content));
+        this.cdr.markForCheck();
+      },
+      error: () =>
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('versions.errorLoad') }),
+    });
+  }
+
+  restoreVersion(): void {
+    const path = this.selectedPath();
+    if (!path || !this.previewVersionId()) return;
+    const content = this.previewContent;
+    this.fileService.saveContent(path, content).subscribe({
+      next: () => {
+        const parsed = this.parseFrontmatter(content);
+        this.rawFileContent = content;
+        this.frontmatter.set(parsed.data);
+        this.editingFrontmatter.set(false);
+        this.currentMarkdown = parsed.content;
+        if (this.editor) {
+          this.isLoading = true;
+          this.editor.action(replaceAll(parsed.content));
+        }
+        this.isDirty.set(false);
+        this.showVersions.set(false);
+        this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryGuardado'), detail: this.t.translate('versions.restored') });
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        if (err?.status === HttpStatusCode.BadGateway) {
+          this.showVersions.set(false);
+          this.messageService.add({ severity: 'warn', summary: this.t.translate('explorer.toastSummaryGuardado'), detail: this.t.translate('explorer.toastSavedNotReplicated') });
+        } else {
+          this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorSave') });
+        }
+      },
+    });
+  }
+
+  private currentFullContent(): string {
+    const fm = this.frontmatter();
+    return Object.keys(fm).length > 0
+      ? this.stringifyWithFrontmatter(this.currentMarkdown, fm)
+      : this.currentMarkdown;
+  }
+
+  /** Minimal LCS-based line diff of the previewed version against the current content. */
+  private lineDiff(current: string, version: string): string[] {
+    const a = current.split('\n');
+    const b = version.split('\n');
+    const n = a.length;
+    const m = b.length;
+    const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    const out: string[] = [];
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+      if (a[i] === b[j]) { out.push(' ' + a[i]); i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push('-' + a[i]); i++; }
+      else { out.push('+' + b[j]); j++; }
+    }
+    while (i < n) { out.push('-' + a[i]); i++; }
+    while (j < m) { out.push('+' + b[j]); j++; }
+    return out;
+  }
+
+  diffLineClass(line: string): string {
+    if (line.startsWith('+')) return 'line-add';
+    if (line.startsWith('-')) return 'line-del';
+    return '';
+  }
+
+  sourceLabel(source: string): string {
+    return this.t.translate('git.source.' + source);
+  }
+
+  sourceClass(source: string): string {
+    switch (source) {
+      case 'LOCAL_EDIT': return 'source-local';
+      case 'WEBDAV_PULL': return 'source-webdav';
+      default: return 'source-job';
+    }
+  }
+
+  formatDate(dateStr: string): string {
+    try {
+      return new Date(dateStr).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' });
+    } catch {
+      return dateStr;
+    }
   }
 
   generatePdf(): void {

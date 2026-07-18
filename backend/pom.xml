@@ -85,6 +85,11 @@
             <version>1.18.3</version>
         </dependency>
         <dependency>
+            <groupId>com.github.lookfirst</groupId>
+            <artifactId>sardine</artifactId>
+            <version>5.12</version>
+        </dependency>
+        <dependency>
             <groupId>org.telegram</groupId>
             <artifactId>telegrambots-springboot-longpolling-starter</artifactId>
             <version>${telegrambots.version}</version>

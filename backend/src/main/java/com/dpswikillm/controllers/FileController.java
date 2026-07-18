@@ -1,9 +1,15 @@
 package com.dpswikillm.controllers;
 
+import com.dpswikillm.dto.FileVersionDto;
 import com.dpswikillm.dto.TreeNodeDto;
 import com.dpswikillm.services.FileService;
+import com.dpswikillm.services.SnapshotService;
+import com.dpswikillm.services.WebDavReplicationException;
 import java.io.UncheckedIOException;
 import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.UUID;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -23,9 +29,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class FileController {
 
     private final FileService fileService;
+    private final SnapshotService snapshotService;
 
-    public FileController(FileService fileService) {
+    public FileController(FileService fileService, SnapshotService snapshotService) {
         this.fileService = fileService;
+        this.snapshotService = snapshotService;
     }
 
     @GetMapping("/tree")
@@ -48,19 +56,23 @@ public class FileController {
     }
 
     @PutMapping(value = "/content", consumes = MediaType.TEXT_PLAIN_VALUE)
-    public ResponseEntity<Void> saveContent(@RequestParam("path") String path, @RequestBody String content) {
+    public ResponseEntity<?> saveContent(@RequestParam("path") String path, @RequestBody String content) {
         try {
             fileService.saveContent(path, content);
             return ResponseEntity.ok().build();
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
+        } catch (WebDavReplicationException e) {
+            // Saved locally + recorded in history, but not replicated to WebDAV.
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("saved", true, "replicated", false, "error", "not_replicated"));
         } catch (UncheckedIOException | IllegalStateException e) {
             return ResponseEntity.internalServerError().build();
         }
     }
 
     @DeleteMapping("/content")
-    public ResponseEntity<Void> deleteContent(@RequestParam("path") String path) {
+    public ResponseEntity<?> deleteContent(@RequestParam("path") String path) {
         try {
             fileService.deleteFile(path);
             return ResponseEntity.ok().build();
@@ -68,13 +80,16 @@ public class FileController {
             return ResponseEntity.badRequest().build();
         } catch (FileService.NoSuchFileException e) {
             return ResponseEntity.notFound().build();
+        } catch (WebDavReplicationException e) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("saved", true, "replicated", false, "error", "not_replicated"));
         } catch (UncheckedIOException | IllegalStateException e) {
             return ResponseEntity.internalServerError().build();
         }
     }
 
     @PostMapping("/rename")
-    public ResponseEntity<Void> renameContent(
+    public ResponseEntity<?> renameContent(
             @RequestParam("path") String path,
             @RequestParam("newName") String newName) {
         try {
@@ -86,6 +101,9 @@ public class FileController {
             return ResponseEntity.notFound().build();
         } catch (FileService.FileAlreadyExistsException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        } catch (WebDavReplicationException e) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("saved", true, "replicated", false, "error", "not_replicated"));
         } catch (UncheckedIOException | IllegalStateException e) {
             return ResponseEntity.internalServerError().build();
         }
@@ -106,7 +124,7 @@ public class FileController {
     }
 
     @PostMapping("/move")
-    public ResponseEntity<Void> moveContent(
+    public ResponseEntity<?> moveContent(
             @RequestParam("path") String path,
             @RequestParam("targetDir") String targetDir) {
         try {
@@ -118,8 +136,33 @@ public class FileController {
             return ResponseEntity.notFound().build();
         } catch (FileService.FileAlreadyExistsException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        } catch (WebDavReplicationException e) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("saved", true, "replicated", false, "error", "not_replicated"));
         } catch (UncheckedIOException | IllegalStateException e) {
             return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @GetMapping("/versions")
+    public ResponseEntity<List<FileVersionDto>> getVersions(@RequestParam("path") String path) {
+        try {
+            return ResponseEntity.ok(snapshotService.getVersions(path));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @GetMapping(value = "/version", produces = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<String> getVersion(
+            @RequestParam("path") String path,
+            @RequestParam("versionId") UUID versionId) {
+        try {
+            return ResponseEntity.ok(snapshotService.getVersionContent(path, versionId));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.notFound().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
         }
     }
 

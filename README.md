@@ -125,7 +125,24 @@ endpoint returns the raw rendered HTML for troubleshooting.
 
 ### Job Revert
 
-Every state-mutating job captures `pre_git_sha` and `commit_range`. Revert issues a `git revert` of the commit range + compensating DB changes. Conflicts (later jobs touching the same files) are detected and reported without overwriting.
+Every state-mutating job groups its file changes under a snapshot (`snapshots` / `snapshot_files`, each row holding `content_before`/`content_after`). Revert restores the captured `content_before` for the job's files and applies compensating DB changes. Conflicts (later jobs touching the same files) are detected and reported without overwriting.
+
+### Vault Replication (WebDAV)
+
+The vault lives in a Docker volume, but when `WEBDAV_URL` is set every local write is also **replicated to an external WebDAV repository** (via the Sardine client):
+
+- **Push on save (synchronous, per file):** creating, editing, deleting, renaming, or moving a vault file writes locally, records the change in history, then pushes *that single file* to WebDAV. If the push fails, the local write and history entry are kept, the file is flagged not-replicated, and the API returns `502` so the UI can show "saved locally, not replicated." The next successful save (or Sync) re-pushes.
+- **Sync button (pull + reconcile):** `POST /api/webdav/sync` fetches the remote state and, per file, compares the local hash, the remote content, and the last-synced baseline (`vault_file_sync`). Remote-only changes are applied and recorded as `WEBDAV_PULL` history entries; local-only changes are left alone; files changed on **both** sides become **conflicts** (neither side overwritten).
+- **Conflict resolution:** unresolved conflicts are listed by `GET /api/webdav/conflicts` and shown side-by-side in the UI. `POST /api/webdav/conflicts/resolve` with `{ path, keep: "LOCAL" | "REMOTE" }` keeps the chosen version (push local, or write remote + record a `WEBDAV_PULL` entry) and clears the conflict.
+
+When `WEBDAV_URL` is blank, replication is disabled, local editing works unchanged, and the Sync endpoint reports "not configured" (`409`).
+
+### Change History & Versions
+
+History is a **flat, per-file change stream** (no commit grouping). Each entry records the file `path`, `+/-` line stats, a `createdAt`, a `changeId` for its diff, and a `source` (`LOCAL_EDIT`, `JOB`, or `WEBDAV_PULL`):
+
+- `GET /api/history` — reverse-chronological per-file entries; `GET /api/history/{changeId}/diff` — unified diff for one entry.
+- The editor's **Versions** control lists prior versions of the open file (`GET /api/files/versions`), previews any version with a diff against the current content (`GET /api/files/version`), and can **restore** one by saving it through the normal save path (which also replicates it to WebDAV).
 
 ### SSE Progress
 
@@ -150,8 +167,10 @@ See `.env.sample` for all required variables. Key ones:
 | `TELEGRAM_BOT_TOKEN` | — | Telegram token (optional; bot disabled if empty) |
 | `TELEGRAM_ALLOWED_CHAT_ID` | — | Only this chat ID is processed |
 | `VAULT_PATH` | `/vault` | Absolute path to vault directory |
-| `GIT_USER_NAME` / `GIT_USER_EMAIL` | local defaults | Git identity used for automated commits |
 | `CORS_ALLOWED_ORIGINS` | — | Comma-separated allowed origins |
+| `WEBDAV_URL` | _(blank)_ | WebDAV endpoint for off-box vault replication. **Leave blank to disable** replication (local editing keeps working) |
+| `WEBDAV_USERNAME` | _(blank)_ | WebDAV username |
+| `WEBDAV_PASSWORD` | _(blank)_ | WebDAV password |
 
 ## Telegram Bot
 
@@ -194,9 +213,13 @@ When `TELEGRAM_BOT_TOKEN` is configured, the bot uses long polling (no inbound w
 | `POST` | `/api/files/move` | Move a vault file |
 | `POST` | `/api/files/directory` | Create a vault directory |
 | `GET` | `/api/files/lookup?q=` | Lexical file search |
-| `GET` | `/api/git/log` | Recent git commits |
-| `GET` | `/api/git/diff` | File diff for a commit/path |
-| `POST` | `/api/git/reset` | Hard reset the vault repository to a SHA |
+| `GET` | `/api/files/versions?path=` | Prior versions of a file (newest first) |
+| `GET` | `/api/files/version?path=&versionId=` | Content of a specific prior version |
+| `GET` | `/api/history` | Per-file change history (flat, newest first) |
+| `GET` | `/api/history/{changeId}/diff` | Unified diff for one change entry |
+| `POST` | `/api/webdav/sync` | Pull + reconcile remote changes; returns `{pulled, deleted, conflicts}` |
+| `GET` | `/api/webdav/conflicts` | Unresolved sync conflicts (local + remote content) |
+| `POST` | `/api/webdav/conflicts/resolve` | Resolve a conflict `{ path, keep: LOCAL\|REMOTE }` |
 | `GET` | `/api/settings/prompts` | List editable LLM prompts |
 | `GET` | `/api/settings/prompts/{key}` | Read one prompt |
 | `PUT` | `/api/settings/prompts/{key}` | Update one prompt |

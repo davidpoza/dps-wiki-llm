@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { TreeNode } from 'primeng/api';
+import { FileVersion } from '../types';
 
 @Injectable({ providedIn: 'root' })
 export class FileService {
@@ -47,5 +48,16 @@ export class FileService {
 
   exportPdf(path: string): Observable<Blob> {
     return this.http.get('/api/files/pdf', { params: { path }, responseType: 'blob' });
+  }
+
+  getVersions(path: string): Observable<FileVersion[]> {
+    return this.http.get<FileVersion[]>('/api/files/versions', { params: { path } });
+  }
+
+  getVersionContent(path: string, versionId: string): Observable<string> {
+    return this.http.get('/api/files/version', {
+      params: { path, versionId },
+      responseType: 'text',
+    });
   }
 }

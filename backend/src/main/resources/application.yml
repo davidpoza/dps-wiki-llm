@@ -64,6 +64,10 @@ app:
   extractor:
     base-url: ${EXTRACTOR_BASE_URL:http://web-extractor:3000}
     timeout: ${EXTRACTOR_TIMEOUT:45s}
+  webdav:
+    url: ${WEBDAV_URL:}
+    username: ${WEBDAV_USERNAME:}
+    password: ${WEBDAV_PASSWORD:}
 
 logging:
   level:

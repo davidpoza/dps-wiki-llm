@@ -23,7 +23,7 @@ class WebIngestionTests {
 
     private VaultPathResolver resolver() {
         return new VaultPathResolver(new AppProperties(vault.toString(), List.of("http://localhost:4200"),
-                null, null, null, null, null, null));
+                null, null, null, null, null, null, null));
     }
 
     private ExtractionResult sampleResult() {

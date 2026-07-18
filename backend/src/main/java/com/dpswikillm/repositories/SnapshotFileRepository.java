@@ -11,5 +11,7 @@ public interface SnapshotFileRepository extends JpaRepository<SnapshotFile, UUID
 
     Optional<SnapshotFile> findBySnapshotIdAndPath(UUID snapshotId, String path);
 
+    List<SnapshotFile> findByPath(String path);
+
     void deleteBySnapshotId(UUID snapshotId);
 }

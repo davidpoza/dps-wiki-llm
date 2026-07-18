@@ -9,6 +9,7 @@ import com.dpswikillm.repositories.OperationRepository;
 import com.dpswikillm.repositories.SnapshotFileRepository;
 import com.dpswikillm.repositories.SnapshotRepository;
 import com.dpswikillm.repositories.UserRepository;
+import com.dpswikillm.repositories.VaultFileSyncRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -47,6 +48,9 @@ class DpsWikiLlmApplicationTests {
 
     @MockBean
     SnapshotFileRepository snapshotFileRepository;
+
+    @MockBean
+    VaultFileSyncRepository vaultFileSyncRepository;
 
     @MockBean
     RabbitTemplate rabbitTemplate;

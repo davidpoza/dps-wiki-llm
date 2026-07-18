@@ -75,16 +75,38 @@
     "refresh": "Actualizar",
     "loading": "Cargando historial...",
     "empty": "No hay cambios registrados aún.",
-    "filesModified": "{{ count }} fichero(s) modificado(s)",
     "showDiff": "Ver diff",
     "hideDiff": "Ocultar diff",
     "loadingDiff": "Cargando diff...",
-    "revertTo": "Revertir este cambio",
-    "revertConfirmHeader": "Confirmar reversión",
-    "revertConfirmMessage": "¿Revertir los cambios de \"{{ message }}\"?\n\nEsta operación es destructiva e irreversible.",
     "errorLoadHistory": "Error al cargar el historial de cambios.",
     "errorLoadDiff": "Error al cargar el diff.",
-    "errorRevert": "Error al revertir el cambio."
+    "source": {
+      "LOCAL_EDIT": "Edición",
+      "JOB": "Trabajo",
+      "WEBDAV_PULL": "Sinc."
+    }
+  },
+  "sync": {
+    "button": "Sincronizar",
+    "syncing": "Sincronizando…",
+    "summary": "Sincronización completada: {{ pulled }} descargados, {{ deleted }} eliminados, {{ conflicts }} conflicto(s).",
+    "notConfigured": "WebDAV no está configurado.",
+    "error": "La sincronización falló.",
+    "resolveError": "No se pudo resolver el conflicto.",
+    "conflictsHeader": "Resolver conflictos",
+    "noConflicts": "No hay conflictos pendientes.",
+    "localVersion": "Versión local",
+    "remoteVersion": "Versión remota",
+    "keepThis": "Conservar esta versión"
+  },
+  "versions": {
+    "button": "Versiones",
+    "header": "Versiones del fichero",
+    "empty": "No hay versiones anteriores.",
+    "selectHint": "Selecciona una versión para ver un diff contra el fichero actual.",
+    "restore": "Restaurar esta versión",
+    "restored": "Versión restaurada.",
+    "errorLoad": "No se pudieron cargar las versiones."
   },
   "explorer": {
     "subtitle": "Explorador",
@@ -137,6 +159,7 @@
     "toastSummaryDeleted": "Eliminado",
     "toastSummaryBrokenLink": "Enlace roto",
     "toastSummaryGuardado": "Guardado",
+    "toastSavedNotReplicated": "Guardado localmente, pero no replicado a WebDAV.",
     "toastSuccessDeleted": "Fichero \"{{ name }}\" eliminado",
     "toastErrorDelete": "No se pudo eliminar el fichero",
     "toastBrokenLink": "No se encontró el documento \"{{ target }}\"",
