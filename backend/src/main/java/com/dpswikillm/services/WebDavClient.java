@@ -123,7 +123,7 @@ public class WebDavClient {
         sardine.move(fromUrl, urlFor(toRel));
     }
 
-    /** Returns the current ETag for a single file, or {@code null} if it doesn't exist or ETags are unsupported. */
+    /** Returns the version key (ETag or Last-Modified) for a single file, or {@code null} if it doesn't exist. */
     public String getEtag(String relPath) throws IOException {
         if (!isEnabled()) {
             return null;
@@ -134,16 +134,51 @@ public class WebDavClient {
             return null;
         }
         List<DavResource> resources = sardine.list(url, 0);
-        return resources.isEmpty() ? null : resources.get(0).getEtag();
+        if (resources.isEmpty()) {
+            return null;
+        }
+        DavResource r = resources.get(0);
+        if (r.getEtag() != null) {
+            return r.getEtag();
+        }
+        return r.getModified() != null ? r.getModified().toInstant().toString() : null;
     }
 
-    /** Recursively lists every {@code .md} file under the base URL with its ETag. */
+    /**
+     * Lists every {@code .md} file under the base URL with its ETag.
+     *
+     * <p>Tries a single {@code Depth: infinity} PROPFIND first (one HTTP request for the
+     * whole tree). Falls back to a recursive {@code Depth: 1} walk if the server rejects
+     * the infinity request (some servers disable it for large vaults).
+     */
     public List<RemoteEntry> list() throws IOException {
         if (!isEnabled()) {
             return List.of();
         }
+        Sardine sardine = sardine();
+        try {
+            return listInfinity(sardine);
+        } catch (IOException e) {
+            log.debug("Depth:infinity PROPFIND failed ({}), falling back to recursive walk", e.getMessage());
+            List<RemoteEntry> out = new ArrayList<>();
+            walk(sardine, "", out);
+            return out;
+        }
+    }
+
+    private List<RemoteEntry> listInfinity(Sardine sardine) throws IOException {
+        List<DavResource> resources = sardine.list(baseUrl + "/", -1);
         List<RemoteEntry> out = new ArrayList<>();
-        walk(sardine(), "", out);
+        for (DavResource resource : resources) {
+            if (!resource.isDirectory()) {
+                String rel = relativePath(resource);
+                if (!rel.isEmpty() && rel.endsWith(".md")) {
+                    String lastModified = resource.getModified() != null
+                            ? resource.getModified().toInstant().toString() : null;
+                    out.add(new RemoteEntry(rel, resource.getEtag(), lastModified));
+                }
+            }
+        }
         return out;
     }
 
@@ -164,7 +199,9 @@ public class WebDavClient {
             if (resource.isDirectory()) {
                 walk(sardine, rel, out);
             } else if (rel.endsWith(".md")) {
-                out.add(new RemoteEntry(rel, resource.getEtag()));
+                String lastModified = resource.getModified() != null
+                        ? resource.getModified().toInstant().toString() : null;
+                out.add(new RemoteEntry(rel, resource.getEtag(), lastModified));
             }
         }
     }
@@ -217,5 +254,10 @@ public class WebDavClient {
         return value.substring(start, end);
     }
 
-    public record RemoteEntry(String path, String etag) {}
+    public record RemoteEntry(String path, String etag, String lastModified) {
+        /** ETag if available, otherwise the ISO Last-Modified string. Used as an opaque version key. */
+        public String versionKey() {
+            return etag != null ? etag : lastModified;
+        }
+    }
 }

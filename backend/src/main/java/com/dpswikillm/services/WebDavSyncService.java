@@ -81,24 +81,33 @@ public class WebDavSyncService {
         // Fetch remote ETags once so subsequent syncs can use the ETag fast-path immediately.
         Map<String, String> remoteEtags = new java.util.HashMap<>();
         try {
-            webDavClient.list().forEach(e -> remoteEtags.put(e.path(), e.etag()));
+            webDavClient.list().forEach(e -> remoteEtags.put(e.path(), e.versionKey()));
         } catch (IOException e) {
             log.warn("WebDAV baseline init: could not fetch remote ETags ({}), proceeding without", e.getMessage());
         }
 
-        int initialized = 0;
-        int processed = 0;
+        // Load existing baselines in one query
+        Map<String, VaultFileSync> existing = baselineRepository.findAll().stream()
+                .collect(Collectors.toMap(VaultFileSync::getPath, b -> b));
+
+        int initialized = 0, backfilled = 0, processed = 0;
         for (String path : localPaths) {
             processed++;
-            if (baselineRepository.findById(path).isEmpty()) {
+            VaultFileSync row = existing.get(path);
+            if (row == null) {
                 String content = readLocal(path);
                 upsertBaseline(path, sha256(content), remoteEtags.get(path), true, false, null);
                 initialized++;
+            } else if (row.getRemoteEtag() == null && remoteEtags.containsKey(path)) {
+                // Backfill ETag for existing baselines so the sync fast-path activates immediately.
+                row.setRemoteEtag(remoteEtags.get(path));
+                baselineRepository.save(row);
+                backfilled++;
             }
             log.info("WebDAV baseline init: {}/{} — {}", processed, total, path);
         }
-        log.info("WebDAV baseline init: done — {} new baselines created, {} already existed",
-                initialized, total - initialized);
+        log.info("WebDAV baseline init: done — {} new, {} etag-backfilled, {} already up-to-date",
+                initialized, backfilled, total - initialized - backfilled);
     }
 
     // ---------------------------------------------------------------------
@@ -169,20 +178,32 @@ public class WebDavSyncService {
         if (!webDavClient.isEnabled()) {
             throw new WebDavNotConfiguredException();
         }
+        long t0 = System.currentTimeMillis();
         List<WebDavClient.RemoteEntry> remoteEntries;
         try {
             remoteEntries = webDavClient.list();
         } catch (IOException e) {
             throw new WebDavReplicationException("Failed to list WebDAV repository", e);
         }
+        log.info("WebDAV sync: PROPFIND listed {} remote files in {}ms",
+                remoteEntries.size(), System.currentTimeMillis() - t0);
+
         Map<String, WebDavClient.RemoteEntry> remoteByPath = remoteEntries.stream()
                 .collect(Collectors.toMap(WebDavClient.RemoteEntry::path, e -> e, (a, b) -> a));
 
+        // Load all baselines upfront to avoid N individual DB queries in the loop.
+        long tBaselines = System.currentTimeMillis();
+        Map<String, VaultFileSync> allBaselines = baselineRepository.findAll().stream()
+                .collect(Collectors.toMap(VaultFileSync::getPath, b -> b));
+        log.info("WebDAV sync: loaded {} baselines in {}ms", allBaselines.size(), System.currentTimeMillis() - tBaselines);
+
+        long tLocal = System.currentTimeMillis();
         Set<String> localPaths = listLocalMarkdown();
+        log.info("WebDAV sync: listed {} local files in {}ms", localPaths.size(), System.currentTimeMillis() - tLocal);
         Set<String> allPaths = new TreeSet<>();
         allPaths.addAll(localPaths);
         allPaths.addAll(remoteByPath.keySet());
-        allPaths.addAll(baselineRepository.findAll().stream().map(VaultFileSync::getPath).toList());
+        allPaths.addAll(allBaselines.keySet());
 
         List<String> pulled = new ArrayList<>();
         List<String> deleted = new ArrayList<>();
@@ -191,38 +212,51 @@ public class WebDavSyncService {
 
         int total = allPaths.size();
         int processed = 0;
+        // Limit SSE events to ~100 per sync to avoid network overhead dominating.
+        int progressStride = Math.max(1, total / 100);
+        long tLoop = System.currentTimeMillis();
 
         for (String path : allPaths) {
             processed++;
-            if (onProgress != null) {
+            if (onProgress != null && (processed % progressStride == 0 || processed == total)) {
                 onProgress.accept(new SyncProgressDto(processed, total, path));
             }
 
-            VaultFileSync baseline = baselineRepository.findById(path).orElse(null);
+            VaultFileSync baseline = allBaselines.get(path);
             String syncedHash = baseline != null ? baseline.getSyncedHash() : null;
             String syncedEtag = baseline != null ? baseline.getRemoteEtag() : null;
 
             boolean localExists = localPaths.contains(path);
-            String localContent = localExists ? readLocal(path) : null;
-            String localHash = localContent != null ? sha256(localContent) : null;
-            boolean localChanged = !Objects.equals(localHash, syncedHash);
-
             WebDavClient.RemoteEntry remote = remoteByPath.get(path);
-            String currentRemoteEtag = remote != null ? remote.etag() : null;
+            String currentRemoteEtag = remote != null ? remote.versionKey() : null;
 
-            // ETag fast-path: skip the HTTP GET when we know remote hasn't changed.
-            // Requires both stored and current ETags to be non-null (servers that don't
-            // return ETags always fall back to fetching content).
+            // ETag fast-path: remote unchanged when both stored and current ETags are non-null and equal.
+            // Servers that don't return ETags always fall back to fetching content (conservative).
             boolean remoteEtagUnchanged = syncedEtag != null
                     && currentRemoteEtag != null
                     && Objects.equals(currentRemoteEtag, syncedEtag);
 
-            // Fast-path: nothing changed on either side — update ETag if it drifted and skip.
-            if (!localChanged && remoteEtagUnchanged) {
+            // Use file mtime to detect local changes without reading content.
+            // If the file hasn't been touched since the last sync, we trust the stored hash.
+            boolean localMayHaveChanged = true;
+            if (baseline != null && baseline.getUpdatedAt() != null && localExists) {
+                try {
+                    Instant mtime = Files.getLastModifiedTime(pathResolver.resolve(path)).toInstant();
+                    localMayHaveChanged = mtime.isAfter(baseline.getUpdatedAt());
+                } catch (IOException ignored) {}
+            }
+
+            // Fast-path: nothing changed on either side.
+            if (!localMayHaveChanged && remoteEtagUnchanged) {
                 continue;
             }
 
-            // Determine remote content: fetch only when the ETag says it changed.
+            // Read local content lazily — only when we can't skip via mtime + ETag.
+            String localContent = localExists ? readLocal(path) : null;
+            String localHash = localContent != null ? sha256(localContent) : null;
+            boolean localChanged = !Objects.equals(localHash, syncedHash);
+
+            // Determine remote content: fetch only when ETag says it changed.
             String remoteContent;
             String remoteHash;
             if (remote == null) {
@@ -281,6 +315,8 @@ public class WebDavSyncService {
             }
         }
 
+        log.info("WebDAV sync: loop done in {}ms — {} pulled, {} deleted, {} conflicts",
+                System.currentTimeMillis() - tLoop, pulled.size(), deleted.size(), conflicts.size());
         if (pullSnapshot != null) {
             snapshotService.finalizeSnapshot(pullSnapshot, null);
         }
@@ -295,7 +331,7 @@ public class WebDavSyncService {
             if (remoteContent != null) {
                 writeLocal(path, remoteContent);
                 snapshotService.recordAfter(snapshot, path);
-                upsertBaseline(path, remoteHash, remote != null ? remote.etag() : null, true, false, null);
+                upsertBaseline(path, remoteHash, remote != null ? remote.versionKey() : null, true, false, null);
                 pulled.add(path);
             } else {
                 deleteLocal(path);
