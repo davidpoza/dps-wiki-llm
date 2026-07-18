@@ -40,6 +40,7 @@ class SnapshotServiceTests {
     void setUp() {
         snapshotRepo = new FakeSnapshotRepository();
         snapshotFileRepo = new FakeSnapshotFileRepository();
+        snapshotFileRepo.setSnapshotRepo(snapshotRepo);
         JobRepository jobRepo = mock(JobRepository.class);
         when(jobRepo.save(any(Job.class))).thenAnswer(inv -> inv.getArgument(0));
         snapshotService = new SnapshotService(snapshotRepo, snapshotFileRepo, resolver(), jobRepo);
@@ -147,7 +148,7 @@ class SnapshotServiceTests {
         savedFile(complete, "wiki/note.md", null, "hello world");
         snapshotService.finalizeSnapshot(complete, null);
 
-        List<com.dpswikillm.dto.FileHistoryEntryDto> history = snapshotService.getFileHistory(50);
+        var history = snapshotService.getFileHistory(0, 50).content();
 
         assertThat(history).hasSize(1);
         assertThat(history.getFirst().path()).isEqualTo("wiki/note.md");
@@ -161,7 +162,7 @@ class SnapshotServiceTests {
         savedFile(complete, "wiki/same.md", "identical\n", "identical\n");
         snapshotService.finalizeSnapshot(complete, null);
 
-        assertThat(snapshotService.getFileHistory(50)).isEmpty();
+        assertThat(snapshotService.getFileHistory(0, 50).content()).isEmpty();
     }
 
     @Test
@@ -197,6 +198,13 @@ class SnapshotServiceTests {
         sf.setPath(path);
         sf.setContentBefore(before);
         sf.setContentAfter(after);
+        List<String> beforeLines = before != null ? java.util.Arrays.asList(before.split("\n", -1)) : List.of();
+        List<String> afterLines = after != null ? java.util.Arrays.asList(after.split("\n", -1)) : List.of();
+        var patch = com.github.difflib.DiffUtils.diff(beforeLines, afterLines);
+        int added = 0, deleted = 0;
+        for (var delta : patch.getDeltas()) { added += delta.getTarget().size(); deleted += delta.getSource().size(); }
+        sf.setLinesAdded(added);
+        sf.setLinesDeleted(deleted);
         return snapshotFileRepo.save(sf);
     }
 
@@ -268,6 +276,41 @@ class SnapshotServiceTests {
 
     static class FakeSnapshotFileRepository implements SnapshotFileRepository {
         private final Map<UUID, SnapshotFile> store = new LinkedHashMap<>();
+        private FakeSnapshotRepository snapshotRepo;
+
+        void setSnapshotRepo(FakeSnapshotRepository snapshotRepo) {
+            this.snapshotRepo = snapshotRepo;
+        }
+
+        @Override
+        public org.springframework.data.domain.Page<com.dpswikillm.dto.FileHistoryEntryDto> findHistoryPaged(
+                org.springframework.data.domain.Pageable pageable) {
+            List<com.dpswikillm.dto.FileHistoryEntryDto> all = store.values().stream()
+                    .filter(sf -> sf.getLinesAdded() == null || sf.getLinesAdded() > 0 || sf.getLinesDeleted() > 0)
+                    .filter(sf -> {
+                        if (snapshotRepo == null) return true;
+                        return snapshotRepo.findById(sf.getSnapshotId())
+                                .map(s -> "COMPLETE".equals(s.getStatus())).orElse(false);
+                    })
+                    .map(sf -> {
+                        com.dpswikillm.domain.Snapshot s = snapshotRepo == null ? null
+                                : snapshotRepo.findById(sf.getSnapshotId()).orElse(null);
+                        return new com.dpswikillm.dto.FileHistoryEntryDto(
+                                sf.getId(), sf.getPath(),
+                                s != null ? s.getSource() : "UNKNOWN",
+                                sf.getLinesAdded() != null ? sf.getLinesAdded() : 0,
+                                sf.getLinesDeleted() != null ? sf.getLinesDeleted() : 0,
+                                s != null ? s.getCreatedAt().toString() : "");
+                    })
+                    .sorted(java.util.Comparator.comparing(
+                            com.dpswikillm.dto.FileHistoryEntryDto::createdAt).reversed())
+                    .toList();
+            int from = (int) pageable.getOffset();
+            int to = Math.min(from + pageable.getPageSize(), all.size());
+            List<com.dpswikillm.dto.FileHistoryEntryDto> content =
+                    from > all.size() ? List.of() : all.subList(from, to);
+            return new org.springframework.data.domain.PageImpl<>(content, pageable, all.size());
+        }
 
         @Override
         public <S extends SnapshotFile> S save(S entity) {

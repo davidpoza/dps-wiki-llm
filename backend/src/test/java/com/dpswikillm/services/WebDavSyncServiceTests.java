@@ -47,10 +47,10 @@ class WebDavSyncServiceTests {
         resolver = new VaultPathResolver(props(vault.toString(), "https://dav.example.com/vault"));
         JobRepository jobRepo = mock(JobRepository.class);
         when(jobRepo.save(any(Job.class))).thenAnswer(i -> i.getArgument(0));
-        snapshotService = new SnapshotService(
-                new SnapshotServiceTests.FakeSnapshotRepository(),
-                new SnapshotServiceTests.FakeSnapshotFileRepository(),
-                resolver, jobRepo);
+        var fakeSnapshotRepo = new SnapshotServiceTests.FakeSnapshotRepository();
+        var fakeSnapshotFileRepo = new SnapshotServiceTests.FakeSnapshotFileRepository();
+        fakeSnapshotFileRepo.setSnapshotRepo(fakeSnapshotRepo);
+        snapshotService = new SnapshotService(fakeSnapshotRepo, fakeSnapshotFileRepo, resolver, jobRepo);
         webdav = new FakeWebDavClient(props(vault.toString(), "https://dav.example.com/vault"));
 
         baselineStore = new HashMap<>();
@@ -155,7 +155,7 @@ class WebDavSyncServiceTests {
         assertThat(result.conflicts()).isEmpty();
         assertThat(readLocal("a.md")).isEqualTo("v2");
         assertThat(baselineStore.get("a.md").getSyncedHash()).isEqualTo(WebDavSyncService.sha256("v2"));
-        assertThat(snapshotService.getFileHistory(50))
+        assertThat(snapshotService.getFileHistory(0, 50).content())
                 .anyMatch(e -> e.path().equals("a.md") && e.source().equals("WEBDAV_PULL"));
     }
 
@@ -258,7 +258,7 @@ class WebDavSyncServiceTests {
         assertThat(baselineStore.get("a.md").isConflict()).isFalse();
         assertThat(baselineStore.get("a.md").getSyncedHash())
                 .isEqualTo(WebDavSyncService.sha256("remote-change"));
-        assertThat(snapshotService.getFileHistory(50))
+        assertThat(snapshotService.getFileHistory(0, 50).content())
                 .anyMatch(e -> e.path().equals("a.md") && e.source().equals("WEBDAV_PULL"));
     }
 

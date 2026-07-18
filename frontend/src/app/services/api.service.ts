@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable, Observer } from 'rxjs';
-import { FileHistoryEntry, SyncResult, Conflict, JobMode } from '../types';
+import { FileHistoryEntry, HistoryPage, SyncResult, Conflict, JobMode } from '../types';
 import { AuthService } from './auth.service';
 
 export interface EnqueueResponse {
@@ -132,8 +132,8 @@ export class ApiService {
     return this.http.get<FileSearchResult[]>('/api/files/lookup', { params: { q, limit: String(limit) } });
   }
 
-  getHistory(limit = 50): Observable<FileHistoryEntry[]> {
-    return this.http.get<FileHistoryEntry[]>('/api/history', { params: { limit: String(limit) } });
+  getHistory(page = 0, size = 20): Observable<HistoryPage> {
+    return this.http.get<HistoryPage>('/api/history', { params: { page: String(page), size: String(size) } });
   }
 
   getChangeDiff(changeId: string): Observable<string> {

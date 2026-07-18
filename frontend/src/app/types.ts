@@ -12,6 +12,14 @@ export interface FileHistoryEntry {
   createdAt: string;
 }
 
+/** Paginated response for the change history endpoint. */
+export interface HistoryPage {
+  content: FileHistoryEntry[];
+  totalElements: number;
+  page: number;
+  size: number;
+}
+
 /** A prior version of a single file, for the editor version-preview control. */
 export interface FileVersion {
   versionId: string;
