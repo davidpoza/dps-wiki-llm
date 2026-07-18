@@ -50,7 +50,12 @@ bootstrapApplication(AppComponent, {
     provideHttpClient(withInterceptors([authInterceptor, loadingInterceptor])),
     provideRouter([
       { path: 'login', component: LoginComponent },
-      { path: '', component: HomeComponent, canActivate: [authGuard] },
+      { path: '', redirectTo: 'jobs', pathMatch: 'full' },
+      { path: 'jobs', component: HomeComponent, canActivate: [authGuard] },
+      { path: 'ingest', component: HomeComponent, canActivate: [authGuard] },
+      { path: 'chat', component: HomeComponent, canActivate: [authGuard] },
+      { path: 'review', component: HomeComponent, canActivate: [authGuard] },
+      { path: 'git', component: HomeComponent, canActivate: [authGuard] },
       { path: 'explorer', component: ExplorerComponent, canActivate: [authGuard], canDeactivate: [unsavedChangesGuard] },
       { path: 'explorer/**', component: ExplorerComponent, canActivate: [authGuard], canDeactivate: [unsavedChangesGuard] },
       { path: 'viewer/**', component: DocumentViewerComponent, canActivate: [authGuard] },
