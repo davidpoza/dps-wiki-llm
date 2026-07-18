@@ -25,6 +25,8 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 /**
@@ -59,6 +61,33 @@ public class WebDavSyncService {
 
     public boolean isEnabled() {
         return webDavClient.isEnabled();
+    }
+
+    // ---------------------------------------------------------------------
+    // Startup baseline initialization
+    // ---------------------------------------------------------------------
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void initializeBaselines() {
+        if (!webDavClient.isEnabled()) {
+            return;
+        }
+        Set<String> localPaths = listLocalMarkdown();
+        int total = localPaths.size();
+        log.info("WebDAV baseline init: scanning {} local files", total);
+        int initialized = 0;
+        int processed = 0;
+        for (String path : localPaths) {
+            processed++;
+            if (baselineRepository.findById(path).isEmpty()) {
+                String content = readLocal(path);
+                upsertBaseline(path, sha256(content), null, true, false, null);
+                initialized++;
+            }
+            log.info("WebDAV baseline init: {}/{} — {}", processed, total, path);
+        }
+        log.info("WebDAV baseline init: done — {} new baselines created, {} already existed",
+                initialized, total - initialized);
     }
 
     // ---------------------------------------------------------------------
