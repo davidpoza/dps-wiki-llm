@@ -220,15 +220,16 @@ import { UnsavedChangesAware } from '../unsaved-changes.guard';
           [placeholder]="'explorer.searchPlaceholder' | transloco"
           class="w-full"
           [value]="searchQuery()"
-          (input)="searchQuery.set($any($event.target).value)"
+          (input)="onSearchInput($any($event.target).value)"
+          (keydown)="onSearchKeyDown($event)"
         />
       </div>
       <div class="search-results">
         @if (filteredFiles().length === 0) {
           <p class="search-empty">{{ 'explorer.noResults' | transloco }}</p>
         }
-        @for (file of filteredFiles(); track file.data) {
-          <div class="search-result" (click)="selectFromSearch(file)">
+        @for (file of filteredFiles(); track file.data; let i = $index) {
+          <div class="search-result" [class.is-active]="searchHighlightIndex() === i" (click)="selectFromSearch(file)">
             <i class="pi pi-file"></i>
             <span [innerHTML]="file.label"></span>
           </div>
@@ -465,6 +466,10 @@ import { UnsavedChangesAware } from '../unsaved-changes.guard';
     .search-result:hover {
       background: var(--app-surface-subtle);
     }
+    .search-result.is-active {
+      background: var(--app-primary-soft);
+      color: var(--app-primary);
+    }
     .search-result .pi {
       color: var(--app-text-muted);
       font-size: 0.8rem;
@@ -688,6 +693,7 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
   readonly treePanelCollapsed = signal(false);
   readonly showSearch = signal(false);
   readonly searchQuery = signal('');
+  readonly searchHighlightIndex = signal<number>(-1);
   readonly contextMenuItems = signal<MenuItem[]>([]);
   readonly contextMenuNode = signal<TreeNode | null>(null);
   readonly showRenameDialog = signal(false);
@@ -1147,7 +1153,34 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
 
   openSearch(): void {
     this.searchQuery.set('');
+    this.searchHighlightIndex.set(-1);
     this.showSearch.set(true);
+  }
+
+  onSearchInput(value: string): void {
+    this.searchQuery.set(value);
+    this.searchHighlightIndex.set(-1);
+  }
+
+  onSearchKeyDown(event: KeyboardEvent): void {
+    const count = this.filteredFiles().length;
+    if (count === 0) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.searchHighlightIndex.update(i => (i + 1) % count);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.searchHighlightIndex.update(i => (i <= 0 ? count - 1 : i - 1));
+    } else if (event.key === 'Enter') {
+      this.selectHighlightedResult();
+    }
+  }
+
+  selectHighlightedResult(): void {
+    const idx = this.searchHighlightIndex();
+    if (idx === -1) return;
+    const file = this.filteredFiles()[idx];
+    if (file) this.selectFromSearch(file);
   }
 
   selectFromSearch(node: TreeNode): void {
@@ -1195,6 +1228,12 @@ export class ExplorerComponent implements AfterViewInit, OnDestroy, UnsavedChang
   onCtrlS(event: Event): void {
     event.preventDefault();
     if (this.isDirty()) this.save();
+  }
+
+  @HostListener('document:keydown.control.p', ['$event'])
+  onCtrlP(event: Event): void {
+    event.preventDefault();
+    this.openSearch();
   }
 
   @HostListener('window:beforeunload', ['$event'])
