@@ -123,6 +123,20 @@ public class WebDavClient {
         sardine.move(fromUrl, urlFor(toRel));
     }
 
+    /** Returns the current ETag for a single file, or {@code null} if it doesn't exist or ETags are unsupported. */
+    public String getEtag(String relPath) throws IOException {
+        if (!isEnabled()) {
+            return null;
+        }
+        String url = urlFor(relPath);
+        Sardine sardine = sardine();
+        if (!sardine.exists(url)) {
+            return null;
+        }
+        List<DavResource> resources = sardine.list(url, 0);
+        return resources.isEmpty() ? null : resources.get(0).getEtag();
+    }
+
     /** Recursively lists every {@code .md} file under the base URL with its ETag. */
     public List<RemoteEntry> list() throws IOException {
         if (!isEnabled()) {
