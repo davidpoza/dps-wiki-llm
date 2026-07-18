@@ -13,7 +13,8 @@ public record AppProperties(
         Telegram telegram,
         Jwt jwt,
         Admin admin,
-        Extractor extractor
+        Extractor extractor,
+        WebDav webdav
 ) {
     public AppProperties {
         if (vaultPath == null) {
@@ -40,6 +41,9 @@ public record AppProperties(
         if (extractor == null) {
             extractor = new Extractor("http://web-extractor:3000", Duration.ofSeconds(45));
         }
+        if (webdav == null) {
+            webdav = new WebDav("", "", "");
+        }
     }
 
     public record Embeddings(String baseUrl, String model, String apiKey, int dimension, Duration healthTimeout) {}
@@ -53,4 +57,22 @@ public record AppProperties(
     public record Admin(String username, String password) {}
 
     public record Extractor(String baseUrl, Duration timeout) {}
+
+    public record WebDav(String url, String username, String password) {
+        public WebDav {
+            if (url == null) {
+                url = "";
+            }
+            if (username == null) {
+                username = "";
+            }
+            if (password == null) {
+                password = "";
+            }
+        }
+
+        public boolean isConfigured() {
+            return url != null && !url.isBlank();
+        }
+    }
 }

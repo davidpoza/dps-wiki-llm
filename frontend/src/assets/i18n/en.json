@@ -75,16 +75,38 @@
     "refresh": "Refresh",
     "loading": "Loading history...",
     "empty": "No changes recorded yet.",
-    "filesModified": "{{ count }} file(s) modified",
     "showDiff": "Show diff",
     "hideDiff": "Hide diff",
     "loadingDiff": "Loading diff...",
-    "revertTo": "Revert this change",
-    "revertConfirmHeader": "Confirm revert",
-    "revertConfirmMessage": "Revert changes from \"{{ message }}\"?\n\nThis operation is destructive and irreversible.",
     "errorLoadHistory": "Error loading change history.",
     "errorLoadDiff": "Error loading diff.",
-    "errorRevert": "Error reverting change."
+    "source": {
+      "LOCAL_EDIT": "Edit",
+      "JOB": "Job",
+      "WEBDAV_PULL": "Sync"
+    }
+  },
+  "sync": {
+    "button": "Sync",
+    "syncing": "Syncing…",
+    "summary": "Sync complete: {{ pulled }} pulled, {{ deleted }} deleted, {{ conflicts }} conflict(s).",
+    "notConfigured": "WebDAV is not configured.",
+    "error": "Sync failed.",
+    "resolveError": "Could not resolve conflict.",
+    "conflictsHeader": "Resolve conflicts",
+    "noConflicts": "No pending conflicts.",
+    "localVersion": "Local version",
+    "remoteVersion": "Remote version",
+    "keepThis": "Keep this version"
+  },
+  "versions": {
+    "button": "Versions",
+    "header": "File versions",
+    "empty": "No prior versions.",
+    "selectHint": "Select a version to preview a diff against the current file.",
+    "restore": "Restore this version",
+    "restored": "Version restored.",
+    "errorLoad": "Could not load versions."
   },
   "explorer": {
     "subtitle": "Explorer",
@@ -137,6 +159,7 @@
     "toastSummaryDeleted": "Deleted",
     "toastSummaryBrokenLink": "Broken link",
     "toastSummaryGuardado": "Saved",
+    "toastSavedNotReplicated": "Saved locally, but not replicated to WebDAV.",
     "toastSuccessDeleted": "File \"{{ name }}\" deleted",
     "toastErrorDelete": "Could not delete file",
     "toastBrokenLink": "Document \"{{ target }}\" not found",

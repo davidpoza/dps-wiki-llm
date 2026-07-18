@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable, Observer } from 'rxjs';
-import { Snapshot, JobMode } from '../types';
+import { FileHistoryEntry, SyncResult, Conflict, JobMode } from '../types';
 import { AuthService } from './auth.service';
 
 export interface EnqueueResponse {
@@ -118,16 +118,24 @@ export class ApiService {
     return this.http.get<FileSearchResult[]>('/api/files/lookup', { params: { q, limit: String(limit) } });
   }
 
-  getSnapshotHistory(limit = 50): Observable<Snapshot[]> {
-    return this.http.get<Snapshot[]>('/api/snapshots', { params: { limit: String(limit) } });
+  getHistory(limit = 50): Observable<FileHistoryEntry[]> {
+    return this.http.get<FileHistoryEntry[]>('/api/history', { params: { limit: String(limit) } });
   }
 
-  resetToSnapshot(id: string): Observable<{ snapshotId: string }> {
-    return this.http.post<{ snapshotId: string }>(`/api/snapshots/${id}/reset`, {});
+  getChangeDiff(changeId: string): Observable<string> {
+    return this.http.get(`/api/history/${changeId}/diff`, { responseType: 'text' });
   }
 
-  getFileDiff(id: string, path: string): Observable<string> {
-    return this.http.get(`/api/snapshots/${id}/diff`, { params: { path }, responseType: 'text' });
+  syncWebdav(): Observable<SyncResult> {
+    return this.http.post<SyncResult>('/api/webdav/sync', {});
+  }
+
+  getConflicts(): Observable<Conflict[]> {
+    return this.http.get<Conflict[]>('/api/webdav/conflicts');
+  }
+
+  resolveConflict(path: string, keep: 'LOCAL' | 'REMOTE'): Observable<void> {
+    return this.http.post<void>('/api/webdav/conflicts/resolve', { path, keep });
   }
 
   getPrompts(): Observable<Prompt[]> {

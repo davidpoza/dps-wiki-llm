@@ -18,6 +18,7 @@ public class Snapshot {
     private String operationType;
     private String message;
     private String status = "PENDING";
+    private String source = "JOB";
     private Instant createdAt = Instant.now();
 
     public UUID getId() { return id; }
@@ -29,5 +30,7 @@ public class Snapshot {
     public void setMessage(String message) { this.message = message; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
     public Instant getCreatedAt() { return createdAt; }
 }

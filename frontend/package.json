@@ -19,6 +19,7 @@
     "@jsverse/transloco": "^8.4.0",
     "@milkdown/core": "^7.21.3",
     "@milkdown/ctx": "^7.21.3",
+    "@milkdown/plugin-history": "^7.21.3",
     "@milkdown/plugin-listener": "^7.21.3",
     "@milkdown/preset-commonmark": "^7.21.3",
     "@milkdown/preset-gfm": "^7.21.3",

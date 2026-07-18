@@ -25,10 +25,14 @@ public class FileService {
 
     private final VaultPathResolver pathResolver;
     private final SnapshotService snapshotService;
+    private final WebDavSyncService webDavSyncService;
 
-    public FileService(VaultPathResolver pathResolver, SnapshotService snapshotService) {
+    public FileService(VaultPathResolver pathResolver,
+                       SnapshotService snapshotService,
+                       WebDavSyncService webDavSyncService) {
         this.pathResolver = pathResolver;
         this.snapshotService = snapshotService;
+        this.webDavSyncService = webDavSyncService;
     }
 
     public List<TreeNodeDto> getTree() {
@@ -72,7 +76,7 @@ public class FileService {
 
     public void saveContent(String relativePath, String content) {
         Path resolved = resolveAndValidate(relativePath);
-        Snapshot snapshot = snapshotService.beginSnapshot(null, "manual-save", relativePath);
+        Snapshot snapshot = snapshotService.beginSnapshot(null, "manual-save", relativePath, "LOCAL_EDIT");
         try {
             snapshotService.captureFile(snapshot, relativePath);
             Files.writeString(resolved, content, StandardCharsets.UTF_8);
@@ -82,6 +86,8 @@ public class FileService {
             snapshotService.deleteSnapshot(snapshot.getId());
             throw new UncheckedIOException(e);
         }
+        // Local write + history are durable; now replicate the single file to WebDAV.
+        webDavSyncService.pushSaved(relativePath, content);
     }
 
     public void deleteFile(String relativePath) {
@@ -89,12 +95,12 @@ public class FileService {
         if (!Files.exists(resolved)) {
             throw new NoSuchFileException(relativePath);
         }
-        String filename = resolved.getFileName().toString();
         try {
             Files.delete(resolved);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+        webDavSyncService.pushDeleted(relativePath);
     }
 
     public void renameFile(String relativePath, String newName) {
@@ -115,12 +121,16 @@ public class FileService {
         if (Files.exists(target)) {
             throw new FileAlreadyExistsException(newName);
         }
-        String oldName = resolved.getFileName().toString();
+        String oldRel = pathResolver.normalizeRelativePath(relativePath);
+        String newRel = pathResolver.vaultRoot().relativize(target).toString().replace('\\', '/');
+        String content;
         try {
             Files.move(resolved, target);
+            content = Files.readString(target, StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+        webDavSyncService.pushMoved(oldRel, newRel, content);
     }
 
     public void moveFile(String relativePath, String targetDirRelPath) {
@@ -148,12 +158,16 @@ public class FileService {
         if (Files.exists(target)) {
             throw new FileAlreadyExistsException(filename);
         }
+        String oldRel = pathResolver.normalizeRelativePath(relativePath);
         String newRelPath = pathResolver.vaultRoot().relativize(target).toString().replace('\\', '/');
+        String content;
         try {
             Files.move(source, target);
+            content = Files.readString(target, StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+        webDavSyncService.pushMoved(oldRel, newRelPath, content);
     }
 
     public void createDirectory(String relativePath) {

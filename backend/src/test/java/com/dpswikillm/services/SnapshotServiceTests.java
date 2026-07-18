@@ -99,18 +99,15 @@ class SnapshotServiceTests {
         snapshotFileRepo.save(sf);
         snapshotService.finalizeSnapshot(snapshot, null);
 
-        String diff = snapshotService.getDiff(snapshot.getId(), "wiki/sources/note.md");
+        String diff = snapshotService.getDiffByChangeId(sf.getId());
 
         assertThat(diff).contains("-line two");
         assertThat(diff).contains("+line three");
     }
 
     @Test
-    void getDiffThrowsForUnknownPath() throws Exception {
-        Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
-        snapshotService.finalizeSnapshot(snapshot, null);
-
-        assertThatThrownBy(() -> snapshotService.getDiff(snapshot.getId(), "not/a/path.md"))
+    void getDiffThrowsForUnknownChange() {
+        assertThatThrownBy(() -> snapshotService.getDiffByChangeId(UUID.randomUUID()))
                 .isInstanceOf(java.util.NoSuchElementException.class);
     }
 
@@ -142,15 +139,65 @@ class SnapshotServiceTests {
     }
 
     @Test
-    void getHistoryReturnsFinalizedSnapshotsOnly() throws Exception {
+    void getFileHistoryReturnsFinalizedPerFileEntriesOnly() {
         Snapshot pending = snapshotService.beginSnapshot("j1", "ingest", "pending");
-        Snapshot complete = snapshotService.beginSnapshot("j2", "ingest", "complete");
+        savedFile(pending, "wiki/pending.md", null, "pending body\n");
+
+        Snapshot complete = snapshotService.beginSnapshot(null, "manual-save", "note.md", "LOCAL_EDIT");
+        savedFile(complete, "wiki/note.md", null, "hello world");
         snapshotService.finalizeSnapshot(complete, null);
 
-        List<com.dpswikillm.dto.SnapshotDto> history = snapshotService.getHistory(50);
+        List<com.dpswikillm.dto.FileHistoryEntryDto> history = snapshotService.getFileHistory(50);
 
         assertThat(history).hasSize(1);
-        assertThat(history.getFirst().message()).isEqualTo("complete");
+        assertThat(history.getFirst().path()).isEqualTo("wiki/note.md");
+        assertThat(history.getFirst().source()).isEqualTo("LOCAL_EDIT");
+        assertThat(history.getFirst().linesAdded()).isEqualTo(1);
+    }
+
+    @Test
+    void getFileHistoryOmitsNoOpEntries() {
+        Snapshot complete = snapshotService.beginSnapshot("j2", "ingest", "noop");
+        savedFile(complete, "wiki/same.md", "identical\n", "identical\n");
+        snapshotService.finalizeSnapshot(complete, null);
+
+        assertThat(snapshotService.getFileHistory(50)).isEmpty();
+    }
+
+    @Test
+    void getVersionsReturnsNewestFirstAndContentIsRetrievable() {
+        Snapshot older = snapshotService.beginSnapshot(null, "manual-save", "note.md", "LOCAL_EDIT");
+        SnapshotFile v1 = savedFile(older, "wiki/note.md", null, "v1\n");
+        snapshotService.finalizeSnapshot(older, null);
+
+        Snapshot newer = snapshotService.beginSnapshot(null, "manual-save", "note.md", "LOCAL_EDIT");
+        SnapshotFile v2 = savedFile(newer, "wiki/note.md", "v1\n", "v2\n");
+        // ensure a later timestamp than v1
+        ReflectionTestUtils.setField(newer, "createdAt", older.getCreatedAt().plusSeconds(5));
+        snapshotService.finalizeSnapshot(newer, null);
+
+        List<com.dpswikillm.dto.FileVersionDto> versions = snapshotService.getVersions("wiki/note.md");
+
+        assertThat(versions).hasSize(2);
+        assertThat(versions.getFirst().versionId()).isEqualTo(v2.getId());
+        assertThat(snapshotService.getVersionContent("wiki/note.md", v2.getId())).isEqualTo("v2\n");
+        assertThat(snapshotService.getVersionContent("wiki/note.md", v1.getId())).isEqualTo("v1\n");
+    }
+
+    @Test
+    void getVersionContentThrowsForUnknownVersion() {
+        assertThatThrownBy(() -> snapshotService.getVersionContent("wiki/note.md", UUID.randomUUID()))
+                .isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    private SnapshotFile savedFile(Snapshot snapshot, String path, String before, String after) {
+        SnapshotFile sf = new SnapshotFile();
+        ReflectionTestUtils.setField(sf, "id", UUID.randomUUID());
+        sf.setSnapshotId(snapshot.getId());
+        sf.setPath(path);
+        sf.setContentBefore(before);
+        sf.setContentAfter(after);
+        return snapshotFileRepo.save(sf);
     }
 
     private VaultPathResolver resolver() {
@@ -158,7 +205,7 @@ class SnapshotServiceTests {
                 vault.toString(), List.of("http://localhost:4200"),
                 new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1)),
                 new AppProperties.Llm("http://localhost:11434/v1", "gpt-oss", "test"),
-                new AppProperties.Telegram("", ""), null, null, null);
+                new AppProperties.Telegram("", ""), null, null, null, null);
         return new VaultPathResolver(props);
     }
 
@@ -182,7 +229,11 @@ class SnapshotServiceTests {
 
         @Override
         public List<Snapshot> findByStatusOrderByCreatedAtDesc(String status, org.springframework.data.domain.Pageable p) {
-            return store.values().stream().filter(s -> status.equals(s.getStatus())).toList();
+            return store.values().stream()
+                    .filter(s -> status.equals(s.getStatus()))
+                    .sorted(java.util.Comparator.comparing(Snapshot::getCreatedAt).reversed())
+                    .limit(p.isPaged() ? p.getPageSize() : Long.MAX_VALUE)
+                    .toList();
         }
 
         // --- unused JPA methods ---
@@ -235,6 +286,11 @@ class SnapshotServiceTests {
             return store.values().stream()
                     .filter(f -> snapshotId.equals(f.getSnapshotId()) && path.equals(f.getPath()))
                     .findFirst();
+        }
+
+        @Override
+        public List<SnapshotFile> findByPath(String path) {
+            return store.values().stream().filter(f -> path.equals(f.getPath())).toList();
         }
 
         @Override

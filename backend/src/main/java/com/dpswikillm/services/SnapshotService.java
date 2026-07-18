@@ -3,8 +3,8 @@ package com.dpswikillm.services;
 import com.dpswikillm.domain.Job;
 import com.dpswikillm.domain.Snapshot;
 import com.dpswikillm.domain.SnapshotFile;
-import com.dpswikillm.dto.SnapshotDto;
-import com.dpswikillm.dto.SnapshotFileStatDto;
+import com.dpswikillm.dto.FileHistoryEntryDto;
+import com.dpswikillm.dto.FileVersionDto;
 import com.dpswikillm.repositories.JobRepository;
 import com.dpswikillm.repositories.SnapshotFileRepository;
 import com.dpswikillm.repositories.SnapshotRepository;
@@ -15,7 +15,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,13 +42,20 @@ public class SnapshotService {
         this.jobRepository = jobRepository;
     }
 
+    /** Begins a snapshot with the default {@code JOB} source (used by the ingest/revert pipelines). */
     @Transactional
     public Snapshot beginSnapshot(String jobId, String operationType, String message) {
+        return beginSnapshot(jobId, operationType, message, "JOB");
+    }
+
+    @Transactional
+    public Snapshot beginSnapshot(String jobId, String operationType, String message, String source) {
         Snapshot snapshot = new Snapshot();
         snapshot.setJobId(jobId);
         snapshot.setOperationType(operationType);
         snapshot.setMessage(message);
         snapshot.setStatus("PENDING");
+        snapshot.setSource(source);
         return snapshotRepository.save(snapshot);
     }
 
@@ -97,35 +106,67 @@ public class SnapshotService {
         snapshotRepository.deleteById(snapshotId);
     }
 
-    public List<SnapshotDto> getHistory(int limit) {
+    /**
+     * Returns the change history as a flat, reverse-chronological stream of per-file
+     * change entries. Entries with no textual change (before == after) are omitted.
+     */
+    public List<FileHistoryEntryDto> getFileHistory(int limit) {
         List<Snapshot> snapshots = snapshotRepository.findByStatusOrderByCreatedAtDesc(
-                "COMPLETE", PageRequest.of(0, limit));
-        return snapshots.stream().map(this::toDto).toList();
+                "COMPLETE", PageRequest.of(0, Math.max(limit, 1)));
+        List<FileHistoryEntryDto> entries = new ArrayList<>();
+        for (Snapshot snapshot : snapshots) {
+            for (SnapshotFile file : snapshotFileRepository.findBySnapshotId(snapshot.getId())) {
+                int[] counts = diffStats(file.getContentBefore(), file.getContentAfter());
+                if (counts[0] == 0 && counts[1] == 0) {
+                    continue;
+                }
+                entries.add(new FileHistoryEntryDto(
+                        file.getId(),
+                        file.getPath(),
+                        snapshot.getSource(),
+                        counts[0],
+                        counts[1],
+                        snapshot.getCreatedAt().toString()));
+            }
+        }
+        return entries.stream().limit(limit).toList();
     }
 
-    private SnapshotDto toDto(Snapshot snapshot) {
-        List<SnapshotFile> files = snapshotFileRepository.findBySnapshotId(snapshot.getId());
-        List<SnapshotFileStatDto> stats = files.stream()
-                .map(f -> {
-                    int[] counts = diffStats(f.getContentBefore(), f.getContentAfter());
-                    return new SnapshotFileStatDto(f.getPath(), counts[0], counts[1]);
-                })
-                .filter(s -> s.added() > 0 || s.deleted() > 0)
-                .toList();
-        return new SnapshotDto(
-                snapshot.getId(),
-                snapshot.getOperationType(),
-                snapshot.getMessage(),
-                snapshot.getCreatedAt().toString(),
-                stats);
+    /** Unified diff for an individual per-file change entry (identified by its snapshot-file id). */
+    public String getDiffByChangeId(UUID changeId) {
+        SnapshotFile sf = snapshotFileRepository.findById(changeId)
+                .orElseThrow(() -> new java.util.NoSuchElementException("Change not found: " + changeId));
+        return buildUnifiedDiff(sf.getContentBefore(), sf.getContentAfter(), sf.getPath());
     }
 
-    public String getDiff(UUID snapshotId, String path) {
+    /** Prior versions of a single file (those where the file existed after the change), newest first. */
+    public List<FileVersionDto> getVersions(String path) {
         String normalized = pathResolver.normalizeRelativePath(path);
-        SnapshotFile sf = snapshotFileRepository.findBySnapshotIdAndPath(snapshotId, normalized)
-                .orElseThrow(() -> new java.util.NoSuchElementException("Path not found in snapshot: " + path));
-        return buildUnifiedDiff(sf.getContentBefore(), sf.getContentAfter(), normalized);
+        return snapshotFileRepository.findByPath(normalized).stream()
+                .filter(sf -> sf.getContentAfter() != null)
+                .map(sf -> {
+                    Snapshot snapshot = snapshotRepository.findById(sf.getSnapshotId()).orElse(null);
+                    if (snapshot == null || !"COMPLETE".equals(snapshot.getStatus())) {
+                        return null;
+                    }
+                    return new VersionRow(sf.getId(), snapshot.getCreatedAt(), snapshot.getSource());
+                })
+                .filter(java.util.Objects::nonNull)
+                .sorted(Comparator.comparing(VersionRow::createdAt).reversed())
+                .map(v -> new FileVersionDto(v.versionId(), v.createdAt().toString(), v.source()))
+                .toList();
     }
+
+    /** Content of a specific prior version of a file. */
+    public String getVersionContent(String path, UUID versionId) {
+        String normalized = pathResolver.normalizeRelativePath(path);
+        SnapshotFile sf = snapshotFileRepository.findById(versionId)
+                .filter(f -> normalized.equals(f.getPath()) && f.getContentAfter() != null)
+                .orElseThrow(() -> new java.util.NoSuchElementException("Version not found: " + versionId));
+        return sf.getContentAfter();
+    }
+
+    private record VersionRow(UUID versionId, java.time.Instant createdAt, String source) {}
 
     @Transactional
     public void hardReset(UUID snapshotId) throws IOException {

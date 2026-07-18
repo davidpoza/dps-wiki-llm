@@ -1,17 +1,36 @@
 export type JobMode = 'unattended' | 'validated';
 
-export interface SnapshotFileStat {
+export type ChangeSource = 'LOCAL_EDIT' | 'JOB' | 'WEBDAV_PULL';
+
+/** A single per-file change entry in the flat history stream. */
+export interface FileHistoryEntry {
+  changeId: string;
   path: string;
-  added: number;
-  deleted: number;
+  source: ChangeSource;
+  linesAdded: number;
+  linesDeleted: number;
+  createdAt: string;
 }
 
-export interface Snapshot {
-  id: string;
-  operationType: string;
-  message: string;
+/** A prior version of a single file, for the editor version-preview control. */
+export interface FileVersion {
+  versionId: string;
   createdAt: string;
-  files: SnapshotFileStat[];
+  source: ChangeSource;
+}
+
+/** Summary returned by a WebDAV sync run. */
+export interface SyncResult {
+  pulled: string[];
+  deleted: string[];
+  conflicts: string[];
+}
+
+/** An unresolved WebDAV sync conflict, with both sides for side-by-side display. */
+export interface Conflict {
+  path: string;
+  localContent: string;
+  remoteContent: string;
 }
 export type JobStatus = 'QUEUED' | 'STARTED' | 'PROGRESS' | 'AWAITING_REVIEW' | 'COMPLETED' | 'FAILED' | 'REVERTED' | 'CANCELLED';
 
