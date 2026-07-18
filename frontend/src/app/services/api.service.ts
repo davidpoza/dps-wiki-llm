@@ -70,6 +70,20 @@ export interface ReindexProgress {
   total: number;
 }
 
+export interface SyncProgress {
+  type: 'progress';
+  processed: number;
+  total: number;
+  path: string;
+}
+
+export interface SyncDone {
+  type: 'done';
+  result: SyncResult;
+}
+
+export type SyncEvent = SyncProgress | SyncDone;
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
@@ -126,8 +140,39 @@ export class ApiService {
     return this.http.get(`/api/history/${changeId}/diff`, { responseType: 'text' });
   }
 
-  syncWebdav(): Observable<SyncResult> {
-    return this.http.post<SyncResult>('/api/webdav/sync', {});
+  syncWebdav(): Observable<SyncEvent> {
+    return new Observable((observer: Observer<SyncEvent>) => {
+      const token = this.auth.token();
+      const url = token
+        ? `/api/webdav/sync?token=${encodeURIComponent(token)}`
+        : '/api/webdav/sync';
+      const es = new EventSource(url);
+      let completed = false;
+
+      es.addEventListener('progress', (e: MessageEvent) => {
+        const data = JSON.parse(e.data) as { processed: number; total: number; path: string };
+        observer.next({ type: 'progress', ...data });
+      });
+      es.addEventListener('done', (e: MessageEvent) => {
+        completed = true;
+        observer.next({ type: 'done', result: JSON.parse(e.data) as SyncResult });
+        es.close();
+        observer.complete();
+      });
+      es.addEventListener('error', (e: MessageEvent) => {
+        completed = true;
+        const data = e.data
+          ? (JSON.parse(e.data) as { code?: string; message?: string })
+          : {};
+        es.close();
+        observer.error({ code: data.code, message: data.message ?? 'Error desconocido' });
+      });
+      es.onerror = () => {
+        es.close();
+        if (!completed) observer.error({ message: 'Error de conexión' });
+      };
+      return () => es.close();
+    });
   }
 
   getConflicts(): Observable<Conflict[]> {
