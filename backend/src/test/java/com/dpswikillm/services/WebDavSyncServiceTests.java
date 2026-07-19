@@ -70,7 +70,7 @@ class WebDavSyncServiceTests {
         }).when(baselineRepo).deleteById(anyString());
 
         service = new WebDavSyncService(webdav, baselineRepo, snapshotService, resolver);
-        fileService = new FileService(resolver, snapshotService, service);
+        fileService = new FileService(resolver, snapshotService, service, mock(ResourceSettingsService.class));
     }
 
     // ---------------- Section 5: push on save/delete/rename ----------------

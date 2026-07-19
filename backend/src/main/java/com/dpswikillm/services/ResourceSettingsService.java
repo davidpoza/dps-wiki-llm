@@ -3,6 +3,12 @@ package com.dpswikillm.services;
 import com.dpswikillm.domain.AppSetting;
 import com.dpswikillm.dto.ResourceSettingsDto;
 import com.dpswikillm.repositories.AppSettingRepository;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +52,9 @@ public class ResourceSettingsService {
         if (!isSupportedImage(target)) {
             throw new IllegalArgumentException("Resource is not a supported image");
         }
+        if (!target.contains("/")) {
+            return resolveBareFilename(target).orElse(target);
+        }
         return target;
     }
 
@@ -66,5 +75,29 @@ public class ResourceSettingsService {
             return false;
         }
         return IMAGE_EXTENSIONS.contains(path.substring(dot + 1).toLowerCase());
+    }
+
+    private Optional<String> resolveBareFilename(String filename) {
+        String resourceFolder = getResourceFolder();
+        if (resourceFolder.isBlank()) {
+            return Optional.empty();
+        }
+
+        Path folder = pathResolver.resolve(resourceFolder);
+        if (!Files.isDirectory(folder)) {
+            return Optional.of(resourceFolder + "/" + filename);
+        }
+
+        try (var stream = Files.walk(folder)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().equals(filename))
+                    .map(path -> pathResolver.vaultRoot().relativize(path).toString().replace('\\', '/'))
+                    .sorted(Comparator.naturalOrder())
+                    .findFirst()
+                    .or(() -> Optional.of(resourceFolder + "/" + filename));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 }

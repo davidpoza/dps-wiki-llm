@@ -23,7 +23,7 @@ function buildResourcePath(target: string, resourceFolder: string): string | nul
 
   const folder = resourceFolder.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
   if (!folder) return null;
-  return `${folder}/${cleanTarget}`;
+  return cleanTarget;
 }
 
 function resourceUrl(path: string, token: string | null): string {
@@ -75,7 +75,7 @@ function buildDecorations(state: EditorState, getView: () => EditorView | null, 
         img.loading = 'lazy';
         img.addEventListener('error', () => {
           figure.classList.add('is-error');
-          figure.textContent = `No se pudo cargar ${path}`;
+          figure.title = `No se pudo cargar ${rawTarget}`;
         });
         figure.appendChild(img);
         return figure;

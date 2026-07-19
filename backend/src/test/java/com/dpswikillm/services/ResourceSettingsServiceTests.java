@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.domain.AppSetting;
 import com.dpswikillm.repositories.AppSettingRepository;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -47,6 +48,19 @@ class ResourceSettingsServiceTests {
 
         assertThat(service.resolveResourcePath("attachments/Pasted image 20260618163907.png"))
                 .isEqualTo("attachments/Pasted image 20260618163907.png");
+    }
+
+    @Test
+    void resolveResourcePathFindsBareFilenameInsideConfiguredFolder() throws Exception {
+        Files.createDirectories(vault.resolve("resources/nested"));
+        Files.writeString(vault.resolve("resources/nested/Pasted image 20260618163907.png"), "png");
+        AppSettingRepository repository = Mockito.mock(AppSettingRepository.class);
+        when(repository.findById("resource-folder"))
+                .thenReturn(Optional.of(new AppSetting("resource-folder", "resources")));
+        ResourceSettingsService service = service(repository);
+
+        assertThat(service.resolveResourcePath("Pasted image 20260618163907.png"))
+                .isEqualTo("resources/nested/Pasted image 20260618163907.png");
     }
 
     @Test

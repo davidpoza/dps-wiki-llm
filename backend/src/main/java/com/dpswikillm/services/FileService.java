@@ -13,6 +13,8 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
@@ -22,17 +24,22 @@ import org.slf4j.LoggerFactory;
 public class FileService {
 
     private static final Logger log = LoggerFactory.getLogger(FileService.class);
+    private static final Pattern OBSIDIAN_IMAGE_EMBED = Pattern.compile("!\\[\\[([^\\]\\n]+)\\]\\]");
+    private static final Pattern IMAGE_EXTENSION = Pattern.compile("(?i)\\.(png|jpe?g|gif|webp|svg)$");
 
     private final VaultPathResolver pathResolver;
     private final SnapshotService snapshotService;
     private final WebDavSyncService webDavSyncService;
+    private final ResourceSettingsService resourceSettingsService;
 
     public FileService(VaultPathResolver pathResolver,
                        SnapshotService snapshotService,
-                       WebDavSyncService webDavSyncService) {
+                       WebDavSyncService webDavSyncService,
+                       ResourceSettingsService resourceSettingsService) {
         this.pathResolver = pathResolver;
         this.snapshotService = snapshotService;
         this.webDavSyncService = webDavSyncService;
+        this.resourceSettingsService = resourceSettingsService;
     }
 
     public List<TreeNodeDto> getTree() {
@@ -212,12 +219,21 @@ public class FileService {
     public byte[] exportPdf(String relativePath) {
         Path input = resolveAndValidate(relativePath);
         if (!Files.exists(input)) throw new NoSuchFileException(relativePath);
+        Path renderedInput = null;
+        Path stylesheet = null;
         Path output = null;
         try {
+            String markdown = Files.readString(input, StandardCharsets.UTF_8);
+            renderedInput = Files.createTempFile("wiki-pdf-input-", ".md");
+            stylesheet = Files.createTempFile("wiki-pdf-style-", ".css");
             output = Files.createTempFile("wiki-pdf-", ".pdf");
+            Files.writeString(renderedInput, renderPdfMarkdown(markdown), StandardCharsets.UTF_8);
+            Files.writeString(stylesheet, pdfStylesheet(), StandardCharsets.UTF_8);
             ProcessBuilder pb = new ProcessBuilder(
-                    "pandoc", input.toString(),
+                    "pandoc", renderedInput.toString(),
                     "--pdf-engine=weasyprint",
+                    "--standalone",
+                    "--css", stylesheet.toString(),
                     "-o", output.toString()
             );
             pb.environment().put("TMPDIR", "/tmp");
@@ -237,10 +253,75 @@ public class FileService {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("PDF export interrupted", e);
         } finally {
+            if (renderedInput != null) {
+                try { Files.deleteIfExists(renderedInput); } catch (IOException ignored) {}
+            }
+            if (stylesheet != null) {
+                try { Files.deleteIfExists(stylesheet); } catch (IOException ignored) {}
+            }
             if (output != null) {
                 try { Files.deleteIfExists(output); } catch (IOException ignored) {}
             }
         }
+    }
+
+    String renderPdfMarkdown(String markdown) {
+        Matcher matcher = OBSIDIAN_IMAGE_EMBED.matcher(markdown == null ? "" : markdown);
+        StringBuilder rendered = new StringBuilder();
+        while (matcher.find()) {
+            String rawTarget = matcher.group(1);
+            String target = cleanObsidianTarget(rawTarget);
+            if (!IMAGE_EXTENSION.matcher(target).find()) {
+                matcher.appendReplacement(rendered, Matcher.quoteReplacement(matcher.group(0)));
+                continue;
+            }
+            try {
+                String resourcePath = resourceSettingsService.resolveResourcePath(target);
+                Path imagePath = pathResolver.resolve(resourcePath);
+                if (!Files.isRegularFile(imagePath)) {
+                    matcher.appendReplacement(rendered, Matcher.quoteReplacement(matcher.group(0)));
+                    continue;
+                }
+                String alt = target.contains("/")
+                        ? target.substring(target.lastIndexOf('/') + 1)
+                        : target;
+                String replacement = "![" + alt.replace("]", "\\]") + "](<" + imagePath.toUri() + ">){.obsidian-resource-image}";
+                matcher.appendReplacement(rendered, Matcher.quoteReplacement(replacement));
+            } catch (IllegalArgumentException | UncheckedIOException ex) {
+                matcher.appendReplacement(rendered, Matcher.quoteReplacement(matcher.group(0)));
+            }
+        }
+        matcher.appendTail(rendered);
+        return rendered.toString();
+    }
+
+    private String cleanObsidianTarget(String rawTarget) {
+        return rawTarget
+                .split("\\|", 2)[0]
+                .split("#", 2)[0]
+                .trim()
+                .replace('\\', '/');
+    }
+
+    private String pdfStylesheet() {
+        return """
+                img.obsidian-resource-image {
+                  display: block;
+                  max-width: 100%;
+                  max-height: 22cm;
+                  width: auto;
+                  height: auto;
+                  object-fit: contain;
+                  margin: 1rem auto;
+                  padding: 0.35rem;
+                  border: 1px solid #d0d7de;
+                  border-radius: 6px;
+                  background: #f6f8fa;
+                }
+                figure {
+                  break-inside: avoid;
+                }
+                """;
     }
 
     private Path resolveAndValidate(String relativePath) {
