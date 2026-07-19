@@ -3,9 +3,11 @@ package com.dpswikillm.controllers;
 import com.dpswikillm.dto.FileVersionDto;
 import com.dpswikillm.dto.TreeNodeDto;
 import com.dpswikillm.services.FileService;
+import com.dpswikillm.services.ResourceSettingsService;
 import com.dpswikillm.services.SnapshotService;
 import com.dpswikillm.services.WebDavReplicationException;
 import java.io.UncheckedIOException;
+import java.net.URLConnection;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -30,10 +32,12 @@ public class FileController {
 
     private final FileService fileService;
     private final SnapshotService snapshotService;
+    private final ResourceSettingsService resourceSettingsService;
 
-    public FileController(FileService fileService, SnapshotService snapshotService) {
+    public FileController(FileService fileService, SnapshotService snapshotService, ResourceSettingsService resourceSettingsService) {
         this.fileService = fileService;
         this.snapshotService = snapshotService;
+        this.resourceSettingsService = resourceSettingsService;
     }
 
     @GetMapping("/tree")
@@ -52,6 +56,27 @@ public class FileController {
                 return ResponseEntity.notFound().build();
             }
             return ResponseEntity.internalServerError().body(e.getCause().getMessage());
+        }
+    }
+
+    @GetMapping("/resource")
+    public ResponseEntity<byte[]> getResource(@RequestParam("path") String path) {
+        try {
+            String resourcePath = resourceSettingsService.resolveResourcePath(path);
+            byte[] content = fileService.getBinaryContent(resourcePath);
+            String mediaType = URLConnection.guessContentTypeFromName(resourcePath);
+            if (mediaType == null || !mediaType.startsWith("image/")) {
+                mediaType = "application/octet-stream";
+            }
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(mediaType))
+                    .body(content);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        } catch (FileService.NoSuchFileException e) {
+            return ResponseEntity.notFound().build();
+        } catch (UncheckedIOException | IllegalStateException e) {
+            return ResponseEntity.internalServerError().build();
         }
     }
 

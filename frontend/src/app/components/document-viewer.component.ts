@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { parse as parseYaml } from 'yaml';
-import { Editor, defaultValueCtx, editorViewOptionsCtx, rootCtx } from '@milkdown/core';
+import { Editor, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, rootCtx } from '@milkdown/core';
 import { replaceAll } from '@milkdown/utils';
 import { commonmark } from '@milkdown/preset-commonmark';
 import { gfm } from '@milkdown/preset-gfm';
@@ -21,6 +21,8 @@ import { TranslocoPipe } from '@jsverse/transloco';
 import { FileService } from '../services/file.service';
 import { ThemeService } from '../services/theme.service';
 import { AuthService } from '../services/auth.service';
+import { ApiService } from '../services/api.service';
+import { createObsidianImagePreviewPlugin, OBSIDIAN_IMAGE_PREVIEW_REFRESH } from './obsidian-image-preview.plugin';
 
 @Component({
   selector: 'app-document-viewer',
@@ -185,6 +187,28 @@ import { AuthService } from '../services/auth.service';
       background: var(--app-surface-subtle);
       font-weight: 600;
     }
+    :host ::ng-deep .obsidian-image-embed-hidden { display: none; }
+    :host ::ng-deep .obsidian-image-preview {
+      margin: 18px auto;
+      max-width: min(100%, 860px);
+      padding: 10px;
+      border: 1px solid var(--app-border);
+      border-radius: 8px;
+      background: var(--app-surface-subtle);
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+    }
+    :host ::ng-deep .obsidian-image-preview img {
+      display: block;
+      width: 100%;
+      max-height: 70vh;
+      object-fit: contain;
+      border-radius: 5px;
+    }
+    :host ::ng-deep .obsidian-image-preview.is-error {
+      color: var(--app-error-text);
+      font-size: 0.875rem;
+      text-align: center;
+    }
   `],
 })
 export class DocumentViewerComponent implements AfterViewInit, OnDestroy {
@@ -195,6 +219,7 @@ export class DocumentViewerComponent implements AfterViewInit, OnDestroy {
   private readonly fileService = inject(FileService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly auth = inject(AuthService);
+  private readonly api = inject(ApiService);
   readonly theme = inject(ThemeService);
 
   readonly filePath = signal<string | null>(null);
@@ -202,6 +227,7 @@ export class DocumentViewerComponent implements AfterViewInit, OnDestroy {
   readonly errorMessage = signal<string | null>(null);
   readonly frontmatter = signal<Record<string, unknown>>({});
   readonly frontmatterEntries = computed(() => Object.entries(this.frontmatter()));
+  readonly resourceFolder = signal('');
 
   private editor: Editor | null = null;
 
@@ -215,6 +241,7 @@ export class DocumentViewerComponent implements AfterViewInit, OnDestroy {
       return;
     }
     this.filePath.set(path);
+    this.loadResourceSettings();
     this.initEditor().then(() => this.loadFile(path));
   }
 
@@ -234,10 +261,32 @@ export class DocumentViewerComponent implements AfterViewInit, OnDestroy {
       })
       .use(commonmark)
       .use(gfm)
+      .use(createObsidianImagePreviewPlugin({
+        getResourceFolder: () => this.resourceFolder(),
+        getToken: () => this.auth.token(),
+      }))
       .create()
       .then(editor => {
         this.editor = editor;
       });
+  }
+
+  private loadResourceSettings(): void {
+    this.api.getResourceSettings().subscribe({
+      next: settings => {
+        this.resourceFolder.set(settings.resourceFolder);
+        this.refreshObsidianImagePreview();
+      },
+      error: () => {},
+    });
+  }
+
+  private refreshObsidianImagePreview(): void {
+    if (!this.editor) return;
+    this.editor.action(ctx => {
+      const view = ctx.get(editorViewCtx);
+      view.dispatch(view.state.tr.setMeta(OBSIDIAN_IMAGE_PREVIEW_REFRESH, true));
+    });
   }
 
   private parseFrontmatter(raw: string): { data: Record<string, unknown>; content: string } {

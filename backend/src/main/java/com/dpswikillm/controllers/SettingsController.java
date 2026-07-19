@@ -1,13 +1,18 @@
 package com.dpswikillm.controllers;
 
 import com.dpswikillm.dto.ReindexProgress;
+import com.dpswikillm.dto.ResourceSettingsDto;
 import com.dpswikillm.services.ReindexService;
+import com.dpswikillm.services.ResourceSettingsService;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -16,9 +21,25 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public class SettingsController {
 
     private final ReindexService reindexService;
+    private final ResourceSettingsService resourceSettingsService;
 
-    public SettingsController(ReindexService reindexService) {
+    public SettingsController(ReindexService reindexService, ResourceSettingsService resourceSettingsService) {
         this.reindexService = reindexService;
+        this.resourceSettingsService = resourceSettingsService;
+    }
+
+    @GetMapping("/resources")
+    public ResourceSettingsDto getResourceSettings() {
+        return resourceSettingsService.getSettings();
+    }
+
+    @PutMapping("/resources")
+    public ResponseEntity<ResourceSettingsDto> updateResourceSettings(@RequestBody ResourceSettingsDto request) {
+        try {
+            return ResponseEntity.ok(resourceSettingsService.updateSettings(request.resourceFolder()));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     @GetMapping(value = "/reindex", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

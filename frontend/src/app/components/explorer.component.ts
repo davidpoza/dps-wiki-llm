@@ -18,7 +18,7 @@ import { NgClass, SlicePipe } from '@angular/common';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { ActivatedRoute, Router } from '@angular/router';
 import { skip } from 'rxjs/operators';
-import { Editor, defaultValueCtx, editorViewOptionsCtx, rootCtx } from '@milkdown/core';
+import { Editor, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, rootCtx } from '@milkdown/core';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { history } from '@milkdown/plugin-history';
 import { commonmark } from '@milkdown/preset-commonmark';
@@ -28,6 +28,7 @@ import { createWikilinkPlugin, WikilinkCoords } from './wikilink.plugin';
 import { createMarkdownLinkPlugin } from './markdown-link.plugin';
 import { createMarkdownImagePlugin } from './markdown-image.plugin';
 import { createLivePreviewPlugin, insertTableAtCursor } from './live-preview.plugin';
+import { createObsidianImagePreviewPlugin, OBSIDIAN_IMAGE_PREVIEW_REFRESH } from './obsidian-image-preview.plugin';
 import type { EditorView } from '@milkdown/prose/view';
 import { TreeNode, ConfirmationService, MessageService, MenuItem } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -730,6 +731,29 @@ import { FileVersion } from '../types';
     :host ::ng-deep .milkdown table tbody tr:nth-child(even) {
       background: var(--app-surface-hover);
     }
+    :host ::ng-deep .obsidian-image-embed-hidden { display: none; }
+    :host ::ng-deep .obsidian-image-preview {
+      margin: 18px auto;
+      max-width: min(100%, 860px);
+      padding: 10px;
+      border: 1px solid var(--app-border);
+      border-radius: 8px;
+      background: var(--app-surface-subtle);
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+      cursor: text;
+    }
+    :host ::ng-deep .obsidian-image-preview img {
+      display: block;
+      width: 100%;
+      max-height: 70vh;
+      object-fit: contain;
+      border-radius: 5px;
+    }
+    :host ::ng-deep .obsidian-image-preview.is-error {
+      color: var(--app-error-text);
+      font-size: 0.875rem;
+      text-align: center;
+    }
     .frontmatter-panel {
       background: var(--app-surface-subtle);
       border-bottom: 1px solid var(--app-border-strong);
@@ -876,6 +900,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly versions = signal<FileVersion[]>([]);
   readonly previewVersionId = signal<string | null>(null);
   readonly previewDiffLines = signal<string[]>([]);
+  readonly resourceFolder = signal('');
   private previewContent = '';
   readonly dirTreeNodes = computed(() => {
     const filterDirs = (nodes: TreeNode[]): TreeNode[] =>
@@ -935,6 +960,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   }
 
   ngAfterViewInit(): void {
+    this.loadResourceSettings();
     this.loadTree();
     this.initEditor().then(() => {
       const filePath = this.getFilePathFromRoute();
@@ -1177,6 +1203,10 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
       .use(createMarkdownImagePlugin())
       .use(createMarkdownLinkPlugin())
       .use(createLivePreviewPlugin())
+      .use(createObsidianImagePreviewPlugin({
+        getResourceFolder: () => this.resourceFolder(),
+        getToken: () => this.auth.token(),
+      }))
       .use(createWikilinkPlugin({
         onNavigate: target => this.navigateToWikilink(target),
         onAutocomplete: (query, coords, view) => {
@@ -1190,6 +1220,24 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
       .then(editor => {
         this.editor = editor;
       });
+  }
+
+  private loadResourceSettings(): void {
+    this.api.getResourceSettings().subscribe({
+      next: settings => {
+        this.resourceFolder.set(settings.resourceFolder);
+        this.refreshObsidianImagePreview();
+      },
+      error: () => {},
+    });
+  }
+
+  private refreshObsidianImagePreview(): void {
+    if (!this.editor) return;
+    this.editor.action(ctx => {
+      const view = ctx.get(editorViewCtx);
+      view.dispatch(view.state.tr.setMeta(OBSIDIAN_IMAGE_PREVIEW_REFRESH, true));
+    });
   }
 
   private getFilePathFromRoute(): string | null {

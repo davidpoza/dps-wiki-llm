@@ -70,6 +70,10 @@ export interface ReindexProgress {
   total: number;
 }
 
+export interface ResourceSettings {
+  resourceFolder: string;
+}
+
 export interface SyncProgress {
   type: 'progress';
   processed: number;
@@ -189,6 +193,14 @@ export class ApiService {
 
   updatePrompt(key: string, text: string): Observable<Prompt> {
     return this.http.put<Prompt>(`/api/settings/prompts/${key}`, { text });
+  }
+
+  getResourceSettings(): Observable<ResourceSettings> {
+    return this.http.get<ResourceSettings>('/api/settings/resources');
+  }
+
+  updateResourceSettings(resourceFolder: string): Observable<ResourceSettings> {
+    return this.http.put<ResourceSettings>('/api/settings/resources', { resourceFolder });
   }
 
   reindex(): Observable<ReindexProgress> {

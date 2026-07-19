@@ -65,6 +65,34 @@ interface PromptState extends Prompt {
         </section>
 
         <section class="settings-section">
+          <h2>Recursos</h2>
+          <p class="section-desc">Carpeta relativa al vault para resolver imágenes Obsidian sin ruta, como ![[Pasted image 20260618163907.png]].</p>
+          <div class="resource-row">
+            <label for="resource-folder" class="resource-label">Carpeta de recursos</label>
+            <input
+              id="resource-folder"
+              class="resource-input"
+              type="text"
+              [(ngModel)]="resourceFolder"
+              [disabled]="resourceSaving()"
+              placeholder="attachments"
+            />
+            <p-button
+              label="Guardar"
+              size="small"
+              [loading]="resourceSaving()"
+              (onClick)="saveResourceSettings()"
+            />
+          </div>
+          @if (resourceSaved()) {
+            <span class="feedback success">Recursos guardados correctamente</span>
+          }
+          @if (resourceError()) {
+            <span class="feedback error">{{ resourceError() }}</span>
+          }
+        </section>
+
+        <section class="settings-section">
           <h2>Prompts del LLM</h2>
           <p class="section-desc">Textos que se envían como instrucciones de sistema al modelo de lenguaje. Los cambios son efectivos de inmediato.</p>
 
@@ -141,6 +169,10 @@ interface PromptState extends Prompt {
     .section-desc { margin-bottom: 16px; }
     .reindex-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .reindex-progress { font-size: 0.875rem; color: var(--app-text-muted); }
+    .resource-row { display: grid; grid-template-columns: 160px 1fr auto; align-items: center; gap: 12px; }
+    .resource-label { font-size: 0.9rem; font-weight: 600; color: var(--app-text); }
+    .resource-input { width: 100%; box-sizing: border-box; border: 1px solid var(--app-border-strong); border-radius: 6px; padding: 9px 10px; color: var(--app-text); background: var(--app-surface-muted); }
+    .resource-input:focus { outline: 2px solid var(--app-primary); border-color: var(--app-primary); }
     .prompts-list { display: flex; flex-direction: column; gap: 20px; }
     .prompt-card { border: 1px solid var(--app-border); border-radius: 8px; padding: 16px; }
     .prompt-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
@@ -171,8 +203,21 @@ export class SettingsComponent implements OnInit {
   readonly reindexTotal = signal(0);
   readonly reindexDone = signal(false);
   readonly reindexError = signal<string | null>(null);
+  resourceFolder = '';
+  readonly resourceSaving = signal(false);
+  readonly resourceSaved = signal(false);
+  readonly resourceError = signal<string | null>(null);
 
   ngOnInit(): void {
+    this.api.getResourceSettings().subscribe({
+      next: (settings) => {
+        this.resourceFolder = settings.resourceFolder;
+      },
+      error: () => {
+        this.resourceError.set('No se pudo cargar la configuración de recursos.');
+      }
+    });
+
     this.api.getPrompts().subscribe({
       next: (data) => {
         this.prompts.set(data.map(p => ({ ...p, saving: false, saved: false, error: null })));
@@ -180,6 +225,25 @@ export class SettingsComponent implements OnInit {
       },
       error: () => {
         this.loading.set(false);
+      }
+    });
+  }
+
+  saveResourceSettings(): void {
+    this.resourceSaving.set(true);
+    this.resourceSaved.set(false);
+    this.resourceError.set(null);
+
+    this.api.updateResourceSettings(this.resourceFolder.trim()).subscribe({
+      next: (settings) => {
+        this.resourceFolder = settings.resourceFolder;
+        this.resourceSaving.set(false);
+        this.resourceSaved.set(true);
+        setTimeout(() => this.resourceSaved.set(false), 3000);
+      },
+      error: () => {
+        this.resourceSaving.set(false);
+        this.resourceError.set('Ruta inválida. Debe ser relativa al vault.');
       }
     });
   }

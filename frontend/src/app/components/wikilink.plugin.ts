@@ -26,6 +26,7 @@ function buildDecorations(doc: Parameters<typeof DecorationSet.create>[0]): Deco
     while ((match = WIKILINK_RE.exec(node.text)) !== null) {
       const start = pos + match.index;
       const end = start + match[0].length;
+      if (match.index > 0 && node.text.charAt(match.index - 1) === '!') continue;
       decorations.push(Decoration.inline(start, end, { class: 'wikilink-token' }));
     }
   });
@@ -61,7 +62,9 @@ export function createWikilinkPlugin(options: WikilinkPluginOptions) {
           const { $head } = view.state.selection;
           const textBefore = $head.parent.textContent.slice(0, $head.parentOffset);
           const match = textBefore.match(/\[\[([^\]|]*)$/);
-          if (match) {
+          const matchStart = match ? textBefore.length - match[0].length : -1;
+          const isEmbed = matchStart > 0 && textBefore.charAt(matchStart - 1) === '!';
+          if (match && !isEmbed) {
             const coords = view.coordsAtPos($head.pos);
             options.onAutocomplete(match[1], coords, view);
           } else {

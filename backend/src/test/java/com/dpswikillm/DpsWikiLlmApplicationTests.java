@@ -1,6 +1,7 @@
 package com.dpswikillm;
 
 import com.dpswikillm.repositories.DocumentIndexRepository;
+import com.dpswikillm.repositories.AppSettingRepository;
 import com.dpswikillm.repositories.JobConnectionCandidateRepository;
 import com.dpswikillm.repositories.JobRepository;
 import com.dpswikillm.repositories.LlmPromptRepository;
@@ -22,6 +23,9 @@ import org.springframework.boot.test.mock.mockito.MockBean;
                 + "org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration"
 })
 class DpsWikiLlmApplicationTests {
+    @MockBean
+    AppSettingRepository appSettingRepository;
+
     @MockBean
     DocumentIndexRepository documentIndexRepository;
 

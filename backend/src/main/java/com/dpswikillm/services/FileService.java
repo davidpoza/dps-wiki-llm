@@ -74,6 +74,18 @@ public class FileService {
         }
     }
 
+    public byte[] getBinaryContent(String relativePath) {
+        Path resolved = resolveAndValidate(relativePath);
+        if (!Files.exists(resolved) || !Files.isRegularFile(resolved)) {
+            throw new NoSuchFileException(relativePath);
+        }
+        try {
+            return Files.readAllBytes(resolved);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     public void saveContent(String relativePath, String content) {
         Path resolved = resolveAndValidate(relativePath);
         Snapshot snapshot = snapshotService.beginSnapshot(null, "manual-save", relativePath, "LOCAL_EDIT");
