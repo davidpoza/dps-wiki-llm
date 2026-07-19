@@ -41,6 +41,7 @@ import { TreeModule } from 'primeng/tree';
 import { HttpStatusCode } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
+import { ApiService } from '../services/api.service';
 import { AuthService } from '../services/auth.service';
 import { FileService } from '../services/file.service';
 import { ThemeService } from '../services/theme.service';
@@ -141,35 +142,44 @@ import { FileVersion } from '../types';
                 <div class="toolbar-group">
                   <p-button
                     icon="pi pi-table"
-                    label="Tabla"
                     size="small"
                     severity="secondary"
                     [text]="true"
                     (onClick)="insertTable()"
                     title="Insertar tabla"
                   />
+                  <p-button
+                    icon="pi pi-cloud-download"
+                    size="small"
+                    severity="secondary"
+                    [text]="true"
+                    [loading]="syncing()"
+                    (onClick)="sync()"
+                    [title]="'sync.button' | transloco"
+                  />
                 </div>
                 <div class="actions-divider"></div>
                 <div class="doc-actions">
                   <p-button
-                    [label]="'explorer.save' | transloco"
+                    icon="pi pi-save"
                     size="small"
                     [disabled]="!isDirty()"
                     (onClick)="save()"
+                    [title]="'explorer.save' | transloco"
                   />
                   <p-button
                     icon="pi pi-history"
-                    [label]="'versions.button' | transloco"
                     size="small"
                     severity="secondary"
                     (onClick)="openVersions()"
+                    [title]="'versions.button' | transloco"
                   />
                   <p-button
                     icon="pi pi-file-pdf"
-                    [label]="'explorer.generatePdf' | transloco"
                     size="small"
                     severity="secondary"
                     (onClick)="generatePdf()"
+                    [title]="'explorer.generatePdf' | transloco"
                   />
                 </div>
               </div>
@@ -825,6 +835,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   @ViewChild('editorContainer') editorContainer!: ElementRef<HTMLDivElement>;
 
   private readonly fileService = inject(FileService);
+  private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
@@ -860,6 +871,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly createDirName = signal('');
   readonly showMoveDialog = signal(false);
   readonly moveTargetDir = signal<TreeNode | null>(null);
+  readonly syncing = signal(false);
   readonly showVersions = signal(false);
   readonly versions = signal<FileVersion[]>([]);
   readonly previewVersionId = signal<string | null>(null);
@@ -1655,6 +1667,36 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     } catch {
       return dateStr;
     }
+  }
+
+  sync(): void {
+    if (this.syncing()) return;
+    this.syncing.set(true);
+    this.api.syncWebdav().subscribe({
+      next: event => {
+        if (event.type === 'done') {
+          const { pulled, deleted, conflicts } = event.result;
+          this.messageService.add({
+            severity: conflicts.length > 0 ? 'warn' : 'success',
+            summary: this.t.translate('sync.button'),
+            detail: this.t.translate('sync.summary', { pulled: pulled.length, deleted: deleted.length, conflicts: conflicts.length }),
+          });
+          if (pulled.length > 0 || deleted.length > 0) this.reloadTree();
+        }
+      },
+      complete: () => {
+        this.syncing.set(false);
+        this.cdr.markForCheck();
+      },
+      error: (err: { code?: string; message?: string }) => {
+        this.syncing.set(false);
+        const detail = err?.code === 'NOT_CONFIGURED'
+          ? this.t.translate('sync.notConfigured')
+          : this.t.translate('sync.error');
+        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail });
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   generatePdf(): void {
