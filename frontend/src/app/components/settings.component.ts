@@ -144,7 +144,8 @@ interface PromptState extends Prompt {
   `,
   styles: [`
     .app-shell {
-      min-height: 100vh;
+      height: 100vh;
+      overflow-y: auto;
       background: var(--app-bg);
       color: var(--app-text);
     }
