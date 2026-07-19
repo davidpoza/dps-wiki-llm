@@ -113,6 +113,57 @@ class SnapshotServiceTests {
     }
 
     @Test
+    void getDiffNoSpuriousBlankLineFromTrailingNewline() {
+        Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
+        SnapshotFile sf = new SnapshotFile();
+        ReflectionTestUtils.setField(sf, "id", UUID.randomUUID());
+        sf.setSnapshotId(snapshot.getId());
+        sf.setPath("wiki/sources/note.md");
+        sf.setContentBefore("line one\nline two\n");
+        sf.setContentAfter("line one\nline three\n");
+        snapshotFileRepo.save(sf);
+
+        String diff = snapshotService.getDiffByChangeId(sf.getId());
+
+        assertThat(diff).doesNotContain("\n\n\n");
+        assertThat(diff.lines().filter(String::isBlank).count()).isLessThan(2);
+    }
+
+    @Test
+    void getDiffCrlfAndLfIdenticalContentProducesNoDiff() {
+        Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
+        SnapshotFile sf = new SnapshotFile();
+        ReflectionTestUtils.setField(sf, "id", UUID.randomUUID());
+        sf.setSnapshotId(snapshot.getId());
+        sf.setPath("wiki/sources/note.md");
+        sf.setContentBefore("line one\r\nline two\r\n");
+        sf.setContentAfter("line one\nline two\n");
+        snapshotFileRepo.save(sf);
+
+        String diff = snapshotService.getDiffByChangeId(sf.getId());
+
+        assertThat(diff).isEmpty();
+    }
+
+    @Test
+    void diffStatsDoNotCountTrailingNewlineAsChange() throws Exception {
+        Files.createDirectories(vault.resolve("wiki/sources"));
+        Files.writeString(vault.resolve("wiki/sources/note.md"), "line one\n", StandardCharsets.UTF_8);
+
+        Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
+        snapshotService.captureFile(snapshot, "wiki/sources/note.md");
+        Files.writeString(vault.resolve("wiki/sources/note.md"), "line one\nline two\n", StandardCharsets.UTF_8);
+        snapshotService.recordAfter(snapshot, "wiki/sources/note.md");
+        snapshotService.finalizeSnapshot(snapshot, null);
+
+        var history = snapshotService.getFileHistory(0, 10).content();
+
+        assertThat(history).hasSize(1);
+        assertThat(history.getFirst().linesAdded()).isEqualTo(1);
+        assertThat(history.getFirst().linesDeleted()).isEqualTo(0);
+    }
+
+    @Test
     void captureFileIsIdempotent() throws Exception {
         Files.createDirectories(vault.resolve("wiki/sources"));
         Files.writeString(vault.resolve("wiki/sources/note.md"), "content\n", StandardCharsets.UTF_8);
@@ -198,8 +249,8 @@ class SnapshotServiceTests {
         sf.setPath(path);
         sf.setContentBefore(before);
         sf.setContentAfter(after);
-        List<String> beforeLines = before != null ? java.util.Arrays.asList(before.split("\n", -1)) : List.of();
-        List<String> afterLines = after != null ? java.util.Arrays.asList(after.split("\n", -1)) : List.of();
+        List<String> beforeLines = before != null ? java.util.Arrays.asList(before.replace("\r\n", "\n").replace("\r", "\n").split("\n", 0)) : List.of();
+        List<String> afterLines = after != null ? java.util.Arrays.asList(after.replace("\r\n", "\n").replace("\r", "\n").split("\n", 0)) : List.of();
         var patch = com.github.difflib.DiffUtils.diff(beforeLines, afterLines);
         int added = 0, deleted = 0;
         for (var delta : patch.getDeltas()) { added += delta.getTarget().size(); deleted += delta.getSource().size(); }
