@@ -427,6 +427,9 @@ export function createLivePreviewPlugin() {
         }
 
         // ── Not expanded: detect cursor entering a mark ──────────────────
+        // (NOTE: Enter inside an expanded block is handled in props.handleKeyDown
+        //  to prevent ProseMirror's splitBlock from leaving a stray empty paragraph
+        //  that serialises as an extra blank line in the .md file.)
         if (cursorPos >= 0) {
           const markRange = findMarkAtCursor(newState);
           if (markRange) {
@@ -547,6 +550,53 @@ export function createLivePreviewPlugin() {
         handleKeyDown(view, event) {
           if ((event as KeyboardEvent).key !== 'Enter') return false;
           const { state } = view;
+
+          // ── Live-preview: collapse heading/block, insert fresh paragraph ─
+          if (!(event as KeyboardEvent).shiftKey) {
+            const lpState = key.getState(state);
+            if (lpState?.expanded && lpState.expanded.mode === 'block') {
+              const blockSel = state.selection;
+              if (blockSel instanceof TextSelection && blockSel.$cursor) {
+                const cursorPos = blockSel.$cursor.pos;
+                const { from, originalRaw } = lpState.expanded;
+                const expandedNode = state.doc.nodeAt(from);
+                if (expandedNode) {
+                  const effectiveTo = from + expandedNode.nodeSize;
+                  if (cursorPos > from && cursorPos < effectiveTo) {
+                    const innerFrom = from + 1;
+                    const innerTo   = effectiveTo - 1;
+                    const textBefore = cursorPos > innerFrom
+                      ? state.doc.textBetween(innerFrom, cursorPos, '', '')
+                      : '';
+                    const textAfter = cursorPos < innerTo
+                      ? state.doc.textBetween(cursorPos, innerTo, '', '')
+                      : '';
+                    const parsedBlock = parseMarkdownToBlock(textBefore, state.schema);
+                    if (parsedBlock) {
+                      const paragraphType = state.schema.nodes['paragraph'];
+                      if (paragraphType) {
+                        const changed = textBefore !== originalRaw;
+                        let tr = state.tr;
+                        tr = tr.replaceWith(from, effectiveTo, parsedBlock);
+                        const afterPos = from + parsedBlock.nodeSize;
+                        const newPara = textAfter
+                          ? paragraphType.create({}, state.schema.text(textAfter))
+                          : paragraphType.create();
+                        tr = tr.insert(afterPos, newPara);
+                        tr = tr.setSelection(TextSelection.create(tr.doc, afterPos + 1));
+                        tr.setMeta(META_KEY, { type: 'collapse' });
+                        if (!changed) tr.setMeta('addToHistory', false);
+                        view.dispatch(tr);
+                        return true;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // ── Table: convert header+separator paragraphs to a table node ──
           const sel = state.selection;
           if (!(sel instanceof TextSelection) || !sel.$cursor) return false;
           const $c = sel.$cursor;
@@ -573,10 +623,10 @@ export function createLivePreviewPlugin() {
           if (!tableNode) return false;
 
           const prevFrom = sepFrom - prevNode.nodeSize;
-          const tr = state.tr.replaceWith(prevFrom, sepTo, tableNode);
-          const afterPos = prevFrom + tableNode.nodeSize;
-          try { tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(afterPos, tr.doc.content.size)))); } catch { /* noop */ }
-          view.dispatch(tr);
+          const tableTr = state.tr.replaceWith(prevFrom, sepTo, tableNode);
+          const tableAfterPos = prevFrom + tableNode.nodeSize;
+          try { tableTr.setSelection(TextSelection.near(tableTr.doc.resolve(Math.min(tableAfterPos, tableTr.doc.content.size)))); } catch { /* noop */ }
+          view.dispatch(tableTr);
           return true;
         },
       },
