@@ -346,25 +346,34 @@ export function createLivePreviewPlugin() {
         if (lpState.expanded) {
           const { from, to, originalRaw, mode } = lpState.expanded;
 
-          if (from >= to) {
+          // For blocks, use the actual current node boundary instead of the
+          // mapped `to`. When Enter splits the expanded paragraph, `to` (mapped
+          // with bias +1) grows to encompass the new paragraph, causing the
+          // collapse to concatenate text from both paragraphs. Using nodeAt(from)
+          // gives the real boundary of the original (possibly shortened) node.
+          const effectiveTo = mode === 'block'
+            ? (() => { const n = newState.doc.nodeAt(from); return n ? from + n.nodeSize : to; })()
+            : to;
+
+          if (from >= effectiveTo) {
             const tr = newState.tr.setMeta(META_KEY, { type: 'collapse' });
             tr.setMeta('addToHistory', false);
             return tr;
           }
 
           const stillInside = mode === 'mark'
-            ? (cursorPos >= from && cursorPos < to)
-            : (cursorPos > from && cursorPos < to);
+            ? (cursorPos >= from && cursorPos < effectiveTo)
+            : (cursorPos > from && cursorPos < effectiveTo);
 
           if (stillInside) return null;
 
           let rawText: string;
           if (mode === 'mark') {
-            rawText = newState.doc.textBetween(from, to, '', '');
+            rawText = newState.doc.textBetween(from, effectiveTo, '', '');
           } else {
-            // Block: text is inside node boundaries (from+1 .. to-1)
+            // Block: text is inside node boundaries (from+1 .. effectiveTo-1)
             const safeFrom = Math.min(from + 1, newState.doc.content.size);
-            const safeTo   = Math.max(safeFrom, Math.min(to - 1, newState.doc.content.size));
+            const safeTo   = Math.max(safeFrom, Math.min(effectiveTo - 1, newState.doc.content.size));
             rawText = safeTo > safeFrom ? newState.doc.textBetween(safeFrom, safeTo, '', '') : '';
           }
 
@@ -373,17 +382,17 @@ export function createLivePreviewPlugin() {
 
           if (mode === 'mark') {
             if (rawText.length === 0) {
-              tr = tr.delete(from, to);
+              tr = tr.delete(from, effectiveTo);
             } else {
               const parsed = parseMarkdownToMark(rawText, schema);
               if (parsed && isImageParsed(parsed)) {
                 const imgNode = schema.nodes['image']?.create(parsed);
-                if (imgNode) tr = tr.replaceWith(from, to, imgNode);
+                if (imgNode) tr = tr.replaceWith(from, effectiveTo, imgNode);
               } else if (parsed) {
                 const { text: mText, mark } = parsed as ParsedMark;
                 tr = mText.length
-                  ? tr.replaceWith(from, to, schema.text(mText, [mark]))
-                  : tr.delete(from, to);
+                  ? tr.replaceWith(from, effectiveTo, schema.text(mText, [mark]))
+                  : tr.delete(from, effectiveTo);
               }
             }
           } else if (mode === 'table') {
@@ -400,7 +409,7 @@ export function createLivePreviewPlugin() {
           } else {
             // Block collapse
             const safeFrom = Math.min(from, newState.doc.content.size);
-            const safeTo   = Math.min(to, newState.doc.content.size);
+            const safeTo   = Math.min(effectiveTo, newState.doc.content.size);
             if (rawText.length === 0) {
               if (safeFrom < safeTo) tr = tr.delete(safeFrom, safeTo);
             } else {
