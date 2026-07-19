@@ -78,29 +78,36 @@ public class WebDavSyncService {
         int total = localPaths.size();
         log.info("WebDAV baseline init: scanning {} local files", total);
 
+        // Fetch remote ETags once so subsequent syncs can use the ETag fast-path immediately.
+        Map<String, String> remoteEtags = new java.util.HashMap<>();
+        try {
+            webDavClient.list().forEach(e -> remoteEtags.put(e.path(), e.versionKey()));
+        } catch (IOException e) {
+            log.warn("WebDAV baseline init: could not fetch remote ETags ({}), proceeding without", e.getMessage());
+        }
+
         // Load existing baselines in one query
         Map<String, VaultFileSync> existing = baselineRepository.findAll().stream()
                 .collect(Collectors.toMap(VaultFileSync::getPath, b -> b));
 
-        int initialized = 0, processed = 0;
+        int initialized = 0, backfilled = 0, processed = 0;
         for (String path : localPaths) {
             processed++;
             VaultFileSync row = existing.get(path);
             if (row == null) {
                 String content = readLocal(path);
-                // Do NOT store remoteEtag here: the current remote ETag may correspond to a
-                // version that differs from the local file (e.g. a remote change made while the
-                // app was down). Storing it would make the ETag fast-path treat the remote as
-                // unchanged on the very next sync and silently skip syncing that file.
-                // The first sync will download and compare content, then set remoteEtag correctly
-                // via the "already-identical" branch or applyRemote.
-                upsertBaseline(path, sha256(content), null, true, false, null);
+                upsertBaseline(path, sha256(content), remoteEtags.get(path), true, false, null);
                 initialized++;
+            } else if (row.getRemoteEtag() == null && remoteEtags.containsKey(path)) {
+                // Backfill ETag for existing baselines so the sync fast-path activates immediately.
+                row.setRemoteEtag(remoteEtags.get(path));
+                baselineRepository.save(row);
+                backfilled++;
             }
             log.info("WebDAV baseline init: {}/{} — {}", processed, total, path);
         }
-        log.info("WebDAV baseline init: done — {} new, {} already up-to-date",
-                initialized, total - initialized);
+        log.info("WebDAV baseline init: done — {} new, {} etag-backfilled, {} already up-to-date",
+                initialized, backfilled, total - initialized - backfilled);
     }
 
     // ---------------------------------------------------------------------
