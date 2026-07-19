@@ -1404,6 +1404,9 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   navigateToWikilink(target: string): void {
     const label = target.toLowerCase();
     const file = this.allFiles().find(n =>
+      (n.data as string ?? '').toLowerCase().replace(/\.md$/i, '') === label ||
+      (n.data as string ?? '').toLowerCase() === label
+    ) ?? this.allFiles().find(n =>
       (n.label ?? '').toLowerCase().replace(/\.md$/i, '') === label ||
       (n.label ?? '').toLowerCase() === label
     );
