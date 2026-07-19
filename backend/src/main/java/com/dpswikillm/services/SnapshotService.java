@@ -216,7 +216,8 @@ public class SnapshotService {
         if (content == null || content.isEmpty()) {
             return List.of();
         }
-        return Arrays.asList(content.split("\n", -1));
+        String normalized = content.replace("\r\n", "\n").replace("\r", "\n");
+        return Arrays.asList(normalized.split("\n", 0));
     }
 
     private int[] diffStats(String before, String after) {
