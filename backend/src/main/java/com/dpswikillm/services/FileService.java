@@ -233,6 +233,7 @@ public class FileService {
                     "pandoc", renderedInput.toString(),
                     "--pdf-engine=weasyprint",
                     "--standalone",
+                    "--highlight-style", "kate",
                     "--css", stylesheet.toString(),
                     "-o", output.toString()
             );
@@ -305,14 +306,122 @@ public class FileService {
 
     private String pdfStylesheet() {
         return """
-                img.obsidian-resource-image {
+                /* ── Page layout ── */
+                @page {
+                  size: A4;
+                  margin: 2cm 2.5cm;
+                }
+
+                /* ── Body typography ── */
+                body {
+                  font-family: sans-serif;
+                  font-size: 11pt;
+                  line-height: 1.6;
+                  color: #24292f;
+                }
+
+                /* ── Headings ── */
+                h1, h2, h3, h4, h5, h6 {
+                  font-weight: 700;
+                  margin-top: 1.2em;
+                  margin-bottom: 0.4em;
+                  line-height: 1.25;
+                }
+                h1 { font-size: 2em;    border-bottom: 1px solid #d0d7de; padding-bottom: 0.2em; }
+                h2 { font-size: 1.5em;  }
+                h3 { font-size: 1.25em; }
+                h4 { font-size: 1.05em; }
+                h5 { font-size: 0.9em;  }
+                h6 { font-size: 0.85em; color: #57606a; }
+
+                /* ── Inline formatting ── */
+                strong, b { font-weight: 700; }
+                em, i     { font-style: italic; }
+
+                a {
+                  color: #0969da;
+                  text-decoration: underline;
+                }
+                a::after {
+                  content: " (" attr(href) ")";
+                  font-size: 0.8em;
+                  word-break: break-all;
+                  color: #57606a;
+                }
+
+                /* ── Lists ── */
+                ul { list-style: disc;    padding-left: 1.75em; margin: 0.5em 0; }
+                ol { list-style: decimal; padding-left: 1.75em; margin: 0.5em 0; }
+                li { margin: 0.25em 0; }
+                ul ul, ol ul { list-style: circle; }
+                ul ol, ol ol { list-style: lower-alpha; }
+
+                /* ── Blockquotes ── */
+                blockquote {
+                  border-left: 4px solid #d0d7de;
+                  padding: 0.25em 1em;
+                  margin: 1em 0;
+                  color: #57606a;
+                }
+
+                /* ── Code ── */
+                code {
+                  font-family: monospace;
+                  font-size: 0.9em;
+                  background: #f6f8fa;
+                  padding: 0.1em 0.35em;
+                  border-radius: 4px;
+                  border: 1px solid #d0d7de;
+                }
+                pre {
+                  background: #f6f8fa;
+                  border: 1px solid #d0d7de;
+                  border-radius: 6px;
+                  padding: 1em;
+                  overflow-x: auto;
+                  white-space: pre-wrap;
+                  word-break: break-all;
+                  margin: 1em 0;
+                }
+                pre code {
+                  background: none;
+                  border: none;
+                  padding: 0;
+                  font-size: inherit;
+                }
+
+                /* ── Tables ── */
+                table {
+                  border-collapse: collapse;
+                  width: 100%;
+                  margin: 1em 0;
+                  font-size: 0.95em;
+                }
+                th, td {
+                  border: 1px solid #d0d7de;
+                  padding: 0.4em 0.75em;
+                  text-align: left;
+                }
+                thead th {
+                  background: #f6f8fa;
+                  font-weight: 700;
+                }
+                tbody tr:nth-child(even) {
+                  background: #f8f9fa;
+                }
+
+                /* ── Images (standard markdown) ── */
+                img {
                   display: block;
                   max-width: 100%;
-                  max-height: 22cm;
-                  width: auto;
+                  max-height: 20cm;
                   height: auto;
-                  object-fit: contain;
                   margin: 1rem auto;
+                }
+
+                /* ── Obsidian-embedded images ── */
+                img.obsidian-resource-image {
+                  object-fit: contain;
                   padding: 0.35rem;
                   border: 1px solid #d0d7de;
                   border-radius: 6px;
