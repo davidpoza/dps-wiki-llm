@@ -238,4 +238,8 @@ export class ApiService {
       return () => es.close();
     });
   }
+
+  getActuatorInfo(): Observable<{ build?: { version?: string } }> {
+    return this.http.get<{ build?: { version?: string } }>('/actuator/info');
+  }
 }

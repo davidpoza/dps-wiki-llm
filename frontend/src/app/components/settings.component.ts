@@ -5,6 +5,7 @@ import { ButtonModule } from 'primeng/button';
 import { ApiService, Prompt } from '../services/api.service';
 import { AuthService } from '../services/auth.service';
 import { ThemeService } from '../services/theme.service';
+import { APP_VERSION } from '../version';
 
 interface PromptState extends Prompt {
   saving: boolean;
@@ -134,6 +135,10 @@ interface PromptState extends Prompt {
             </div>
           }
         </section>
+
+        <footer class="version-footer">
+          Frontend: v{{ frontendVersion }} &nbsp;|&nbsp; Backend: v{{ backendVersion() }}
+        </footer>
       </section>
     </main>
   `,
@@ -186,6 +191,7 @@ interface PromptState extends Prompt {
     .feedback.success { color: var(--app-success-text); }
     .feedback.error { color: var(--app-error-text); }
     .loading-msg, .empty-msg { color: var(--app-text-muted); }
+    .version-footer { text-align: center; font-size: 0.75rem; color: var(--app-text-subtle); padding-top: 8px; }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -194,6 +200,9 @@ export class SettingsComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   readonly theme = inject(ThemeService);
+
+  readonly frontendVersion = APP_VERSION;
+  readonly backendVersion = signal('…');
 
   readonly loading = signal(true);
   readonly prompts = signal<PromptState[]>([]);
@@ -209,6 +218,11 @@ export class SettingsComponent implements OnInit {
   readonly resourceError = signal<string | null>(null);
 
   ngOnInit(): void {
+    this.api.getActuatorInfo().subscribe({
+      next: (info) => this.backendVersion.set(info.build?.version ?? 'N/D'),
+      error: () => this.backendVersion.set('N/D'),
+    });
+
     this.api.getResourceSettings().subscribe({
       next: (settings) => {
         this.resourceFolder = settings.resourceFolder;

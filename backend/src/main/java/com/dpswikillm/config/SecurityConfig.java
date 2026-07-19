@@ -51,6 +51,7 @@ public class SecurityConfig {
                                 "/auth/login/2fa",
                                 "/error",
                                 "/actuator/health/**",
+                                "/actuator/info",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"
