@@ -114,6 +114,9 @@ import { FileVersion } from '../types';
             (onNodeContextMenuSelect)="onNodeContextMenuSelect($event)"
             styleClass="w-full"
             [emptyMessage]="'explorer.noResults' | transloco"
+            [virtualScroll]="true"
+            [virtualScrollItemSize]="32"
+            scrollHeight="flex"
           >
             <ng-template pTemplate="default" let-node>
               <span class="tree-label" [title]="node.label">{{ node.label }}</span>
@@ -459,10 +462,11 @@ import { FileVersion } from '../types';
       flex-shrink: 0;
       border-right: none;
       background: var(--app-surface);
-      overflow-y: auto;
-      overflow-x: hidden;
+      overflow: hidden;
       padding: 8px;
       transition: width 0.2s ease;
+      display: flex;
+      flex-direction: column;
     }
     .file-tree-panel.collapsed {
       padding: 0;
