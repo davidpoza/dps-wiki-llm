@@ -26,6 +26,13 @@ public class FileService {
     private static final Logger log = LoggerFactory.getLogger(FileService.class);
     private static final Pattern OBSIDIAN_IMAGE_EMBED = Pattern.compile("!\\[\\[([^\\]\\n]+)\\]\\]");
     private static final Pattern IMAGE_EXTENSION = Pattern.compile("(?i)\\.(png|jpe?g|gif|webp|svg)$");
+    private static final Pattern FRONTMATTER_BLOCK =
+            Pattern.compile("\\A---[ \\t]*\\r?\\n(.*?)\\r?\\n---[ \\t]*(?:\\r?\\n|\\z)", Pattern.DOTALL);
+    private static final Pattern FRONTMATTER_TITLE =
+            Pattern.compile("^title:[ \\t]*(.*?)[ \\t]*\\r?$", Pattern.MULTILINE);
+    private static final Pattern TOP_LEVEL_TITLE_LINE = Pattern.compile("title:[ \\t]*.*");
+    private static final Pattern BODY_HEADING =
+            Pattern.compile("^#{1,6}[ \\t]+(.+?)[ \\t]*$", Pattern.MULTILINE);
 
     private final VaultPathResolver pathResolver;
     private final SnapshotService snapshotService;
@@ -227,7 +234,7 @@ public class FileService {
             renderedInput = Files.createTempFile("wiki-pdf-input-", ".md");
             stylesheet = Files.createTempFile("wiki-pdf-style-", ".css");
             output = Files.createTempFile("wiki-pdf-", ".pdf");
-            Files.writeString(renderedInput, renderPdfMarkdown(markdown), StandardCharsets.UTF_8);
+            Files.writeString(renderedInput, renderPdfMarkdown(stripDuplicateFrontmatterTitle(markdown)), StandardCharsets.UTF_8);
             Files.writeString(stylesheet, pdfStylesheet(), StandardCharsets.UTF_8);
             ProcessBuilder pb = new ProcessBuilder(
                     "pandoc", renderedInput.toString(),
@@ -294,6 +301,71 @@ public class FileService {
         }
         matcher.appendTail(rendered);
         return rendered.toString();
+    }
+
+    /**
+     * Pandoc's {@code --standalone} mode renders the top-level frontmatter {@code title} as its own
+     * title block. Intake notes also inject a {@code # {title}} heading into the body, so the title
+     * would appear twice in the exported PDF. When the body already contains the title as a heading,
+     * remove the frontmatter {@code title} line so pandoc emits it only once; otherwise leave the
+     * markdown untouched so a frontmatter-only title still renders.
+     */
+    String stripDuplicateFrontmatterTitle(String markdown) {
+        if (markdown == null) {
+            return null;
+        }
+        Matcher frontmatter = FRONTMATTER_BLOCK.matcher(markdown);
+        if (!frontmatter.find()) {
+            return markdown;
+        }
+        Matcher titleMatcher = FRONTMATTER_TITLE.matcher(frontmatter.group(1));
+        if (!titleMatcher.find()) {
+            return markdown;
+        }
+        String title = unquote(titleMatcher.group(1).trim());
+        String body = markdown.substring(frontmatter.end());
+        if (title.isEmpty() || !bodyContainsHeading(body, title)) {
+            return markdown;
+        }
+        String stripped = removeTopLevelTitleLine(frontmatter.group(1));
+        String rebuilt = "---\n" + (stripped.isEmpty() ? "" : stripped + "\n") + "---\n";
+        return rebuilt + body;
+    }
+
+    private boolean bodyContainsHeading(String body, String title) {
+        Matcher headings = BODY_HEADING.matcher(body);
+        while (headings.find()) {
+            if (headings.group(1).trim().equals(title)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String removeTopLevelTitleLine(String frontmatter) {
+        StringBuilder kept = new StringBuilder();
+        for (String line : frontmatter.split("\n", -1)) {
+            String withoutCr = line.endsWith("\r") ? line.substring(0, line.length() - 1) : line;
+            if (TOP_LEVEL_TITLE_LINE.matcher(withoutCr).matches()) {
+                continue;
+            }
+            if (kept.length() > 0) {
+                kept.append('\n');
+            }
+            kept.append(withoutCr);
+        }
+        return kept.toString();
+    }
+
+    private static String unquote(String value) {
+        if (value.length() >= 2) {
+            char first = value.charAt(0);
+            char last = value.charAt(value.length() - 1);
+            if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+                return value.substring(1, value.length() - 1);
+            }
+        }
+        return value;
     }
 
     private String cleanObsidianTarget(String rawTarget) {

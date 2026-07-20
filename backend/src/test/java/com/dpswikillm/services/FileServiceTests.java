@@ -37,6 +37,91 @@ class FileServiceTests {
         assertThat(rendered).doesNotContain("![[Pasted image 20260618163907.png]]");
     }
 
+    @Test
+    void stripsFrontmatterTitleWhenBodyRepeatsItAsHeading() {
+        String markdown = """
+                ---
+                title: "Code Is Cheap Now"
+                source: upload
+                ---
+                # Code Is Cheap Now
+
+                Body text.
+                """;
+
+        String result = service().stripDuplicateFrontmatterTitle(markdown);
+
+        assertThat(result).doesNotContain("title: \"Code Is Cheap Now\"");
+        assertThat(result).contains("source: upload");
+        assertThat(result).contains("# Code Is Cheap Now");
+        // The title survives exactly once, as the body heading.
+        assertThat(result.split("Code Is Cheap Now", -1)).hasSize(2);
+    }
+
+    @Test
+    void keepsFrontmatterTitleWhenBodyHasNoMatchingHeading() {
+        String markdown = """
+                ---
+                title: "Only In Frontmatter"
+                source: upload
+                ---
+                Body text without a matching heading.
+                """;
+
+        String result = service().stripDuplicateFrontmatterTitle(markdown);
+
+        assertThat(result).isEqualTo(markdown);
+    }
+
+    @Test
+    void leavesMarkdownUntouchedWhenThereIsNoFrontmatter() {
+        String markdown = "# Some Heading\n\nJust body content.\n";
+
+        assertThat(service().stripDuplicateFrontmatterTitle(markdown)).isEqualTo(markdown);
+    }
+
+    @Test
+    void leavesMarkdownUntouchedWhenFrontmatterHasNoTitle() {
+        String markdown = """
+                ---
+                source: upload
+                filename: note.md
+                ---
+                # Some Heading
+
+                Body.
+                """;
+
+        assertThat(service().stripDuplicateFrontmatterTitle(markdown)).isEqualTo(markdown);
+    }
+
+    @Test
+    void matchesQuotedTitleAgainstDeeperHeadingIgnoringWhitespace() {
+        String markdown = """
+                ---
+                title:   "Mi segundo cerebro: una wiki"
+                source: upload
+                ---
+                ##   Mi segundo cerebro: una wiki\s
+
+                Body text.
+                """;
+
+        String result = service().stripDuplicateFrontmatterTitle(markdown);
+
+        assertThat(result).doesNotContain("title:");
+        assertThat(result).contains("source: upload");
+        assertThat(result).contains("Mi segundo cerebro: una wiki");
+    }
+
+    private FileService service() {
+        return new FileService(
+                resolver(),
+                mock(SnapshotService.class),
+                mock(WebDavSyncService.class),
+                mock(ResourceSettingsService.class));
+    }
+
     private VaultPathResolver resolver() {
         return new VaultPathResolver(new AppProperties(
                 vault.toString(),
