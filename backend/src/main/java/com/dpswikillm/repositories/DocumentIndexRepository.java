@@ -19,5 +19,7 @@ public interface DocumentIndexRepository {
 
     List<SearchResult> semanticSearch(float[] queryVector, int limit);
 
+    List<SearchResult> semanticSearchByType(float[] queryVector, String docType, int limit);
+
     List<SearchResult> lexicalLookup(String query, int limit);
 }

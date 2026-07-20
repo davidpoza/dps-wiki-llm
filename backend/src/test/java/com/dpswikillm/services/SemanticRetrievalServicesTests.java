@@ -165,6 +165,17 @@ class SemanticRetrievalServicesTests {
         }
 
         @Override
+        public List<SearchResult> semanticSearchByType(float[] queryVector, String docType, int limit) {
+            return documents.stream()
+                    .filter(doc -> vectors.containsKey(doc.id()))
+                    .filter(doc -> docType.equals(doc.docType()))
+                    .map(doc -> new SearchResult(doc.path(), doc.title(), doc.docType(), cosine(queryVector, vectors.get(doc.id())), doc.body()))
+                    .sorted(Comparator.comparingDouble(SearchResult::score).reversed())
+                    .limit(limit)
+                    .toList();
+        }
+
+        @Override
         public List<SearchResult> lexicalLookup(String query, int limit) {
             String lower = query.toLowerCase();
             return documents.stream()

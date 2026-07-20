@@ -119,6 +119,23 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
     }
 
     @Override
+    public List<SearchResult> semanticSearchByType(float[] queryVector, String docType, int limit) {
+        return jdbcTemplate.query("""
+                SELECT d.path, d.title, d.doc_type, d.body, 1 - (e.embedding <=> ?::vector) AS score
+                FROM document_embeddings e
+                JOIN documents d ON d.id = e.document_id
+                WHERE d.doc_type = ?
+                ORDER BY e.embedding <=> ?::vector
+                LIMIT ?
+                """, (rs, rowNum) -> new SearchResult(
+                rs.getString("path"),
+                rs.getString("title"),
+                rs.getString("doc_type"),
+                rs.getDouble("score"),
+                rs.getString("body")), vectorLiteral(queryVector), docType, vectorLiteral(queryVector), limit);
+    }
+
+    @Override
     public List<SearchResult> lexicalLookup(String query, int limit) {
         String pattern = "%" + query + "%";
         return jdbcTemplate.query("""

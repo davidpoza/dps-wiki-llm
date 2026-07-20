@@ -162,6 +162,7 @@ class JobRevertServiceTests {
         @Override public void upsertEmbedding(UUID id, String model, int dim, float[] emb, String hash) { hashes.put(id, hash); }
         @Override public void pruneEmbeddingsNotIn(String model, List<UUID> ids) { hashes.keySet().removeIf(id -> !ids.contains(id)); }
         @Override public List<SearchResult> semanticSearch(float[] q, int limit) { return List.of(); }
+        @Override public List<SearchResult> semanticSearchByType(float[] q, String docType, int limit) { return List.of(); }
         @Override public List<SearchResult> lexicalLookup(String q, int limit) { return List.of(); }
     }
 }

@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -128,12 +129,36 @@ public class GuidedReviewService {
                     "review:" + job.getId() + ":" + candidate.getTargetPath() + ":" + candidate.getProposedLink()));
         }
 
+        // Reverse (forward) links: the source note links back out to each accepted target so every
+        // connection is bidirectional, regardless of the flow (unattended or guided review).
+        Map<String, LinkedHashSet<String>> forwardLinksBySource = new LinkedHashMap<>();
+        for (JobConnectionCandidate candidate : accepted) {
+            if (candidate.getProposedLink() == null) {
+                continue;
+            }
+            forwardLinksBySource
+                    .computeIfAbsent(candidate.getProposedLink(), key -> new LinkedHashSet<>())
+                    .add("[[" + candidate.getTargetPath() + "]]");
+        }
+        for (Map.Entry<String, LinkedHashSet<String>> entry : forwardLinksBySource.entrySet()) {
+            actions.add(new MutationAction(
+                    MutationActionType.update,
+                    entry.getKey(),
+                    null,
+                    Map.of(),
+                    Map.of("Related", new ArrayList<>(entry.getValue())),
+                    "forward-links:" + job.getId() + ":" + entry.getKey()));
+        }
+
         lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "review-apply", "Applying accepted connection candidates");
 
-        // Capture before state for all target paths and idempotency ledger
+        // Capture before state for all target paths, source notes and idempotency ledger
         Snapshot snapshot = resolveSnapshot(job);
         for (JobConnectionCandidate candidate : accepted) {
             snapshotService.captureFile(snapshot, candidate.getTargetPath());
+        }
+        for (String source : forwardLinksBySource.keySet()) {
+            snapshotService.captureFile(snapshot, source);
         }
         snapshotService.captureFile(snapshot, "state/runtime/idempotency-keys.json");
 

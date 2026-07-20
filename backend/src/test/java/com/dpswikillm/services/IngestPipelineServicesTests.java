@@ -204,6 +204,7 @@ class IngestPipelineServicesTests {
     void unattendedIngestWithConnectionsFinalizesSnapshot() throws Exception {
         Files.createDirectories(vault.resolve("raw/inbox"));
         Files.createDirectories(vault.resolve("wiki/concepts"));
+        Files.createDirectories(vault.resolve("wiki/sources"));
         Files.writeString(vault.resolve("raw/inbox/input.md"), "# Fixture\n\nA grounded fact.");
         Files.writeString(vault.resolve("wiki/concepts/existing.md"), """
                 ---
@@ -215,6 +216,17 @@ class IngestPipelineServicesTests {
 
                 ## Summary
                 An existing concept.
+                """);
+        Files.writeString(vault.resolve("wiki/sources/fixture.md"), """
+                ---
+                type: source
+                title: Fixture
+                ---
+
+                # Fixture
+
+                ## Summary
+                A grounded fact.
                 """);
 
         JobConnectionCandidate candidate = candidate("wiki/concepts/existing.md", "wiki/sources/fixture.md");
@@ -274,6 +286,12 @@ class IngestPipelineServicesTests {
         assertThat(job.getSnapshotId()).isNotNull();
         assertThat(snapshotRepo.findById(job.getSnapshotId()).map(com.dpswikillm.domain.Snapshot::getStatus))
                 .contains("COMPLETE");
+        // Bidirectional linking: the target note backlinks to the source note, and the source note
+        // links back out to the target (reverse link applied inside applyAccepted, both flows).
+        assertThat(Files.readString(vault.resolve("wiki/concepts/existing.md")))
+                .contains("[[wiki/sources/fixture.md]]");
+        assertThat(Files.readString(vault.resolve("wiki/sources/fixture.md")))
+                .contains("[[wiki/concepts/existing.md]]");
     }
 
     @Test
@@ -355,6 +373,11 @@ class IngestPipelineServicesTests {
         assertThat(occurrences(target, "[[wiki/sources/source.md]]")).isEqualTo(2);
         assertThat(Files.readString(vault.resolve("wiki/concepts/manual.md")))
                 .contains("[[wiki/sources/source.md]]");
+        // Reverse link: guided review now links the source note back out to each accepted/manual target.
+        String source = Files.readString(vault.resolve("wiki/sources/source.md"));
+        assertThat(source).contains("[[wiki/concepts/target.md]]", "[[wiki/concepts/manual.md]]");
+        // Idempotent: re-applying the same connection does not duplicate the reverse link.
+        assertThat(occurrences(source, "[[wiki/concepts/target.md]]")).isEqualTo(1);
     }
 
     private IngestPipelineService pipeline() {
@@ -471,6 +494,7 @@ class IngestPipelineServicesTests {
         @Override public void upsertEmbedding(UUID id, String model, int dim, float[] emb, String hash) { hashes.put(id, hash); }
         @Override public void pruneEmbeddingsNotIn(String model, List<UUID> ids) { hashes.keySet().removeIf(id -> !ids.contains(id)); }
         @Override public List<SearchResult> semanticSearch(float[] q, int limit) { return List.of(); }
+        @Override public List<SearchResult> semanticSearchByType(float[] q, String docType, int limit) { return List.of(); }
         @Override public List<SearchResult> lexicalLookup(String q, int limit) { return List.of(); }
     }
 

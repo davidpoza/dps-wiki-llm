@@ -21,4 +21,11 @@ public class SemanticSearchService {
         }
         return repository.semanticSearch(embeddingClient.embedQuery(query), Math.max(1, limit));
     }
+
+    public List<SearchResult> searchByType(String query, String docType, int limit) {
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+        return repository.semanticSearchByType(embeddingClient.embedQuery(query), docType, Math.max(1, limit));
+    }
 }
