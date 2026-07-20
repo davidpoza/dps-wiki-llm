@@ -139,7 +139,8 @@ public class GuidedReviewService {
 
         MutationResult result = mutationApplier.apply(new MutationPlan(planId, actions));
         reindexService.reindexWiki();
-        embeddingIndexService.embedIncremental();
+        embeddingIndexService.embedIncremental(p -> lifecycleService.progress(job, "embedding-scan", "embeddings",
+                "{\"current\":" + p.processed() + ",\"total\":" + p.total() + "}"));
 
         for (String p : result.created()) snapshotService.recordAfter(snapshot, p);
         for (String p : result.updated()) snapshotService.recordAfter(snapshot, p);

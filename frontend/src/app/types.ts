@@ -65,7 +65,8 @@ export interface SseJobEvent {
 }
 
 export interface ScanActivity {
-  path: string;
+  label: string;
+  path?: string;
   percent: number;
 }
 

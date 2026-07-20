@@ -116,7 +116,8 @@ public class IngestPipelineService {
 
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "reindex", "Reindexing wiki documents");
             reindexService.reindexWiki();
-            embeddingIndexService.embedIncremental();
+            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "embedding", "Generating embeddings");
+            embeddingIndexService.embedIncremental(embeddingProgress(job));
 
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "connection-discovery", "Requesting optional connection plan");
             MutationPlan llmPlan = requestOptionalPlan(payload, sourceNotePath);
@@ -150,7 +151,7 @@ public class IngestPipelineService {
                 applyForwardLinks(snapshot, job, sourceNotePath, candidates);
                 snapshotService.recordAfter(snapshot, sourceNotePath);
                 reindexService.reindexWiki();
-                embeddingIndexService.embedIncremental();
+                embeddingIndexService.embedIncremental(embeddingProgress(job));
             }
 
             List<String> allPaths = new ArrayList<>(List.of(sourceNotePath, "INDEX.md"));
@@ -197,6 +198,15 @@ public class IngestPipelineService {
                 Map.of("Related", links),
                 "forward-links:" + job.getId());
         mutationApplier.apply(new MutationPlan("forward-links-" + job.getId(), List.of(action)));
+    }
+
+    /**
+     * Emit an {@code embedding-scan} progress event per batch so the UI can show a
+     * live percentage while the (slow) embedding phase runs.
+     */
+    private java.util.function.Consumer<EmbeddingIndexService.EmbedProgress> embeddingProgress(Job job) {
+        return p -> lifecycleService.progress(job, "embedding-scan", "embeddings",
+                "{\"current\":" + p.processed() + ",\"total\":" + p.total() + "}");
     }
 
     private void capturePathsInPlan(Snapshot snapshot, MutationPlan plan) throws IOException {

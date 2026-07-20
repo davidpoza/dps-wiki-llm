@@ -95,15 +95,17 @@ export class JobsStore implements OnDestroy {
       if (event.step === 'file' && event.path) {
         next.files = [...existing.files, { path: event.path, action: event.action ?? 'read' }];
       } else if (event.step?.endsWith('-scan') && event.message) {
-        let currentActivity: ScanActivity | null = null;
+        const isEmbedding = event.step === 'embedding-scan';
+        const label = isEmbedding ? 'embeddings' : 'scanning';
+        const path = isEmbedding ? undefined : event.message;
+        let percent = 0;
         try {
           const prog = JSON.parse(event.result ?? '{}') as { current?: number; total?: number };
-          const percent = prog.total ? Math.round(((prog.current ?? 0) / prog.total) * 100) : 0;
-          currentActivity = { path: event.message, percent };
+          percent = prog.total ? Math.round(((prog.current ?? 0) / prog.total) * 100) : 0;
         } catch {
-          currentActivity = { path: event.message, percent: 0 };
+          percent = 0;
         }
-        next.currentActivity = currentActivity;
+        next.currentActivity = { label, path, percent };
       } else if (event.message) {
         next.phases = [...existing.phases, { step: event.step, message: event.message }];
       }

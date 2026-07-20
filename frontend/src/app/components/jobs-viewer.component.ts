@@ -53,8 +53,10 @@ const PAGE_SIZE = 10;
 
             @if (job.currentActivity) {
               <div class="scan-activity">
-                <span class="scan-label">scanning</span>
-                <span class="scan-path">{{ job.currentActivity.path }}</span>
+                <span class="scan-label">{{ job.currentActivity.label }}</span>
+                @if (job.currentActivity.path) {
+                  <span class="scan-path">{{ job.currentActivity.path }}</span>
+                }
                 <span class="scan-percent">({{ job.currentActivity.percent }}%)</span>
               </div>
             }
