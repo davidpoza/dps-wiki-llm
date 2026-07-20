@@ -98,7 +98,7 @@ const PAGE_SIZE = 10;
   `,
   styles: [`
     .jobs-viewer { display: grid; gap: 12px; }
-    .jobs-list { display: grid; gap: 12px; overflow-y: auto; padding: 4px 2px; align-content: start; max-height: calc(100vh - 240px); }
+    .jobs-list { display: grid; gap: 12px; padding: 4px 2px; align-content: start; }
     .empty { color: var(--app-text-muted); margin: 0; }
     .job-card {
       border: 1px solid var(--app-border);
