@@ -77,6 +77,29 @@ public class MarkdownService {
         return render(frontmatter, title, sections);
     }
 
+    /**
+     * Inserts a YAML list ({@code key:} followed by {@code   - "value"} lines) into the
+     * document's leading frontmatter block, immediately before the closing {@code ---}
+     * delimiter. The document body is preserved byte-for-byte; only the new key lines are
+     * added. When the document has no frontmatter block, a minimal one is created.
+     */
+    public String injectFrontmatterList(String markdown, String key, List<String> values) {
+        String content = markdown == null ? "" : markdown;
+        StringBuilder block = new StringBuilder();
+        appendFrontmatter(block, key, values);
+        String insertion = block.toString();
+
+        if (content.startsWith("---\n")) {
+            int end = content.indexOf("\n---\n", 4);
+            if (end >= 0) {
+                String before = content.substring(0, end); // "---\n<frontmatter>"
+                String after = content.substring(end);      // "\n---\n<body>"
+                return before + "\n" + insertion.stripTrailing() + after;
+            }
+        }
+        return "---\n" + insertion + "---\n\n" + content;
+    }
+
     private String render(Map<String, Object> frontmatter, String title, Map<String, String> sections) {
         StringBuilder out = new StringBuilder();
         if (!frontmatter.isEmpty()) {

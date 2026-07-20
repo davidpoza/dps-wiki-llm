@@ -70,6 +70,13 @@ export interface ReindexProgress {
   total: number;
 }
 
+export interface KeywordGenerationProgress {
+  processed: number;
+  total: number;
+  updated: number;
+  skipped: number;
+}
+
 export interface DiscoveredLink {
   path: string;
   title: string;
@@ -239,6 +246,42 @@ export class ApiService {
       es.addEventListener('done', (e: MessageEvent) => {
         completed = true;
         observer.next(JSON.parse(e.data) as ReindexProgress);
+        es.close();
+        observer.complete();
+      });
+      es.addEventListener('error', (e: MessageEvent) => {
+        completed = true;
+        const data = e.data
+          ? (JSON.parse(e.data) as { message: string })
+          : { message: 'Error desconocido' };
+        es.close();
+        observer.error(new Error(data.message));
+      });
+      es.onerror = () => {
+        es.close();
+        if (!completed) {
+          observer.error(new Error('Error de conexión'));
+        }
+      };
+      return () => es.close();
+    });
+  }
+
+  generateKeywords(): Observable<KeywordGenerationProgress> {
+    return new Observable((observer: Observer<KeywordGenerationProgress>) => {
+      const token = this.auth.token();
+      const url = token
+        ? `/api/settings/keywords/generate?token=${encodeURIComponent(token)}`
+        : '/api/settings/keywords/generate';
+      const es = new EventSource(url);
+      let completed = false;
+
+      es.addEventListener('progress', (e: MessageEvent) => {
+        observer.next(JSON.parse(e.data) as KeywordGenerationProgress);
+      });
+      es.addEventListener('done', (e: MessageEvent) => {
+        completed = true;
+        observer.next(JSON.parse(e.data) as KeywordGenerationProgress);
         es.close();
         observer.complete();
       });
