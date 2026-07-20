@@ -119,8 +119,15 @@ import { ProgressBarModule } from 'primeng/progressbar';
         <section class="editor-panel">
           @if (selectedPath()) {
             <div class="editor-header">
-              <div class="editor-title">
-                <span class="file-title">{{ selectedLabel() }}</span>
+              <div class="editor-title" [title]="selectedPath()">
+                @if (selectedPathParts(); as parts) {
+                  <span class="file-path">
+                    @if (parts.dir) {
+                      <span class="file-path-dir">{{ parts.dir }}</span>
+                    }
+                    <span class="file-title">{{ parts.name }}</span>
+                  </span>
+                }
                 @if (isDirty()) {
                   <span class="dirty-dot" title="Unsaved changes">●</span>
                 }
@@ -631,13 +638,27 @@ import { ProgressBarModule } from 'primeng/progressbar';
       gap: 6px;
       min-width: 0;
     }
-    .file-title {
+    .file-path {
+      display: flex;
+      align-items: baseline;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .file-path-dir {
       font-size: 0.875rem;
-      font-weight: 500;
+      font-weight: 400;
+      color: var(--app-text-muted);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      min-width: 0;
+    }
+    .file-title {
+      font-size: 0.875rem;
+      font-weight: 500;
+      white-space: nowrap;
       color: var(--app-text);
+      flex-shrink: 0;
     }
     .dirty-dot {
       color: var(--p-primary-color, #10b981);
@@ -929,6 +950,14 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly treeNodes = signal<TreeNode[]>([]);
   readonly selectedPath = signal<string | null>(null);
   readonly selectedLabel = signal<string>('');
+  readonly selectedPathParts = computed(() => {
+    const path = this.selectedPath();
+    if (!path) return null;
+    const idx = path.lastIndexOf('/');
+    return idx === -1
+      ? { dir: '', name: path }
+      : { dir: path.slice(0, idx + 1), name: path.slice(idx + 1) };
+  });
   readonly isDirty = signal(false);
   readonly frontmatter = signal<Record<string, unknown>>({});
   readonly frontmatterEntries = computed(() => Object.entries(this.frontmatter()));

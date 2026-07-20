@@ -60,8 +60,13 @@ import { createObsidianImagePreviewPlugin, OBSIDIAN_IMAGE_PREVIEW_REFRESH } from
           </div>
         } @else {
           <div class="viewer-body">
-            @if (filePath()) {
-              <h2 class="viewer-filename">{{ filePath()!.split('/').pop() }}</h2>
+            @if (pathParts(); as parts) {
+              <h2 class="viewer-filename" [title]="filePath()">
+                @if (parts.dir) {
+                  <span class="viewer-path-dir">{{ parts.dir }}</span>
+                }
+                <span class="viewer-path-name">{{ parts.name }}</span>
+              </h2>
             }
             @if (frontmatterEntries().length > 0) {
               <div class="viewer-frontmatter">
@@ -126,6 +131,16 @@ import { createObsidianImagePreviewPlugin, OBSIDIAN_IMAGE_PREVIEW_REFRESH } from
     .viewer-filename {
       margin: 0 0 12px;
       font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--app-text);
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .viewer-path-dir {
+      font-weight: 400;
+      color: var(--app-text-muted);
+    }
+    .viewer-path-name {
       font-weight: 700;
       color: var(--app-text);
     }
@@ -228,6 +243,14 @@ export class DocumentViewerComponent implements AfterViewInit, OnDestroy {
   readonly frontmatter = signal<Record<string, unknown>>({});
   readonly frontmatterEntries = computed(() => Object.entries(this.frontmatter()));
   readonly resourceFolder = signal('');
+  readonly pathParts = computed(() => {
+    const path = this.filePath();
+    if (!path) return null;
+    const idx = path.lastIndexOf('/');
+    return idx === -1
+      ? { dir: '', name: path }
+      : { dir: path.slice(0, idx + 1), name: path.slice(idx + 1) };
+  });
 
   private editor: Editor | null = null;
 
