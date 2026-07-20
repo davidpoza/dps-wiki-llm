@@ -1,0 +1,50 @@
+<?xml version="1.0" ?>
+<PubmedArticleSet>
+<PubmedArticle>
+  <MedlineCitation Status="MEDLINE">
+    <PMID Version="1">12750433</PMID>
+    <Article PubModel="Print-Electronic">
+      <Journal>
+        <Title>The Journal of pharmacology and experimental therapeutics</Title>
+        <ISOAbbreviation>J Pharmacol Exp Ther</ISOAbbreviation>
+        <JournalIssue>
+          <PubDate>
+            <Year>2003</Year>
+            <Month>Aug</Month>
+          </PubDate>
+        </JournalIssue>
+      </Journal>
+      <ArticleTitle>Dissection of the anti-inflammatory effect of the core and C-terminal (KPV) alpha-melanocyte-stimulating hormone peptides.</ArticleTitle>
+      <Abstract>
+        <AbstractText>In this study, we analyzed the anti-inflammatory effects of alpha-melanocyte stimulating hormone (MSH) peptides in a model of crystal-induced peritonitis.</AbstractText>
+      </Abstract>
+      <AuthorList CompleteYN="Y">
+        <Author ValidYN="Y"><LastName>Getting</LastName><ForeName>Stephen J</ForeName><Initials>SJ</Initials></Author>
+        <Author ValidYN="Y"><LastName>Perretti</LastName><ForeName>Mauro</ForeName><Initials>M</Initials></Author>
+      </AuthorList>
+      <Language>eng</Language>
+      <ArticleDate DateType="Electronic">
+        <Year>2003</Year>
+        <Month>05</Month>
+        <Day>15</Day>
+      </ArticleDate>
+    </Article>
+  </MedlineCitation>
+  <PubmedData>
+    <ArticleIdList>
+      <ArticleId IdType="pubmed">12750433</ArticleId>
+      <ArticleId IdType="doi">10.1124/jpet.103.051623</ArticleId>
+      <ArticleId IdType="pii">S0022-3565(24)30846-8</ArticleId>
+    </ArticleIdList>
+    <ReferenceList>
+      <Reference>
+        <Citation>A cited reference that happens to be open access.</Citation>
+        <ArticleIdList>
+          <ArticleId IdType="pubmed">99999999</ArticleId>
+          <ArticleId IdType="pmc">PMC9999999</ArticleId>
+        </ArticleIdList>
+      </Reference>
+    </ReferenceList>
+  </PubmedData>
+</PubmedArticle>
+</PubmedArticleSet>

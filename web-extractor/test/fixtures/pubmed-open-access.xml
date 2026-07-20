@@ -1,0 +1,41 @@
+<?xml version="1.0" ?>
+<PubmedArticleSet>
+<PubmedArticle>
+  <MedlineCitation Status="MEDLINE">
+    <PMID Version="1">37533870</PMID>
+    <Article PubModel="Electronic-eCollection">
+      <Journal>
+        <Title>Frontiers in immunology</Title>
+        <ISOAbbreviation>Front Immunol</ISOAbbreviation>
+        <JournalIssue>
+          <PubDate>
+            <Year>2023</Year>
+          </PubDate>
+        </JournalIssue>
+      </Journal>
+      <ArticleTitle>Gut microbiota: a newly identified environmental factor in systemic lupus erythematosus.</ArticleTitle>
+      <Abstract>
+        <AbstractText Label="BACKGROUND" NlmCategory="BACKGROUND">Lupus is a complex autoimmune disease.</AbstractText>
+        <AbstractText Label="RESULTS" NlmCategory="RESULTS">Gut microbiota dysbiosis is associated with disease activity.</AbstractText>
+      </Abstract>
+      <AuthorList CompleteYN="Y">
+        <Author ValidYN="Y"><LastName>Yao</LastName><ForeName>Kaijin</ForeName><Initials>K</Initials></Author>
+        <Author ValidYN="Y"><CollectiveName>The Lupus Microbiome Consortium</CollectiveName></Author>
+      </AuthorList>
+      <Language>eng</Language>
+      <ArticleDate DateType="Electronic">
+        <Year>2023</Year>
+        <Month>07</Month>
+        <Day>18</Day>
+      </ArticleDate>
+    </Article>
+  </MedlineCitation>
+  <PubmedData>
+    <ArticleIdList>
+      <ArticleId IdType="pubmed">37533870</ArticleId>
+      <ArticleId IdType="pmc">PMC10390700</ArticleId>
+      <ArticleId IdType="doi">10.3389/fimmu.2023.1202850</ArticleId>
+    </ArticleIdList>
+  </PubmedData>
+</PubmedArticle>
+</PubmedArticleSet>
