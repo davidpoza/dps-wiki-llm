@@ -88,7 +88,9 @@ class KeywordGenerationServiceTests {
                 """);
 
         LlmClient llmClient = mock(LlmClient.class);
-        when(llmClient.chatJson(anyList())).thenReturn("{\"keywords\": [\"alpha\", \"beta\", \"alpha\"]}");
+        // Mixed case, spaces, and a post-normalization duplicate to exercise kebab-case normalization.
+        when(llmClient.chatJson(anyList()))
+                .thenReturn("{\"keywords\": [\"Machine Learning\", \"software economy\", \"machine learning\"]}");
         PromptService promptService = mock(PromptService.class);
         when(promptService.getText("keywords-system")).thenReturn("system prompt");
         FileService fileService = mock(FileService.class);
@@ -111,7 +113,8 @@ class KeywordGenerationServiceTests {
         assertThat(pathCaptor.getAllValues())
                 .containsExactlyInAnyOrder("wiki/concepts/a-with-summary.md", "wiki/concepts/b-no-summary.md");
         assertThat(contentCaptor.getAllValues())
-                .allSatisfy(content -> assertThat(content).contains("keywords:\n  - \"alpha\"\n  - \"beta\"\n"));
+                .allSatisfy(content -> assertThat(content)
+                        .contains("keywords:\n  - \"machine-learning\"\n  - \"software-economy\"\n"));
 
         // Source-text selection: Summary used verbatim; body-minus-excluded when no Summary.
         @SuppressWarnings("unchecked")

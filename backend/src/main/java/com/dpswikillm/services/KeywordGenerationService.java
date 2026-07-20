@@ -171,12 +171,24 @@ public class KeywordGenerationService {
             if (!item.isTextual()) {
                 continue;
             }
-            String value = item.asText().trim();
-            if (!value.isBlank() && seen.add(value.toLowerCase(Locale.ROOT))) {
+            String value = normalizeKeyword(item.asText());
+            if (!value.isBlank() && seen.add(value)) {
                 keywords.add(value);
             }
         }
         return keywords;
+    }
+
+    /**
+     * Enforces the mechanical keyword format: lowercase, spaces replaced by hyphens
+     * (kebab-case), with collapsed/trimmed hyphens. Singular form and article removal
+     * are the model's responsibility via the prompt.
+     */
+    private String normalizeKeyword(String raw) {
+        return raw.trim().toLowerCase(Locale.ROOT)
+                .replaceAll("\\s+", "-")
+                .replaceAll("-{2,}", "-")
+                .replaceAll("^-+|-+$", "");
     }
 
     private boolean nonEmptyArray(JsonNode node, String field) {

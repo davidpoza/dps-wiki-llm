@@ -71,6 +71,29 @@ For each eligible note, the system SHALL derive the LLM input text from the note
 - **WHEN** an eligible note has no `Summary` section (or it is empty)
 - **THEN** the process generates keywords from the remaining note body with the `Sources`, `Related`, and `Links` sections removed
 
+### Requirement: Keywords are always in English
+
+The system SHALL generate keywords in English regardless of the note's language, translating source terms as needed so keywords stay consistent across the vault for semantic search.
+
+#### Scenario: Note written in another language
+
+- **WHEN** an eligible note is written in Spanish (or any non-English language)
+- **THEN** the generated `keywords` are in English
+
+### Requirement: Keyword format normalization
+
+The system SHALL produce keywords in a normalized form: singular, without articles, lowercase, and using hyphens instead of spaces (kebab-case). The mechanical rules (lowercase and hyphenation) SHALL be enforced in code so the stored keywords are guaranteed to be well-formed even if the model deviates.
+
+#### Scenario: Multi-word keyword is hyphenated and lowercased
+
+- **WHEN** the model returns a keyword such as `Machine Learning`
+- **THEN** the stored keyword is `machine-learning`
+
+#### Scenario: Duplicate keywords after normalization are collapsed
+
+- **WHEN** the model returns keywords that normalize to the same value (for example `Machine Learning` and `machine learning`)
+- **THEN** only one keyword is stored
+
 ### Requirement: Persisting generated keywords
 
 The system SHALL write generated keywords into the note's frontmatter `keywords` field using a minimal edit that preserves the rest of the frontmatter and body, and SHALL persist the change through the standard save path so it is recorded in file history and replicated to WebDAV.

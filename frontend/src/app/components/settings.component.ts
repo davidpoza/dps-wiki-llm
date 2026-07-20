@@ -67,7 +67,7 @@ interface PromptState extends Prompt {
 
         <section class="settings-section">
           <h2>Keywords</h2>
-          <p class="section-desc">Genera el campo <code>keywords</code> en el frontmatter de las notas de <code>wiki/concepts</code> y <code>wiki/sources</code> que aún no lo tienen. Usa la sección «Summary» y, si no existe, el resto del texto excluyendo «Sources», «Related» y «Links».</p>
+          <p class="section-desc">Genera el campo <code>keywords</code> (siempre en inglés) en el frontmatter de las notas de <code>wiki/concepts</code> y <code>wiki/sources</code> que aún no lo tienen. Usa la sección «Summary» y, si no existe, el resto del texto excluyendo «Sources», «Related» y «Links».</p>
           <div class="reindex-row">
             <p-button
               label="Generar keywords"
