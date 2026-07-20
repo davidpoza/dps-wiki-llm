@@ -10,6 +10,17 @@
     "brand": "DPS Wiki",
     "loading": "Cargando…"
   },
+  "nav": {
+    "jobs": "Trabajos",
+    "ingest": "Ingesta",
+    "chat": "Chat",
+    "review": "Revisión",
+    "changes": "Cambios",
+    "explorer": "Explorador",
+    "settings": "Configuración",
+    "profile": "Perfil",
+    "menu": "Menú"
+  },
   "login": {
     "username": "Usuario",
     "password": "Contraseña",
@@ -19,17 +30,6 @@
     "twoFactorCode": "Código de verificación",
     "verify": "Verificar",
     "invalidCode": "Código incorrecto o caducado"
-  },
-  "home": {
-    "subtitle": "Pipeline de conocimiento",
-    "explorer": "Explorador",
-    "tabs": {
-      "jobs": "Trabajos",
-      "ingest": "Ingesta",
-      "chat": "Chat",
-      "review": "Revisión",
-      "git": "Historial de cambios"
-    }
   },
   "chat": {
     "placeholder": "Haz una pregunta sobre tu base de conocimiento…",
@@ -109,7 +109,6 @@
     "errorLoad": "No se pudieron cargar las versiones."
   },
   "explorer": {
-    "subtitle": "Explorador",
     "searchFile": "Buscar fichero",
     "expandPanel": "Expandir panel",
     "collapsePanel": "Colapsar panel",

@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
+import { SelectButtonModule } from 'primeng/selectbutton';
 import { ApiService, Prompt } from '../services/api.service';
-import { AuthService } from '../services/auth.service';
+import { NavComponent } from './nav.component';
 import { ThemeService } from '../services/theme.service';
 import { APP_VERSION } from '../version';
 
@@ -16,29 +16,28 @@ interface PromptState extends Prompt {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [FormsModule, ButtonModule],
+  imports: [FormsModule, ButtonModule, SelectButtonModule, NavComponent],
   template: `
     <main class="app-shell">
+      <app-nav />
       <section class="workspace">
-        <header class="topbar">
-          <div class="brand">
-            <h1>Configuración</h1>
-            <p>Ajustes del sistema</p>
-          </div>
-          <div class="topbar-actions">
-            <p-button
-              severity="secondary"
-              [icon]="theme.isDark() ? 'pi pi-sun' : 'pi pi-moon'"
-              [rounded]="true"
-              [text]="true"
-              size="small"
-              [title]="theme.isDark() ? 'Modo claro' : 'Modo oscuro'"
-              (onClick)="theme.toggle()"
-            />
-            <p-button severity="secondary" label="Volver" size="small" (onClick)="goHome()" />
-            <p-button severity="secondary" label="Cerrar sesión" size="small" (onClick)="logout()" />
-          </div>
+        <header class="page-head">
+          <h1>Configuración</h1>
+          <p>Ajustes del sistema</p>
         </header>
+
+        <section class="settings-section">
+          <h2>Apariencia</h2>
+          <p class="section-desc">Elige el tema claro u oscuro de la interfaz.</p>
+          <p-selectButton
+            [options]="themeOptions"
+            [ngModel]="theme.theme()"
+            (onChange)="onThemeChange($event.value)"
+            optionLabel="label"
+            optionValue="value"
+            [allowEmpty]="false"
+          />
+        </section>
 
         <section class="settings-section reindex-section">
           <h2>Índice del Vault</h2>
@@ -183,17 +182,7 @@ interface PromptState extends Prompt {
       flex-direction: column;
       gap: 20px;
     }
-    .topbar {
-      margin-bottom: 4px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .topbar-actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
+    .page-head { margin-bottom: 4px; }
     h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
     h2 { margin: 0 0 6px; font-size: 1.1rem; }
     p { margin: 4px 0 0; color: var(--app-text-muted); font-size: 0.875rem; }
@@ -224,9 +213,12 @@ interface PromptState extends Prompt {
 })
 export class SettingsComponent implements OnInit {
   private readonly api = inject(ApiService);
-  private readonly auth = inject(AuthService);
-  private readonly router = inject(Router);
   readonly theme = inject(ThemeService);
+
+  readonly themeOptions = [
+    { label: 'Claro', value: 'light' as const },
+    { label: 'Oscuro', value: 'dark' as const },
+  ];
 
   readonly frontendVersion = APP_VERSION;
   readonly backendVersion = signal('…');
@@ -374,12 +366,9 @@ export class SettingsComponent implements OnInit {
     });
   }
 
-  goHome(): void {
-    this.router.navigateByUrl('/');
-  }
-
-  logout(): void {
-    this.auth.logout();
-    this.router.navigateByUrl('/login');
+  onThemeChange(value: 'light' | 'dark'): void {
+    if (value) {
+      this.theme.setTheme(value);
+    }
   }
 }

@@ -45,7 +45,7 @@ import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { ApiService, DiscoveredLink } from '../services/api.service';
 import { AuthService } from '../services/auth.service';
 import { FileService } from '../services/file.service';
-import { ThemeService } from '../services/theme.service';
+import { NavComponent } from './nav.component';
 import { UnsavedChangesAware } from '../unsaved-changes.guard';
 import { FileVersion } from '../types';
 import { ProgressBarModule } from 'primeng/progressbar';
@@ -53,7 +53,7 @@ import { ProgressBarModule } from 'primeng/progressbar';
 @Component({
   selector: 'app-explorer',
   standalone: true,
-  imports: [TreeModule, ButtonModule, ContextMenuModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe, NgClass, TranslocoPipe, ProgressBarModule],
+  imports: [TreeModule, ButtonModule, ContextMenuModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe, NgClass, TranslocoPipe, ProgressBarModule, NavComponent],
   providers: [MessageService, ConfirmationService],
   template: `
     <p-toast />
@@ -61,25 +61,7 @@ import { ProgressBarModule } from 'primeng/progressbar';
     <p-contextMenu #cm [model]="contextMenuItems()" />
 
     <main class="explorer-shell">
-      <header class="topbar">
-        <div class="brand">
-          <h1>{{ 'common.brand' | transloco }}</h1>
-          <p>{{ 'explorer.subtitle' | transloco }}</p>
-        </div>
-        <div class="topbar-actions">
-          <p-button
-            severity="secondary"
-            [icon]="theme.isDark() ? 'pi pi-sun' : 'pi pi-moon'"
-            [rounded]="true"
-            [text]="true"
-            size="small"
-            [title]="theme.isDark() ? ('common.lightMode' | transloco) : ('common.darkMode' | transloco)"
-            (onClick)="theme.toggle()"
-          />
-          <p-button severity="secondary" [label]="'common.home' | transloco" size="small" (onClick)="goHome()" />
-          <p-button severity="secondary" [label]="'common.signOut' | transloco" size="small" (onClick)="logout()" />
-        </div>
-      </header>
+      <app-nav />
 
       <div class="explorer-layout">
         <nav class="sidebar-toolbar">
@@ -499,22 +481,11 @@ import { ProgressBarModule } from 'primeng/progressbar';
       display: flex;
       flex-direction: column;
     }
-    .topbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 24px;
-      border-bottom: 1px solid var(--app-border);
-      background: var(--app-surface);
-    }
-    .topbar-actions { display: flex; gap: 8px; align-items: center; }
-    .brand h1 { margin: 0; font-size: 1.3rem; }
-    .brand p { margin: 2px 0 0; font-size: 0.8rem; color: var(--app-text-muted); }
     .explorer-layout {
       display: flex;
       flex: 1;
+      min-height: 0;
       overflow: hidden;
-      height: calc(100vh - 62px);
     }
     .file-tree-panel {
       flex-shrink: 0;
@@ -954,7 +925,6 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   private readonly confirmationService = inject(ConfirmationService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly t = inject(TranslocoService);
-  readonly theme = inject(ThemeService);
 
   readonly treeNodes = signal<TreeNode[]>([]);
   readonly selectedPath = signal<string | null>(null);
@@ -1918,16 +1888,4 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     });
   }
 
-  goHome(): void {
-    this.confirmDiscardChanges(() => {
-      this.router.navigateByUrl('/');
-    });
-  }
-
-  logout(): void {
-    this.confirmDiscardChanges(() => {
-      this.auth.logout();
-      this.router.navigateByUrl('/login');
-    });
-  }
 }

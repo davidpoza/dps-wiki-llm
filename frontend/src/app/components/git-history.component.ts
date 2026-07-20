@@ -78,12 +78,15 @@ const FIRST_PAGE = 0;
       </div>
 
       @if (totalElements() > pageSize) {
-        <p-paginator
-          [rows]="pageSize"
-          [totalRecords]="totalElements()"
-          [first]="currentPage() * pageSize"
-          (onPageChange)="onPage($event)"
-        />
+        <div class="paginator-wrap">
+          <p-paginator
+            [rows]="pageSize"
+            [totalRecords]="totalElements()"
+            [first]="currentPage() * pageSize"
+            [pageLinkSize]="3"
+            (onPageChange)="onPage($event)"
+          />
+        </div>
       }
     </div>
 
@@ -168,6 +171,14 @@ const FIRST_PAGE = 0;
     .keep-btn { padding: 0.15rem 0.6rem; font-size: 0.75rem; cursor: pointer; border: 1px solid var(--app-primary); border-radius: 4px; background: var(--app-primary); color: #fff; }
     .pane-body { margin: 0; border-radius: 0; max-height: 50vh; }
     .line-changed { background: #3a2f1a; color: #ffd58a; }
+    .paginator-wrap { margin-top: 0.75rem; }
+    :host ::ng-deep .p-paginator { flex-wrap: wrap; row-gap: 4px; justify-content: center; padding: 4px 0; background: transparent; }
+    @media (max-width: 600px) {
+      .history { padding: 0.75rem; }
+      .history-header { flex-wrap: wrap; }
+      .entry-list { max-height: none; overflow-y: visible; }
+      .conflict-panes { flex-direction: column; }
+    }
   `]
 })
 export class GitHistoryComponent implements OnInit {

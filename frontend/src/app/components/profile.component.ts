@@ -9,33 +9,19 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { AuthService, LoginEvent, TwoFactorSetup } from '../services/auth.service';
-import { ThemeService } from '../services/theme.service';
+import { NavComponent } from './nav.component';
 
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [FormsModule, ButtonModule, InputText, Password, TableModule, TagModule, TranslocoPipe, DatePipe],
+  imports: [FormsModule, ButtonModule, InputText, Password, TableModule, TagModule, TranslocoPipe, DatePipe, NavComponent],
   template: `
     <main class="app-shell">
+      <app-nav />
       <section class="workspace">
-        <header class="topbar">
-          <div class="brand">
-            <h1>{{ 'profile.title' | transloco }}</h1>
-            <p>{{ 'profile.subtitle' | transloco }}</p>
-          </div>
-          <div class="topbar-actions">
-            <p-button
-              severity="secondary"
-              [icon]="theme.isDark() ? 'pi pi-sun' : 'pi pi-moon'"
-              [rounded]="true"
-              [text]="true"
-              size="small"
-              [title]="theme.isDark() ? ('common.lightMode' | transloco) : ('common.darkMode' | transloco)"
-              (onClick)="theme.toggle()"
-            />
-            <p-button severity="secondary" [label]="'common.home' | transloco" size="small" (onClick)="goHome()" />
-            <p-button severity="secondary" [label]="'common.signOut' | transloco" size="small" (onClick)="logout()" />
-          </div>
+        <header class="page-head">
+          <h1>{{ 'profile.title' | transloco }}</h1>
+          <p>{{ 'profile.subtitle' | transloco }}</p>
         </header>
 
         <section class="card">
@@ -150,10 +136,9 @@ import { ThemeService } from '../services/theme.service';
   styles: [`
     .app-shell { height: 100vh; overflow-y: auto; background: var(--app-bg); color: var(--app-text); }
     .workspace { max-width: 860px; margin: 0 auto; padding: 1.5rem; }
-    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-    .brand h1 { margin: 0; }
-    .brand p { margin: 0; font-size: .875rem; opacity: .7; }
-    .topbar-actions { display: flex; gap: .5rem; align-items: center; }
+    .page-head { margin-bottom: 1.5rem; }
+    .page-head h1 { margin: 0; }
+    .page-head p { margin: 0; font-size: .875rem; opacity: .7; }
     .card { border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface);
       padding: 1.25rem; margin-bottom: 1.25rem; box-shadow: var(--app-shadow); }
     .card h2 { margin-top: 0; font-size: 1.1rem; }
@@ -179,7 +164,6 @@ export class ProfileComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly t = inject(TranslocoService);
-  readonly theme = inject(ThemeService);
 
   readonly currentUser = this.auth.currentUser;
 
@@ -284,10 +268,6 @@ export class ProfileComponent implements OnInit {
     } finally {
       this.twoFactorLoading.set(false);
     }
-  }
-
-  goHome(): void {
-    this.router.navigateByUrl('/');
   }
 
   logout(): void {
