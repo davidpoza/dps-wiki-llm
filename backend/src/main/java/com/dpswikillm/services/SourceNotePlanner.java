@@ -30,6 +30,10 @@ public class SourceNotePlanner {
             frontmatter.put("canonical_url", payload.canonicalUrl());
         }
 
+        if (note.keywords() != null && !note.keywords().isEmpty()) {
+            frontmatter.put("keywords", note.keywords());
+        }
+
         Map<String, List<String>> sections = new LinkedHashMap<>();
         sections.put("Summary", List.of(note.summary()));
         sections.put("Raw Context", List.of(note.rawContext()));

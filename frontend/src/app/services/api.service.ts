@@ -70,6 +70,27 @@ export interface ReindexProgress {
   total: number;
 }
 
+export interface DiscoveredLink {
+  path: string;
+  title: string;
+  docType: string;
+  score: number;
+}
+
+export interface LinkDiscoveryProgress {
+  type: 'progress';
+  step: string;
+  current: number;
+  total: number;
+}
+
+export interface LinkDiscoveryDone {
+  type: 'done';
+  links: DiscoveredLink[];
+}
+
+export type LinkDiscoveryEvent = LinkDiscoveryProgress | LinkDiscoveryDone;
+
 export interface ResourceSettings {
   resourceFolder: string;
 }
@@ -241,5 +262,36 @@ export class ApiService {
 
   getActuatorInfo(): Observable<{ build?: { version?: string } }> {
     return this.http.get<{ build?: { version?: string } }>('/actuator/info');
+  }
+
+  discoverLinks(path: string): Observable<LinkDiscoveryEvent> {
+    return new Observable((observer: Observer<LinkDiscoveryEvent>) => {
+      const token = this.auth.token();
+      const url = `/api/jobs/link-discovery-stream?path=${encodeURIComponent(path)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
+      const es = new EventSource(url);
+      let completed = false;
+
+      es.addEventListener('progress', (e: MessageEvent) => {
+        const data = JSON.parse(e.data) as { step: string; current: number; total: number };
+        observer.next({ type: 'progress', ...data });
+      });
+      es.addEventListener('done', (e: MessageEvent) => {
+        completed = true;
+        observer.next({ type: 'done', links: JSON.parse(e.data) as DiscoveredLink[] });
+        es.close();
+        observer.complete();
+      });
+      es.addEventListener('error', (e: MessageEvent) => {
+        completed = true;
+        const data = e.data ? (JSON.parse(e.data) as { message?: string }) : {};
+        es.close();
+        observer.error({ message: data.message ?? 'Error desconocido' });
+      });
+      es.onerror = () => {
+        es.close();
+        if (!completed) observer.error({ message: 'Error de conexión' });
+      };
+      return () => es.close();
+    });
   }
 }

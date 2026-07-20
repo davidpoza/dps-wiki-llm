@@ -123,7 +123,7 @@ class JobRevertServiceTests {
                 operationRepository,
                 snapshotService,
                 new ReindexService(resolver(), new MarkdownService(), documentRepository),
-                new EmbeddingIndexService(documentRepository, new StubEmbeddingClient(), properties()),
+                new EmbeddingIndexService(documentRepository, new StubEmbeddingClient(), properties(), new MarkdownService()),
                 lifecycleService,
                 new ObjectMapper());
     }

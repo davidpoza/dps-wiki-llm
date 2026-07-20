@@ -144,15 +144,45 @@ public class MarkdownService {
 
     private Map<String, Object> parseFrontmatter(String raw) {
         Map<String, Object> values = new LinkedHashMap<>();
+        String pendingListKey = null;
+        List<String> pendingList = null;
         for (String line : raw.split("\n")) {
-            if (line.isBlank() || line.startsWith(" ") || line.trim().startsWith("- ")) {
+            if (line.isBlank()) {
+                if (pendingListKey != null) {
+                    values.put(pendingListKey, new ArrayList<>(pendingList));
+                    pendingListKey = null;
+                    pendingList = null;
+                }
                 continue;
+            }
+            // YAML list item
+            if (line.startsWith("  - ") || line.startsWith("- ")) {
+                if (pendingListKey != null) {
+                    pendingList.add(unquoteYamlScalar(line.replaceFirst("^\\s*-\\s+", "")));
+                }
+                continue;
+            }
+            // Flush pending list when a non-item line is encountered
+            if (pendingListKey != null) {
+                values.put(pendingListKey, new ArrayList<>(pendingList));
+                pendingListKey = null;
+                pendingList = null;
             }
             int separator = line.indexOf(':');
             if (separator <= 0) {
                 continue;
             }
-            values.put(line.substring(0, separator).trim(), unquoteYamlScalar(line.substring(separator + 1).trim()));
+            String key = line.substring(0, separator).trim();
+            String valueStr = line.substring(separator + 1).trim();
+            if (valueStr.isEmpty()) {
+                pendingListKey = key;
+                pendingList = new ArrayList<>();
+            } else {
+                values.put(key, unquoteYamlScalar(valueStr));
+            }
+        }
+        if (pendingListKey != null) {
+            values.put(pendingListKey, new ArrayList<>(pendingList));
         }
         return values;
     }

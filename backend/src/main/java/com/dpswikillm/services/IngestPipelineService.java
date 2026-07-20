@@ -3,8 +3,11 @@ package com.dpswikillm.services;
 import com.dpswikillm.domain.ConnectionCandidateDecision;
 import com.dpswikillm.domain.GuardrailResult;
 import com.dpswikillm.domain.Job;
+import com.dpswikillm.domain.JobConnectionCandidate;
 import com.dpswikillm.domain.JobMode;
 import com.dpswikillm.domain.JobStatus;
+import com.dpswikillm.domain.MutationAction;
+import com.dpswikillm.domain.MutationActionType;
 import com.dpswikillm.domain.MutationPlan;
 import com.dpswikillm.domain.MutationResult;
 import com.dpswikillm.domain.NormalizedSourcePayload;
@@ -17,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -142,6 +146,11 @@ public class IngestPipelineService {
                 for (String p : connectionsResult.created()) snapshotService.recordAfter(snapshot, p);
                 for (String p : connectionsResult.updated()) snapshotService.recordAfter(snapshot, p);
                 snapshotService.recordAfter(snapshot, "state/runtime/idempotency-keys.json");
+
+                applyForwardLinks(snapshot, job, sourceNotePath, candidates);
+                snapshotService.recordAfter(snapshot, sourceNotePath);
+                reindexService.reindexWiki();
+                embeddingIndexService.embedIncremental();
             }
 
             List<String> allPaths = new ArrayList<>(List.of(sourceNotePath, "INDEX.md"));
@@ -165,6 +174,29 @@ public class IngestPipelineService {
             lifecycleService.transition(job.getId(), JobStatus.FAILED, "failed", ex.getMessage());
             throw ex;
         }
+    }
+
+    /**
+     * Add the discovered connections as outbound {@code [[wikilink]]} entries in a
+     * "Related" section of the freshly generated source note, so the note itself
+     * links out to the semantically related documents.
+     */
+    private void applyForwardLinks(Snapshot snapshot, Job job, String sourceNotePath,
+                                   List<JobConnectionCandidate> candidates) throws IOException {
+        List<String> links = candidates.stream()
+                .map(JobConnectionCandidate::getTargetPath)
+                .distinct()
+                .map(target -> "[[" + target + "]]")
+                .toList();
+        if (links.isEmpty()) {
+            return;
+        }
+        snapshotService.captureFile(snapshot, sourceNotePath);
+        MutationAction action = new MutationAction(
+                MutationActionType.update, sourceNotePath, null, Map.of(),
+                Map.of("Related", links),
+                "forward-links:" + job.getId());
+        mutationApplier.apply(new MutationPlan("forward-links-" + job.getId(), List.of(action)));
     }
 
     private void capturePathsInPlan(Snapshot snapshot, MutationPlan plan) throws IOException {

@@ -8,5 +8,6 @@ public record LlmSourceNote(
         List<String> extractedClaims,
         List<String> openQuestions,
         String generatedBy,
-        String model
+        String model,
+        List<String> keywords
 ) {}

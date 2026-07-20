@@ -15,6 +15,7 @@ import com.dpswikillm.services.GuidedReviewService;
 import com.dpswikillm.services.JobEventService;
 import com.dpswikillm.services.JobLifecycleService;
 import com.dpswikillm.services.JobQueueService;
+import com.dpswikillm.services.LinkDiscoveryService;
 import com.dpswikillm.services.RawIntakeService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,6 +23,7 @@ import java.util.List;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -44,12 +46,14 @@ public class JobController {
     private final RawIntakeService rawIntakeService;
     private final GuidedReviewService guidedReviewService;
     private final FileLookupService fileLookupService;
+    private final LinkDiscoveryService linkDiscoveryService;
     private final ObjectMapper objectMapper;
 
     public JobController(JobEventService eventService, JobQueueService queueService,
                          JobLifecycleService lifecycleService, JobRepository jobRepository,
                          RawIntakeService rawIntakeService, GuidedReviewService guidedReviewService,
-                         FileLookupService fileLookupService, ObjectMapper objectMapper) {
+                         FileLookupService fileLookupService, LinkDiscoveryService linkDiscoveryService,
+                         ObjectMapper objectMapper) {
         this.eventService = eventService;
         this.queueService = queueService;
         this.lifecycleService = lifecycleService;
@@ -57,6 +61,7 @@ public class JobController {
         this.rawIntakeService = rawIntakeService;
         this.guidedReviewService = guidedReviewService;
         this.fileLookupService = fileLookupService;
+        this.linkDiscoveryService = linkDiscoveryService;
         this.objectMapper = objectMapper;
     }
 
@@ -138,4 +143,31 @@ public class JobController {
                                                     @RequestParam(value = "limit", defaultValue = "10") int limit) {
         return fileLookupService.lookup(query, limit);
     }
+
+    @GetMapping(value = "/jobs/link-discovery-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter linkDiscoveryStream(@RequestParam("path") String path) {
+        SseEmitter emitter = new SseEmitter(0L);
+        CompletableFuture.runAsync(() -> {
+            try {
+                java.util.List<LinkDiscoveryService.DiscoveredLink> results = linkDiscoveryService.discover(path,
+                        progress -> {
+                            try {
+                                emitter.send(SseEmitter.event().name("progress").data(progress));
+                            } catch (java.io.IOException | IllegalStateException ex) {
+                                throw new IllegalStateException("SSE send failed", ex);
+                            }
+                        });
+                emitter.send(SseEmitter.event().name("done").data(results));
+                emitter.complete();
+            } catch (Exception ex) {
+                try {
+                    emitter.send(SseEmitter.event().name("error").data(new ErrorPayload(ex.getMessage())));
+                } catch (java.io.IOException | IllegalStateException ignored) {}
+                emitter.complete();
+            }
+        });
+        return emitter;
+    }
+
+    private record ErrorPayload(String message) {}
 }

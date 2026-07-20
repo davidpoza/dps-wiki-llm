@@ -17,11 +17,14 @@ public class EmbeddingIndexService {
     private final DocumentIndexRepository repository;
     private final EmbeddingClient embeddingClient;
     private final AppProperties properties;
+    private final MarkdownService markdownService;
 
-    public EmbeddingIndexService(DocumentIndexRepository repository, EmbeddingClient embeddingClient, AppProperties properties) {
+    public EmbeddingIndexService(DocumentIndexRepository repository, EmbeddingClient embeddingClient,
+                                  AppProperties properties, MarkdownService markdownService) {
         this.repository = repository;
         this.embeddingClient = embeddingClient;
         this.properties = properties;
+        this.markdownService = markdownService;
     }
 
     public EmbedIndexResult embedIncremental() {
@@ -53,6 +56,12 @@ public class EmbeddingIndexService {
     }
 
     private String normalizedText(DocumentRecord doc) {
+        var frontmatter = markdownService.parse(doc.body()).frontmatter();
+        Object raw = frontmatter.get("keywords");
+        if (raw instanceof List<?> kw && !kw.isEmpty()) {
+            String joined = kw.stream().map(Object::toString).collect(java.util.stream.Collectors.joining(" "));
+            return (doc.title() + " " + joined).replaceAll("\\s+", " ").trim();
+        }
         return (doc.title() + "\n" + doc.body()).replaceAll("\\s+", " ").trim();
     }
 

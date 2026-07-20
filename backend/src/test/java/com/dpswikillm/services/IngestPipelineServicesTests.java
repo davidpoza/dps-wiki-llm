@@ -87,7 +87,7 @@ class IngestPipelineServicesTests {
         SourceNoteLlmService service = new SourceNoteLlmService(
                 messages -> "{\"summary\":\"ok\"}",
                 new JsonExtractionService(new ObjectMapper()),
-                ps);
+                ps, new RetryingLlmExecutor());
 
         assertThatThrownBy(() -> service.clean(new SourceNormalizer(resolver()).normalize("raw/inbox/missing.md")))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -238,7 +238,7 @@ class IngestPipelineServicesTests {
         JobLifecycleService lifecycle = mock(JobLifecycleService.class);
         when(lifecycle.transition(any(), any(JobStatus.class), any(), any())).thenAnswer(invocation -> new Job());
         ReindexService reindex = new ReindexService(resolver, new MarkdownService(), documentRepository);
-        EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, new StubEmbeddingClient(), properties());
+        EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, new StubEmbeddingClient(), properties(), new MarkdownService());
         GuidedReviewService realGuidedReview = new GuidedReviewService(
                 jobRepository, candidateRepository, operationRepository,
                 new MutationApplier(resolver, new MarkdownService(), new ObjectMapper()),
@@ -251,9 +251,9 @@ class IngestPipelineServicesTests {
         when(ps.getText(anyString())).thenReturn("system prompt");
         IngestPipelineService pipeline = new IngestPipelineService(
                 new SourceNormalizer(resolver),
-                new SourceNoteLlmService(llm, new JsonExtractionService(new ObjectMapper()), ps),
+                new SourceNoteLlmService(llm, new JsonExtractionService(new ObjectMapper()), ps, new RetryingLlmExecutor()),
                 new SourceNotePlanner(),
-                new LlmMutationPlanService(llm, new JsonExtractionService(new ObjectMapper()), new ObjectMapper(), ps),
+                new LlmMutationPlanService(llm, new JsonExtractionService(new ObjectMapper()), new ObjectMapper(), ps, new RetryingLlmExecutor()),
                 new MutationGuardrailService(resolver),
                 new MutationApplier(resolver, new MarkdownService(), new ObjectMapper()),
                 new RootIndexService(resolver),
@@ -328,7 +328,7 @@ class IngestPipelineServicesTests {
         when(operationRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         FakeDocumentRepository documentRepository = new FakeDocumentRepository();
         ReindexService reindex = new ReindexService(resolver(), new MarkdownService(), documentRepository);
-        EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, new StubEmbeddingClient(), properties());
+        EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, new StubEmbeddingClient(), properties(), new MarkdownService());
 
         GuidedReviewService reviewService = new GuidedReviewService(
                 jobRepository,
@@ -384,10 +384,10 @@ class IngestPipelineServicesTests {
         LlmClient llm = new SequencedLlmClient();
         PromptService ps = mock(PromptService.class);
         when(ps.getText(anyString())).thenReturn("system prompt");
-        SourceNoteLlmService sourceNoteLlm = new SourceNoteLlmService(llm, new JsonExtractionService(new ObjectMapper()), ps);
-        LlmMutationPlanService planService = new LlmMutationPlanService(llm, new JsonExtractionService(new ObjectMapper()), new ObjectMapper(), ps);
+        SourceNoteLlmService sourceNoteLlm = new SourceNoteLlmService(llm, new JsonExtractionService(new ObjectMapper()), ps, new RetryingLlmExecutor());
+        LlmMutationPlanService planService = new LlmMutationPlanService(llm, new JsonExtractionService(new ObjectMapper()), new ObjectMapper(), ps, new RetryingLlmExecutor());
         ReindexService reindex = new ReindexService(resolver, new MarkdownService(), documentRepository);
-        EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, embeddingClient, properties());
+        EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, embeddingClient, properties(), new MarkdownService());
         return new PipelineHarness(new IngestPipelineService(
                 new SourceNormalizer(resolver),
                 sourceNoteLlm,
@@ -446,7 +446,7 @@ class IngestPipelineServicesTests {
         public String chat(List<ChatMessage> messages) {
             calls += 1;
             if (calls == 1) {
-                return "{\"summary\":\"Fixture summary\",\"raw_context\":\"Fixture context\",\"extracted_claims\":[\"A grounded fact\"],\"open_questions\":[]}";
+                return "{\"summary\":\"Fixture summary\",\"raw_context\":\"Fixture context\",\"extracted_claims\":[\"A grounded fact\"],\"open_questions\":[],\"keywords\":[\"fixture\",\"test\"]}";
             }
             return "{\"plan_id\":\"optional\",\"page_actions\":[]}";
         }

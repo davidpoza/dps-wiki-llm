@@ -2,37 +2,62 @@ package com.dpswikillm.services;
 
 import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.dto.ChatMessage;
+import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 @Service
 public class OpenAiCompatibleLlmClient implements LlmClient {
+    // Bounds a single generation. Generous enough for slow LLM responses, but
+    // finite so a stalled upstream connection can't hang the pipeline forever.
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(120);
+
     private final AppProperties properties;
     private final RestClient restClient;
     private final RetryingLlmExecutor retrying;
 
     public OpenAiCompatibleLlmClient(AppProperties properties, RestClient.Builder builder, RetryingLlmExecutor retrying) {
         this.properties = properties;
-        this.restClient = builder.baseUrl(properties.llm().baseUrl()).build();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout((int) CONNECT_TIMEOUT.toMillis());
+        factory.setReadTimeout((int) READ_TIMEOUT.toMillis());
+        this.restClient = builder
+                .baseUrl(properties.llm().baseUrl())
+                .requestFactory(factory)
+                .build();
         this.retrying = retrying;
     }
 
     @Override
     public String chat(List<ChatMessage> messages) {
-        return retrying.execute(() -> doChat(messages));
+        return retrying.execute(() -> doChat(messages, false));
+    }
+
+    @Override
+    public String chatJson(List<ChatMessage> messages) {
+        return retrying.execute(() -> doChat(messages, true));
     }
 
     @SuppressWarnings("unchecked")
-    private String doChat(List<ChatMessage> messages) {
+    private String doChat(List<ChatMessage> messages, boolean jsonMode) {
         try {
+            Map<String, Object> requestBody = new LinkedHashMap<>();
+            requestBody.put("model", properties.llm().model());
+            requestBody.put("messages", messages);
+            if (jsonMode) {
+                requestBody.put("response_format", Map.of("type", "json_object"));
+            }
             Map<String, Object> response = restClient.post()
                     .uri("/chat/completions")
                     .header("Authorization", "Bearer " + properties.llm().apiKey())
-                    .body(Map.of("model", properties.llm().model(), "messages", messages))
+                    .body(requestBody)
                     .retrieve()
                     .body(Map.class);
 

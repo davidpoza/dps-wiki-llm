@@ -52,7 +52,7 @@ class SemanticRetrievalServicesTests {
         DocumentRecord doc = doc("wiki/concepts/a.md", "A", "alpha");
         repository.documents = new ArrayList<>(List.of(doc));
         StubEmbeddingClient embeddings = new StubEmbeddingClient();
-        EmbeddingIndexService service = new EmbeddingIndexService(repository, embeddings, properties());
+        EmbeddingIndexService service = new EmbeddingIndexService(repository, embeddings, properties(), new MarkdownService());
 
         assertThat(service.embedIncremental().embeddedDocuments()).isEqualTo(1);
         assertThat(service.embedIncremental().embeddedDocuments()).isZero();

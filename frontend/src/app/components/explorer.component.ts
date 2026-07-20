@@ -42,17 +42,18 @@ import { TreeModule } from 'primeng/tree';
 import { HttpStatusCode } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
-import { ApiService } from '../services/api.service';
+import { ApiService, DiscoveredLink } from '../services/api.service';
 import { AuthService } from '../services/auth.service';
 import { FileService } from '../services/file.service';
 import { ThemeService } from '../services/theme.service';
 import { UnsavedChangesAware } from '../unsaved-changes.guard';
 import { FileVersion } from '../types';
+import { ProgressBarModule } from 'primeng/progressbar';
 
 @Component({
   selector: 'app-explorer',
   standalone: true,
-  imports: [TreeModule, ButtonModule, ContextMenuModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe, NgClass, TranslocoPipe],
+  imports: [TreeModule, ButtonModule, ContextMenuModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe, NgClass, TranslocoPipe, ProgressBarModule],
   providers: [MessageService, ConfirmationService],
   template: `
     <p-toast />
@@ -170,6 +171,13 @@ import { FileVersion } from '../types';
                     [disabled]="!isDirty()"
                     (onClick)="save()"
                     [title]="'explorer.save' | transloco"
+                  />
+                  <p-button
+                    icon="pi pi-sitemap"
+                    size="small"
+                    severity="secondary"
+                    (onClick)="openLinkDiscovery()"
+                    [title]="'explorer.discoverLinks' | transloco"
                   />
                   <p-button
                     icon="pi pi-history"
@@ -389,6 +397,56 @@ import { FileVersion } from '../types';
       <ng-template pTemplate="footer">
         <p-button [label]="'common.cancel' | transloco" severity="secondary" size="small" (onClick)="showMoveDialog.set(false)" />
         <p-button [label]="'explorer.moveHere' | transloco" size="small" (onClick)="confirmMove()" />
+      </ng-template>
+    </p-dialog>
+
+    <p-dialog
+      [header]="'explorer.linkDiscoveryHeader' | transloco"
+      [(visible)]="showLinkDiscovery"
+      [modal]="true"
+      [draggable]="false"
+      [style]="{ width: '600px' }"
+      (onHide)="onLinkDiscoveryHide()"
+    >
+      <div class="link-discovery-body">
+        @if (linkDiscoveryRunning()) {
+          <div class="ld-progress-area">
+            <div class="ld-step-label">{{ linkDiscoveryStepLabel() }}</div>
+            <p-progressBar [value]="linkDiscoveryPercent()" [showValue]="false" styleClass="ld-bar" />
+          </div>
+        } @else if (linkDiscoveryError()) {
+          <div class="ld-error">
+            <i class="pi pi-exclamation-triangle"></i>
+            <span>{{ linkDiscoveryError() }}</span>
+          </div>
+        } @else if (linkDiscoveryNoKeywords()) {
+          <div class="ld-warn">
+            <i class="pi pi-info-circle"></i>
+            <span>{{ 'explorer.linkDiscoveryNoKeywords' | transloco }}</span>
+          </div>
+        } @else {
+          @if (linkDiscoveryResults().length === 0) {
+            <p class="ld-empty">{{ 'explorer.linkDiscoveryNoResults' | transloco }}</p>
+          } @else {
+            <div class="ld-results">
+              @for (link of linkDiscoveryResults(); track link.path) {
+                <div class="ld-result-item" (click)="navigateToDiscoveredLink(link.path)">
+                  <div class="ld-result-info">
+                    <span class="ld-result-title">{{ link.title || link.path }}</span>
+                    <span class="ld-result-path">{{ link.path }}</span>
+                  </div>
+                  <div class="ld-result-score">
+                    <span class="ld-score-label">{{ 'explorer.linkDiscoveryScore' | transloco }}</span>
+                    <span class="ld-score-value">{{ (link.score * 100).toFixed(0) }}%</span>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        }
+      </div>
+      <ng-template pTemplate="footer">
+        <p-button [label]="'explorer.linkDiscoveryClose' | transloco" severity="secondary" size="small" (onClick)="showLinkDiscovery.set(false)" />
       </ng-template>
     </p-dialog>
 
@@ -856,6 +914,30 @@ import { FileVersion } from '../types';
     .version-diff .line-add { background: #1a3a1a; color: #7ee787; }
     .version-diff .line-del { background: #3a1a1a; color: #ff7b72; }
     .versions-preview .hint, .versions-list .hint { padding: 16px; color: var(--app-text-muted); font-size: 0.85rem; }
+    .link-discovery-body { min-height: 80px; }
+    .ld-progress-area { display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
+    .ld-step-label { font-size: 0.875rem; color: var(--app-text-muted); }
+    :host ::ng-deep .ld-bar { height: 8px; border-radius: 4px; }
+    .ld-error, .ld-warn {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px; border-radius: 6px; font-size: 0.875rem;
+    }
+    .ld-error { background: var(--app-error-bg); color: var(--app-error-text); }
+    .ld-warn { background: var(--app-primary-soft); color: var(--app-text); }
+    .ld-empty { color: var(--app-text-muted); font-size: 0.875rem; padding: 8px 0; }
+    .ld-results { display: flex; flex-direction: column; gap: 6px; max-height: 380px; overflow-y: auto; }
+    .ld-result-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px; border: 1px solid var(--app-border);
+      border-radius: 6px; cursor: pointer; transition: background 0.1s;
+    }
+    .ld-result-item:hover { background: var(--app-surface-subtle); }
+    .ld-result-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .ld-result-title { font-size: 0.875rem; font-weight: 500; color: var(--app-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ld-result-path { font-size: 0.75rem; color: var(--app-text-muted); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ld-result-score { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; margin-left: 12px; }
+    .ld-score-label { font-size: 0.65rem; color: var(--app-text-subtle); text-transform: uppercase; letter-spacing: 0.04em; }
+    .ld-score-value { font-size: 0.9rem; font-weight: 700; color: var(--app-primary); }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -901,6 +983,23 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly moveTargetDir = signal<TreeNode | null>(null);
   readonly syncing = signal(false);
   readonly showVersions = signal(false);
+  readonly showLinkDiscovery = signal(false);
+  readonly linkDiscoveryRunning = signal(false);
+  readonly linkDiscoveryError = signal<string | null>(null);
+  readonly linkDiscoveryNoKeywords = signal(false);
+  readonly linkDiscoveryResults = signal<DiscoveredLink[]>([]);
+  readonly linkDiscoveryStep = signal<{ step: string; current: number; total: number } | null>(null);
+  readonly linkDiscoveryPercent = computed(() => {
+    const s = this.linkDiscoveryStep();
+    return s ? Math.round((s.current / s.total) * 100) : 0;
+  });
+  readonly linkDiscoveryStepLabel = computed(() => {
+    const step = this.linkDiscoveryStep()?.step;
+    if (step === 'loading') return this.t.translate('explorer.linkDiscoveryStepLoading');
+    if (step === 'searching') return this.t.translate('explorer.linkDiscoveryStepSearching');
+    return this.t.translate('explorer.linkDiscoveryStepDone');
+  });
+  private linkDiscoverySub: { unsubscribe(): void } | null = null;
   readonly versions = signal<FileVersion[]>([]);
   readonly previewVersionId = signal<string | null>(null);
   readonly previewDiffLines = signal<string[]>([]);
@@ -1752,6 +1851,50 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         this.cdr.markForCheck();
       },
     });
+  }
+
+  openLinkDiscovery(): void {
+    const path = this.selectedPath();
+    if (!path) return;
+    const fm = this.frontmatter();
+    const hasKeywords = Array.isArray(fm['keywords']) && (fm['keywords'] as unknown[]).length > 0;
+    this.linkDiscoveryResults.set([]);
+    this.linkDiscoveryError.set(null);
+    this.linkDiscoveryStep.set(null);
+    this.linkDiscoveryNoKeywords.set(!hasKeywords);
+    this.showLinkDiscovery.set(true);
+    if (!hasKeywords) return;
+    this.linkDiscoveryRunning.set(true);
+    this.linkDiscoverySub = this.api.discoverLinks(path).subscribe({
+      next: event => {
+        if (event.type === 'progress') {
+          this.linkDiscoveryStep.set({ step: event.step, current: event.current, total: event.total });
+        } else if (event.type === 'done') {
+          this.linkDiscoveryResults.set(event.links);
+          this.linkDiscoveryRunning.set(false);
+        }
+        this.cdr.markForCheck();
+      },
+      error: (err: { message?: string }) => {
+        this.linkDiscoveryError.set(err.message ?? this.t.translate('explorer.linkDiscoveryError'));
+        this.linkDiscoveryRunning.set(false);
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  onLinkDiscoveryHide(): void {
+    this.linkDiscoverySub?.unsubscribe();
+    this.linkDiscoverySub = null;
+    this.linkDiscoveryRunning.set(false);
+  }
+
+  navigateToDiscoveredLink(path: string): void {
+    const node = this.allFiles().find(n => n.data === path);
+    if (node) {
+      this.showLinkDiscovery.set(false);
+      this.openFile(node);
+    }
   }
 
   generatePdf(): void {

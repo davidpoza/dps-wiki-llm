@@ -170,7 +170,17 @@
     "confirmDeleteMessage": "Delete file \"{{ name }}\"?",
     "confirmUnsavedHeader": "Unsaved changes",
     "confirmUnsavedMessage": "You have unsaved changes. Discard and open the selected file?",
-    "confirmUnsavedNavigate": "You have unsaved changes. Discard and navigate?"
+    "confirmUnsavedNavigate": "You have unsaved changes. Discard and navigate?",
+    "discoverLinks": "Discover links",
+    "linkDiscoveryHeader": "Link discovery",
+    "linkDiscoveryStepLoading": "Loading document...",
+    "linkDiscoveryStepSearching": "Searching for semantic connections...",
+    "linkDiscoveryStepDone": "Search completed",
+    "linkDiscoveryNoResults": "No semantic connections found.",
+    "linkDiscoveryScore": "Relevance",
+    "linkDiscoveryClose": "Close",
+    "linkDiscoveryError": "Error discovering links",
+    "linkDiscoveryNoKeywords": "This document has no keywords in its frontmatter. Ingest it first to generate them."
   },
   "profile": {
     "title": "Profile",

@@ -170,7 +170,17 @@
     "confirmDeleteMessage": "¿Eliminar el fichero \"{{ name }}\"?",
     "confirmUnsavedHeader": "Cambios sin guardar",
     "confirmUnsavedMessage": "Hay cambios sin guardar. ¿Descartar y abrir el fichero seleccionado?",
-    "confirmUnsavedNavigate": "Hay cambios sin guardar. ¿Descartar y navegar?"
+    "confirmUnsavedNavigate": "Hay cambios sin guardar. ¿Descartar y navegar?",
+    "discoverLinks": "Buscar enlaces",
+    "linkDiscoveryHeader": "Búsqueda de enlaces",
+    "linkDiscoveryStepLoading": "Cargando documento...",
+    "linkDiscoveryStepSearching": "Buscando conexiones semánticas...",
+    "linkDiscoveryStepDone": "Búsqueda completada",
+    "linkDiscoveryNoResults": "No se encontraron conexiones semánticas.",
+    "linkDiscoveryScore": "Relevancia",
+    "linkDiscoveryClose": "Cerrar",
+    "linkDiscoveryError": "Error al buscar enlaces",
+    "linkDiscoveryNoKeywords": "Este documento no tiene keywords en el frontmatter. Ingéstalo primero para generarlos."
   },
   "profile": {
     "title": "Perfil",

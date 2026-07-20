@@ -41,7 +41,7 @@ public class ConnectionDiscoveryService {
                         .filter(a -> a.action() == MutationActionType.update && a.path() != null)
                         .toList();
 
-        String query = payload.title() + "\n" + payload.content();
+        String query = buildQuery(payload);
         List<SearchResult> semanticResults = semanticSearchService.search(query, DEFAULT_NEIGHBOR_LIMIT).stream()
                 .filter(r -> r.score() >= DEFAULT_THRESHOLD && !r.path().equals(sourceNotePath))
                 .toList();
@@ -66,6 +66,14 @@ public class ConnectionDiscoveryService {
         }
 
         return candidateRepository.saveAll(candidates.values());
+    }
+
+    private static String buildQuery(NormalizedSourcePayload payload) {
+        var note = payload.sourceNote();
+        if (note != null && note.keywords() != null && !note.keywords().isEmpty()) {
+            return String.join(" ", note.keywords());
+        }
+        return payload.title();
     }
 
     private JobConnectionCandidate candidate(Job job, String targetPath, String sourceNotePath, String section,
