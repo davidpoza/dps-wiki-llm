@@ -5,7 +5,10 @@ import com.dpswikillm.domain.NormalizedSourcePayload;
 import com.dpswikillm.dto.ChatMessage;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -46,7 +49,43 @@ public class SourceNoteLlmService {
                 stringArray(node.get("open_questions")),
                 "llm",
                 null,
-                stringArray(node.get("keywords")));
+                normalizedKeywords(node.get("keywords")));
+    }
+
+    /**
+     * Builds the frontmatter keyword list from the LLM response, mechanically
+     * normalizing each entry and removing blanks/duplicates. This keeps the stored
+     * format (lowercase kebab-case) stable even when the model does not fully comply
+     * with the prompt, mirroring {@code KeywordGenerationService}.
+     */
+    private List<String> normalizedKeywords(JsonNode node) {
+        List<String> keywords = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        if (node == null || !node.isArray()) {
+            return keywords;
+        }
+        for (JsonNode item : node) {
+            if (!item.isTextual()) {
+                continue;
+            }
+            String value = normalizeKeyword(item.asText());
+            if (!value.isBlank() && seen.add(value)) {
+                keywords.add(value);
+            }
+        }
+        return keywords;
+    }
+
+    /**
+     * Enforces the mechanical keyword format: lowercase, spaces replaced by hyphens
+     * (kebab-case), with collapsed/trimmed hyphens. Singular form and article removal
+     * are the model's responsibility via the prompt.
+     */
+    private String normalizeKeyword(String raw) {
+        return raw.trim().toLowerCase(Locale.ROOT)
+                .replaceAll("\\s+", "-")
+                .replaceAll("-{2,}", "-")
+                .replaceAll("^-+|-+$", "");
     }
 
     private boolean nonEmpty(JsonNode node, String field) {
