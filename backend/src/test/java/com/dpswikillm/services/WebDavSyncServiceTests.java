@@ -292,7 +292,7 @@ class WebDavSyncServiceTests {
     private static AppProperties props(String vaultPath, String webdavUrl) {
         return new AppProperties(
                 vaultPath, List.of("http://localhost:4200"),
-                new AppProperties.Embeddings("http://embeddings:8080", "m", "", 384, Duration.ofSeconds(1)),
+                new AppProperties.Embeddings("http://embeddings:8080", "m", "", 384, Duration.ofSeconds(1), 8),
                 new AppProperties.Llm("http://llm", "m", ""),
                 new AppProperties.Telegram("", ""), null, null, null,
                 new AppProperties.WebDav(webdavUrl, "user", "pass"));

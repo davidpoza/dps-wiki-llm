@@ -47,7 +47,7 @@ class WikiBotServiceTests {
         restTemplate = mock(RestTemplate.class);
 
         AppProperties props = new AppProperties(null, List.of(),
-                new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1)),
+                new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1), 8),
                 new AppProperties.Llm("http://localhost", "model", ""),
                 new AppProperties.Telegram("bot-token", String.valueOf(ALLOWED_CHAT_ID)), null, null, null, null);
 

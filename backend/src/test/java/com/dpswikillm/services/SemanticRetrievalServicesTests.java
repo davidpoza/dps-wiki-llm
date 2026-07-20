@@ -102,7 +102,7 @@ class SemanticRetrievalServicesTests {
         return new AppProperties(
                 vault.toString(),
                 List.of("http://localhost:4200"),
-                new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1)),
+                new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1), 8),
                 new AppProperties.Llm("http://localhost:11434/v1", "gpt-oss", "test"),
                 new AppProperties.Telegram("", ""), null, null, null, null);
     }
