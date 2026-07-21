@@ -59,6 +59,19 @@ public class SnapshotService {
     }
 
     @Transactional
+    public void captureFileAsNew(Snapshot snapshot, String relPath) throws IOException {
+        String normalized = pathResolver.normalizeRelativePath(relPath);
+        if (snapshotFileRepository.findBySnapshotIdAndPath(snapshot.getId(), normalized).isPresent()) {
+            return;
+        }
+        SnapshotFile sf = new SnapshotFile();
+        sf.setSnapshotId(snapshot.getId());
+        sf.setPath(normalized);
+        sf.setContentBefore(null);
+        snapshotFileRepository.save(sf);
+    }
+
+    @Transactional
     public void captureFile(Snapshot snapshot, String relPath) throws IOException {
         String normalized = pathResolver.normalizeRelativePath(relPath);
         if (snapshotFileRepository.findBySnapshotIdAndPath(snapshot.getId(), normalized).isPresent()) {

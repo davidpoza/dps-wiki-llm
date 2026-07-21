@@ -79,6 +79,36 @@ class JobRevertServiceTests {
     }
 
     @Test
+    void revertIngestJobDeletesRawFile() throws Exception {
+        Files.createDirectories(vault.resolve("raw/inbox"));
+        Files.writeString(vault.resolve("raw/inbox/source.md"), "# Source\n", StandardCharsets.UTF_8);
+        Files.createDirectories(vault.resolve("wiki/concepts"));
+        Files.writeString(vault.resolve("wiki/concepts/note.md"), "# Note\n", StandardCharsets.UTF_8);
+
+        Snapshot originalSnapshot = snapshotService.beginSnapshot("target", "ingest", "Ingest note");
+        snapshotService.captureFileAsNew(originalSnapshot, "raw/inbox/source.md");
+        snapshotService.recordAfter(originalSnapshot, "raw/inbox/source.md");
+        snapshotService.captureFile(originalSnapshot, "wiki/concepts/note.md");
+        Files.delete(vault.resolve("wiki/concepts/note.md"));
+        snapshotService.recordAfter(originalSnapshot, "wiki/concepts/note.md");
+
+        Job target = job(UUID.randomUUID(), JobType.INGEST, JobStatus.COMPLETED);
+        ReflectionTestUtils.setField(target, "createdAt", Instant.parse("2026-07-08T00:00:00Z"));
+        target.setAffectedPaths("[\"wiki/concepts/note.md\",\"raw/inbox/source.md\"]");
+        target.setSnapshotId(originalSnapshot.getId());
+        snapshotService.finalizeSnapshot(originalSnapshot, target);
+
+        Job revertJob = job(UUID.randomUUID(), JobType.REVERT, JobStatus.STARTED);
+        revertJob.setPayloadRef(target.getId().toString());
+
+        service(target, revertJob, List.of(), new FakeDocumentRepository()).revert(revertJob);
+
+        assertThat(Files.exists(vault.resolve("raw/inbox/source.md"))).isFalse();
+        assertThat(Files.exists(vault.resolve("wiki/concepts/note.md"))).isTrue();
+        assertThat(target.getStatus()).isEqualTo(JobStatus.REVERTED);
+    }
+
+    @Test
     void laterJobConflictBlocksRevert() throws Exception {
         Files.createDirectories(vault.resolve("wiki/concepts"));
         Files.writeString(vault.resolve("wiki/concepts/revert-me.md"), "# Revert Me\n", StandardCharsets.UTF_8);

@@ -164,6 +164,34 @@ class SnapshotServiceTests {
     }
 
     @Test
+    void captureFileAsNewStoresNullContentBeforeRegardlessOfDiskState() throws Exception {
+        Files.createDirectories(vault.resolve("raw/inbox"));
+        Files.writeString(vault.resolve("raw/inbox/source.md"), "# Source\n", StandardCharsets.UTF_8);
+
+        Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
+        snapshotService.captureFileAsNew(snapshot, "raw/inbox/source.md");
+
+        SnapshotFile sf = snapshotFileRepo.findBySnapshotIdAndPath(snapshot.getId(), "raw/inbox/source.md")
+                .orElseThrow();
+        assertThat(sf.getContentBefore()).isNull();
+    }
+
+    @Test
+    void captureFileAsNewAndHardResetDeletesFile() throws Exception {
+        Files.createDirectories(vault.resolve("raw/inbox"));
+        Files.writeString(vault.resolve("raw/inbox/source.md"), "# Source\n", StandardCharsets.UTF_8);
+
+        Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
+        snapshotService.captureFileAsNew(snapshot, "raw/inbox/source.md");
+        snapshotService.recordAfter(snapshot, "raw/inbox/source.md");
+        snapshotService.finalizeSnapshot(snapshot, null);
+
+        snapshotService.hardReset(snapshot.getId());
+
+        assertThat(Files.exists(vault.resolve("raw/inbox/source.md"))).isFalse();
+    }
+
+    @Test
     void captureFileIsIdempotent() throws Exception {
         Files.createDirectories(vault.resolve("wiki/sources"));
         Files.writeString(vault.resolve("wiki/sources/note.md"), "content\n", StandardCharsets.UTF_8);

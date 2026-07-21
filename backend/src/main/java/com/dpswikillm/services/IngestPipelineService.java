@@ -90,6 +90,7 @@ public class IngestPipelineService {
         try {
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "normalization", "Normalizing raw artifact");
             NormalizedSourcePayload payload = sourceNormalizer.normalize(job.getPayloadRef());
+            snapshotService.captureFileAsNew(snapshot, payload.rawPath());
             lifecycleService.fileEvent(job, payload.rawPath(), "read");
 
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "llm-cleaning", "Cleaning source note with LLM");
@@ -126,7 +127,8 @@ public class IngestPipelineService {
             var candidates = connectionDiscoveryService.discoverAndPersist(job, payload, sourceNotePath, resolvedPlan);
 
             if (job.getMode() == JobMode.validated) {
-                List<String> baselinePaths = new ArrayList<>(List.of(sourceNotePath, "INDEX.md", "state/runtime/idempotency-keys.json"));
+                snapshotService.recordAfter(snapshot, payload.rawPath());
+                List<String> baselinePaths = new ArrayList<>(List.of(sourceNotePath, "INDEX.md", "state/runtime/idempotency-keys.json", payload.rawPath()));
                 job.setAffectedPaths(toJson(baselinePaths));
                 job.setSnapshotId(snapshot.getId());
                 jobRepository.save(job);
@@ -154,10 +156,13 @@ public class IngestPipelineService {
                 snapshotService.recordAfter(snapshot, sourceNotePath);
             }
 
+            snapshotService.recordAfter(snapshot, payload.rawPath());
+
             List<String> allPaths = new ArrayList<>(List.of(sourceNotePath, "INDEX.md"));
             allPaths.addAll(connectionsResult.created());
             allPaths.addAll(connectionsResult.updated());
             allPaths.add("state/runtime/idempotency-keys.json");
+            allPaths.add(payload.rawPath());
             int connectionCount = connectionsResult.created().size() + connectionsResult.updated().size();
             String commitMessage = connectionCount > 0
                     ? "Ingest: " + payload.title() + " (+" + connectionCount + " connections)"
