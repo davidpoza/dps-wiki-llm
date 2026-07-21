@@ -655,19 +655,18 @@ import { ProgressBarModule } from 'primeng/progressbar';
     }
     .editor-header {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      flex-direction: column;
       padding: 6px 12px;
       border-bottom: 1px solid var(--app-border);
       background: var(--app-surface);
-      gap: 12px;
-      min-height: 44px;
+      gap: 2px;
     }
     .editor-title {
       display: flex;
       align-items: center;
       gap: 6px;
       min-width: 0;
+      min-height: 28px;
     }
     .file-path {
       display: flex;
@@ -701,7 +700,7 @@ import { ProgressBarModule } from 'primeng/progressbar';
       display: flex;
       align-items: center;
       gap: 4px;
-      flex-shrink: 0;
+      align-self: flex-end;
     }
     .toolbar-group {
       display: flex;
