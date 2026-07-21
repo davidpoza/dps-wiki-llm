@@ -37,6 +37,7 @@ public class IngestPipelineService {
     private final JobRepository jobRepository;
     private final ConnectionDiscoveryService connectionDiscoveryService;
     private final GuidedReviewService guidedReviewService;
+    private final ConceptResolutionService conceptResolutionService;
     private final ObjectMapper objectMapper;
 
     public IngestPipelineService(SourceNormalizer sourceNormalizer,
@@ -54,6 +55,7 @@ public class IngestPipelineService {
                                  JobRepository jobRepository,
                                  ConnectionDiscoveryService connectionDiscoveryService,
                                  GuidedReviewService guidedReviewService,
+                                 ConceptResolutionService conceptResolutionService,
                                  ObjectMapper objectMapper) {
         this.sourceNormalizer = sourceNormalizer;
         this.sourceNoteLlmService = sourceNoteLlmService;
@@ -70,6 +72,7 @@ public class IngestPipelineService {
         this.jobRepository = jobRepository;
         this.connectionDiscoveryService = connectionDiscoveryService;
         this.guidedReviewService = guidedReviewService;
+        this.conceptResolutionService = conceptResolutionService;
         this.objectMapper = objectMapper;
     }
 
@@ -118,7 +121,9 @@ public class IngestPipelineService {
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "connection-discovery", "Requesting optional connection plan");
             MutationPlan llmPlan = requestOptionalPlan(payload, sourceNotePath);
             GuardrailResult guarded = guardrailService.guardrail(llmPlan, payload.rawPath(), sourceNotePath);
-            var candidates = connectionDiscoveryService.discoverAndPersist(job, payload, sourceNotePath, guarded.plan());
+            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "concept-resolution", "Resolving concept duplicates");
+            MutationPlan resolvedPlan = conceptResolutionService.resolve(guarded.plan());
+            var candidates = connectionDiscoveryService.discoverAndPersist(job, payload, sourceNotePath, resolvedPlan);
 
             if (job.getMode() == JobMode.validated) {
                 List<String> baselinePaths = new ArrayList<>(List.of(sourceNotePath, "INDEX.md", "state/runtime/idempotency-keys.json"));

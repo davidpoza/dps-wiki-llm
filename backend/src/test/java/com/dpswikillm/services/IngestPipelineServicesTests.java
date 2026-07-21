@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -261,6 +262,8 @@ class IngestPipelineServicesTests {
         LlmClient llm = new SequencedLlmClient();
         PromptService ps = mock(PromptService.class);
         when(ps.getText(anyString())).thenReturn("system prompt");
+        ConceptResolutionService conceptRes = mock(ConceptResolutionService.class);
+        when(conceptRes.resolve(any(MutationPlan.class))).thenAnswer(inv -> inv.getArgument(0));
         IngestPipelineService pipeline = new IngestPipelineService(
                 new SourceNormalizer(resolver),
                 new SourceNoteLlmService(llm, new JsonExtractionService(new ObjectMapper()), ps, new RetryingLlmExecutor()),
@@ -272,7 +275,7 @@ class IngestPipelineServicesTests {
                 reindex, embeddings,
                 snapshotService,
                 resolver, lifecycle, jobRepository, discovery, realGuidedReview,
-                new ObjectMapper().findAndRegisterModules());
+                conceptRes, new ObjectMapper().findAndRegisterModules());
 
         Job job = new Job();
         ReflectionTestUtils.setField(job, "id", UUID.randomUUID());
@@ -380,6 +383,58 @@ class IngestPipelineServicesTests {
         assertThat(occurrences(source, "[[wiki/concepts/target.md]]")).isEqualTo(1);
     }
 
+    @Test
+    void conceptResolutionServiceIsCalledDuringIngest() throws Exception {
+        Files.createDirectories(vault.resolve("raw/inbox"));
+        Files.writeString(vault.resolve("raw/inbox/input.md"), "# Fixture\n\nA grounded fact.");
+
+        ConnectionDiscoveryService discovery = mock(ConnectionDiscoveryService.class);
+        when(discovery.discoverAndPersist(any(), any(), any(), any())).thenReturn(List.of());
+        GuidedReviewService guidedReview = mock(GuidedReviewService.class);
+        try {
+            when(guidedReview.applyAccepted(any(Job.class), any(), any(), anyBoolean())).thenReturn(MutationResult.empty("mock"));
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
+        VaultPathResolver resolver = resolver();
+        FakeDocumentRepository documentRepository = new FakeDocumentRepository();
+        JobRepository jobRepository = mock(JobRepository.class);
+        when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        JobLifecycleService lifecycle = mock(JobLifecycleService.class);
+        when(lifecycle.transition(any(), any(JobStatus.class), any(), any())).thenAnswer(invocation -> new Job());
+        LlmClient llm = new SequencedLlmClient();
+        PromptService ps = mock(PromptService.class);
+        when(ps.getText(anyString())).thenReturn("system prompt");
+        SourceNoteLlmService sourceNoteLlm = new SourceNoteLlmService(llm, new JsonExtractionService(new ObjectMapper()), ps, new RetryingLlmExecutor());
+        LlmMutationPlanService planService = new LlmMutationPlanService(llm, new JsonExtractionService(new ObjectMapper()), new ObjectMapper(), ps, new RetryingLlmExecutor());
+        ReindexService reindex = new ReindexService(resolver, new MarkdownService(), documentRepository);
+        EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, new StubEmbeddingClient(), properties(), new MarkdownService());
+
+        MutationPlan transformedPlan = new MutationPlan("resolved", List.of());
+        ConceptResolutionService conceptResolution = mock(ConceptResolutionService.class);
+        when(conceptResolution.resolve(any(MutationPlan.class))).thenReturn(transformedPlan);
+
+        IngestPipelineService pipeline = new IngestPipelineService(
+                new SourceNormalizer(resolver), sourceNoteLlm, new SourceNotePlanner(),
+                planService, new MutationGuardrailService(resolver),
+                new MutationApplier(resolver, new MarkdownService(), new ObjectMapper()),
+                new RootIndexService(resolver), reindex, embeddings, snapshotService,
+                resolver, lifecycle, jobRepository, discovery, guidedReview,
+                conceptResolution, new ObjectMapper().findAndRegisterModules());
+
+        Job job = new Job();
+        ReflectionTestUtils.setField(job, "id", UUID.randomUUID());
+        job.setType(JobType.INGEST);
+        job.setMode(JobMode.unattended);
+        job.setPayloadRef("raw/inbox/input.md");
+        job.setQueuePosition(1);
+
+        pipeline.run(job);
+
+        verify(conceptResolution).resolve(any(MutationPlan.class));
+        verify(discovery).discoverAndPersist(any(), any(), any(), eq(transformedPlan));
+    }
+
     private IngestPipelineService pipeline() {
         return pipeline(new StubEmbeddingClient());
     }
@@ -411,6 +466,8 @@ class IngestPipelineServicesTests {
         LlmMutationPlanService planService = new LlmMutationPlanService(llm, new JsonExtractionService(new ObjectMapper()), new ObjectMapper(), ps, new RetryingLlmExecutor());
         ReindexService reindex = new ReindexService(resolver, new MarkdownService(), documentRepository);
         EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, embeddingClient, properties(), new MarkdownService());
+        ConceptResolutionService conceptResolution = mock(ConceptResolutionService.class);
+        when(conceptResolution.resolve(any(MutationPlan.class))).thenAnswer(inv -> inv.getArgument(0));
         return new PipelineHarness(new IngestPipelineService(
                 new SourceNormalizer(resolver),
                 sourceNoteLlm,
@@ -427,6 +484,7 @@ class IngestPipelineServicesTests {
                 jobRepository,
                 discovery,
                 guidedReview,
+                conceptResolution,
                 new ObjectMapper().findAndRegisterModules()), lifecycle);
     }
 
