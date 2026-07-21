@@ -53,9 +53,14 @@ const FIRST_PAGE = 0;
       <div class="entry-list">
         @for (entry of page(); track entry.changeId) {
           <div class="entry-card">
-            <div class="entry-row">
+            <div class="path-row">
+              <button class="editor-btn" [title]="entry.path" (click)="openFile(entry.path)">
+                <i class="pi pi-file-edit"></i>
+              </button>
+              <span class="file-path">{{ entry.path }}</span>
+            </div>
+            <div class="meta-row">
               <span class="source-badge" [ngClass]="sourceClass(entry.source)">{{ sourceLabel(entry.source) }}</span>
-              <span class="file-path" [title]="entry.path" role="link" tabindex="0" (click)="openFile(entry.path)" (keydown.enter)="openFile(entry.path)">{{ entry.path }}</span>
               <span class="stat-added">+{{ entry.linesAdded }}</span>
               <span class="stat-deleted">-{{ entry.linesDeleted }}</span>
               <span class="entry-date">{{ formatDate(entry.createdAt) }}</span>
@@ -144,17 +149,20 @@ const FIRST_PAGE = 0;
     .error-msg { color: var(--app-error-text); }
     .loading, .empty { color: var(--app-text-muted); }
     .entry-list { display: flex; flex-direction: column; gap: 0.4rem; padding: 4px 2px; }
-    .entry-card { border: 1px solid var(--app-border); border-radius: 6px; padding: 0.5rem 0.75rem; background: var(--app-surface); }
-    .entry-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; font-size: 0.85rem; }
+    .entry-card { border: 1px solid var(--app-border); border-radius: 6px; padding: 0.5rem 0.75rem; background: var(--app-surface); display: flex; flex-direction: column; gap: 0.35rem; }
+    .path-row { display: flex; align-items: flex-start; gap: 0.4rem; }
+    .editor-btn { flex-shrink: 0; display: flex; align-items: center; justify-content: center; min-width: 28px; min-height: 28px; padding: 0.2rem; cursor: pointer; border: none; background: transparent; color: var(--app-primary); border-radius: 4px; }
+    .editor-btn:hover { background: var(--app-primary-soft); }
+    .editor-btn .pi { font-size: 0.9rem; }
+    .file-path { font-family: monospace; font-size: 0.8rem; word-break: break-all; line-height: 1.4; padding-top: 0.15rem; }
+    .meta-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.8rem; }
     .source-badge { font-size: 0.7rem; font-weight: 600; padding: 0.1rem 0.45rem; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
     .source-local { background: #dbeafe; color: #1e40af; }
     .source-job { background: #ede9fe; color: #6d28d9; }
     .source-webdav { background: #dcfce7; color: #166534; }
-    .file-path { flex: 1; font-family: monospace; font-size: 0.8rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: var(--app-primary); }
-    .file-path:hover { text-decoration: underline; }
     .stat-added { color: #22863a; font-weight: 600; }
     .stat-deleted { color: #cb2431; font-weight: 600; }
-    .entry-date { color: var(--app-text-muted); font-size: 0.75rem; }
+    .entry-date { color: var(--app-text-muted); font-size: 0.75rem; margin-left: auto; }
     .diff-btn { padding: 0.1rem 0.5rem; font-size: 0.75rem; cursor: pointer; border: 1px solid var(--app-border-strong); border-radius: 3px; background: var(--app-surface-muted); color: var(--app-text); white-space: nowrap; }
     .diff-btn:hover { background: var(--app-surface-subtle); }
     .diff-container { display: block; width: 100%; padding: 0; }
