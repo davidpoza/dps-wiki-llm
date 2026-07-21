@@ -483,10 +483,12 @@ import { ProgressBarModule } from 'primeng/progressbar';
     :host {
       display: block;
       height: 100vh;
+      height: 100dvh;
       overflow: hidden;
     }
     .explorer-shell {
       height: 100vh;
+      height: 100dvh;
       overflow: hidden;
       background: var(--app-bg);
       color: var(--app-text);
@@ -533,6 +535,9 @@ import { ProgressBarModule } from 'primeng/progressbar';
     }
     .resizer:hover, .resizer.active {
       background: var(--app-text-subtle);
+    }
+    @media (max-width: 767px) {
+      .resizer { display: none; }
     }
     .wikilink-dropdown {
       position: fixed;
@@ -985,7 +990,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly frontmatterRawYaml = signal('');
   readonly frontmatterYamlError = signal(false);
   readonly treePanelWidth = signal(280);
-  readonly treePanelCollapsed = signal(false);
+  readonly treePanelCollapsed = signal(window.innerWidth < 768);
   readonly showSearch = signal(false);
   readonly searchQuery = signal('');
   readonly searchHighlightIndex = signal<number>(-1);
@@ -1395,6 +1400,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   private openFile(node: TreeNode): void {
     this.navigatingFromTree = true;
+    if (window.innerWidth < 768) this.treePanelCollapsed.set(true);
     this.loadFile(node);
     const segments = (node.data as string).split('/');
     this.router.navigate(['explorer', ...segments]);
@@ -1641,6 +1647,13 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   @HostListener('document:mouseup')
   onMouseUp(): void {
     this.isResizing = false;
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    if (window.innerWidth < 768 && !this.treePanelCollapsed()) {
+      this.treePanelCollapsed.set(true);
+    }
   }
 
   @HostListener('document:keydown.escape')
