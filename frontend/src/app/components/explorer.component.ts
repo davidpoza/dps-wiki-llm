@@ -279,7 +279,12 @@ import { ProgressBarModule } from 'primeng/progressbar';
         @for (file of filteredFiles(); track file.data; let i = $index) {
           <div class="search-result" [class.is-active]="searchHighlightIndex() === i" (click)="selectFromSearch(file)">
             <i class="pi pi-file"></i>
-            <span [innerHTML]="file.label"></span>
+            <span class="search-result-info">
+              <span [innerHTML]="file.label"></span>
+              @if (searchResultPath(file); as dir) {
+                <span class="search-result-path">{{ dir }}</span>
+              }
+            </span>
           </div>
         }
       </div>
@@ -577,7 +582,7 @@ import { ProgressBarModule } from 'primeng/progressbar';
     }
     .search-result {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 8px;
       padding: 8px 10px;
       border-radius: 4px;
@@ -596,6 +601,20 @@ import { ProgressBarModule } from 'primeng/progressbar';
     .search-result .pi {
       color: var(--app-text-muted);
       font-size: 0.8rem;
+      flex-shrink: 0;
+    }
+    .search-result-info {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      flex: 1;
+    }
+    .search-result-path {
+      font-size: 0.75rem;
+      color: var(--app-text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .search-empty {
       text-align: center;
@@ -1018,7 +1037,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   readonly filteredFiles = computed(() => {
     const q = this.searchQuery().toLowerCase().trim();
-    return q ? this.allFiles().filter(n => n.label?.toLowerCase().includes(q)) : this.allFiles();
+    return q ? this.allFiles().filter(n => (n.data as string).toLowerCase().includes(q)) : this.allFiles();
   });
 
   selectedNode: TreeNode | null = null;
@@ -1580,6 +1599,12 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     if (idx === -1) return;
     const file = this.filteredFiles()[idx];
     if (file) this.selectFromSearch(file);
+  }
+
+  searchResultPath(node: TreeNode): string {
+    const path = node.data as string;
+    const idx = path.lastIndexOf('/');
+    return idx === -1 ? '' : path.slice(0, idx + 1);
   }
 
   selectFromSearch(node: TreeNode): void {
