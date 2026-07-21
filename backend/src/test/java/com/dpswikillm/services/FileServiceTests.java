@@ -96,7 +96,26 @@ class FileServiceTests {
     }
 
     @Test
-    void matchesQuotedTitleAgainstDeeperHeadingIgnoringWhitespace() {
+    void stripsFrontmatterTitleWhenBodyHasH1WithDifferentText() {
+        String markdown = """
+                ---
+                title: "My Note"
+                source: upload
+                ---
+                # A Different Heading
+
+                Body text.
+                """;
+
+        String result = service().stripDuplicateFrontmatterTitle(markdown);
+
+        assertThat(result).doesNotContain("title: \"My Note\"");
+        assertThat(result).contains("source: upload");
+        assertThat(result).contains("# A Different Heading");
+    }
+
+    @Test
+    void keepsFrontmatterTitleWhenBodyHasOnlyDeeperHeadings() {
         String markdown = """
                 ---
                 title:   "Mi segundo cerebro: una wiki"
@@ -109,7 +128,7 @@ class FileServiceTests {
 
         String result = service().stripDuplicateFrontmatterTitle(markdown);
 
-        assertThat(result).doesNotContain("title:");
+        assertThat(result).contains("title:");
         assertThat(result).contains("source: upload");
         assertThat(result).contains("Mi segundo cerebro: una wiki");
     }

@@ -33,6 +33,8 @@ public class FileService {
     private static final Pattern TOP_LEVEL_TITLE_LINE = Pattern.compile("title:[ \\t]*.*");
     private static final Pattern BODY_HEADING =
             Pattern.compile("^#{1,6}[ \\t]+(.+?)[ \\t]*$", Pattern.MULTILINE);
+    private static final Pattern H1_HEADING =
+            Pattern.compile("^#[ \\t]+.+", Pattern.MULTILINE);
 
     private final VaultPathResolver pathResolver;
     private final SnapshotService snapshotService;
@@ -324,7 +326,7 @@ public class FileService {
         }
         String title = unquote(titleMatcher.group(1).trim());
         String body = markdown.substring(frontmatter.end());
-        if (title.isEmpty() || !bodyContainsHeading(body, title)) {
+        if (title.isEmpty() || !bodyHasH1(body)) {
             return markdown;
         }
         String stripped = removeTopLevelTitleLine(frontmatter.group(1));
@@ -332,14 +334,8 @@ public class FileService {
         return rebuilt + body;
     }
 
-    private boolean bodyContainsHeading(String body, String title) {
-        Matcher headings = BODY_HEADING.matcher(body);
-        while (headings.find()) {
-            if (headings.group(1).trim().equals(title)) {
-                return true;
-            }
-        }
-        return false;
+    private boolean bodyHasH1(String body) {
+        return H1_HEADING.matcher(body).find();
     }
 
     private String removeTopLevelTitleLine(String frontmatter) {
