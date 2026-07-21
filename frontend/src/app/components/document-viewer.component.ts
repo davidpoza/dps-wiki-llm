@@ -17,7 +17,10 @@ import { replaceAll } from '@milkdown/utils';
 import { commonmark } from '@milkdown/preset-commonmark';
 import { gfm } from '@milkdown/preset-gfm';
 import { ButtonModule } from 'primeng/button';
-import { TranslocoPipe } from '@jsverse/transloco';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { ToastModule } from 'primeng/toast';
+import { ConfirmationService, MessageService } from 'primeng/api';
+import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { FileService } from '../services/file.service';
 import { ThemeService } from '../services/theme.service';
 import { AuthService } from '../services/auth.service';
@@ -27,7 +30,8 @@ import { createObsidianImagePreviewPlugin, OBSIDIAN_IMAGE_PREVIEW_REFRESH } from
 @Component({
   selector: 'app-document-viewer',
   standalone: true,
-  imports: [ButtonModule, TranslocoPipe],
+  imports: [ButtonModule, ConfirmDialogModule, ToastModule, TranslocoPipe],
+  providers: [ConfirmationService, MessageService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <main class="viewer-shell">
@@ -45,6 +49,9 @@ import { createObsidianImagePreviewPlugin, OBSIDIAN_IMAGE_PREVIEW_REFRESH } from
             (onClick)="theme.toggle()"
           />
           <p-button severity="secondary" [label]="'common.home' | transloco" size="small" (onClick)="goHome()" />
+          @if (auth.isLoggedIn()) {
+            <p-button severity="danger" icon="pi pi-trash" [label]="'viewer.delete' | transloco" size="small" (onClick)="confirmDelete()" />
+          }
         </div>
       </header>
 
@@ -83,6 +90,8 @@ import { createObsidianImagePreviewPlugin, OBSIDIAN_IMAGE_PREVIEW_REFRESH } from
         }
       </div>
     </main>
+    <p-confirmdialog />
+    <p-toast />
   `,
   styles: [`
     :host { display: block; height: 100vh; overflow: hidden; }
@@ -233,7 +242,10 @@ export class DocumentViewerComponent implements AfterViewInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly fileService = inject(FileService);
   private readonly cdr = inject(ChangeDetectorRef);
-  private readonly auth = inject(AuthService);
+  private readonly confirmationService = inject(ConfirmationService);
+  private readonly messageService = inject(MessageService);
+  private readonly t = inject(TranslocoService);
+  readonly auth = inject(AuthService);
   private readonly api = inject(ApiService);
   readonly theme = inject(ThemeService);
 
@@ -353,5 +365,27 @@ export class DocumentViewerComponent implements AfterViewInit, OnDestroy {
 
   goHome(): void {
     this.router.navigateByUrl('/');
+  }
+
+  confirmDelete(): void {
+    const path = this.filePath();
+    if (!path) return;
+    const fileName = path.slice(path.lastIndexOf('/') + 1);
+    this.confirmationService.confirm({
+      message: this.t.translate('viewer.deleteConfirmMessage', { name: fileName }),
+      header: this.t.translate('viewer.deleteConfirmHeader'),
+      icon: 'pi pi-trash',
+      accept: () => {
+        this.fileService.deleteFile(path).subscribe({
+          next: () => this.router.navigateByUrl('/'),
+          error: () =>
+            this.messageService.add({
+              severity: 'error',
+              summary: this.t.translate('common.error'),
+              detail: this.t.translate('viewer.deleteError'),
+            }),
+        });
+      },
+    });
   }
 }

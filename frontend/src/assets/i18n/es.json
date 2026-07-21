@@ -186,6 +186,12 @@
     "linkDiscoveryError": "Error al buscar enlaces",
     "linkDiscoveryNoKeywords": "Este documento no tiene keywords en el frontmatter. Ingéstalo primero para generarlos."
   },
+  "viewer": {
+    "delete": "Eliminar",
+    "deleteConfirmHeader": "Eliminar fichero",
+    "deleteConfirmMessage": "¿Eliminar el fichero \"{{ name }}\"?",
+    "deleteError": "No se pudo eliminar el fichero"
+  },
   "profile": {
     "title": "Perfil",
     "subtitle": "Tu cuenta",

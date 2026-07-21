@@ -186,6 +186,12 @@
     "linkDiscoveryError": "Error discovering links",
     "linkDiscoveryNoKeywords": "This document has no keywords in its frontmatter. Ingest it first to generate them."
   },
+  "viewer": {
+    "delete": "Delete",
+    "deleteConfirmHeader": "Delete file",
+    "deleteConfirmMessage": "Delete file \"{{ name }}\"?",
+    "deleteError": "Could not delete file"
+  },
   "profile": {
     "title": "Profile",
     "subtitle": "Your account",
