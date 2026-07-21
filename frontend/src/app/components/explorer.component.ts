@@ -182,6 +182,13 @@ import { ProgressBarModule } from 'primeng/progressbar';
                     (onClick)="generatePdf()"
                     [title]="'explorer.generatePdf' | transloco"
                   />
+                  <p-button
+                    icon="pi pi-trash"
+                    size="small"
+                    severity="danger"
+                    (onClick)="deleteCurrentFile()"
+                    [title]="'explorer.contextMenuDelete' | transloco"
+                  />
                 </div>
               </div>
             </div>
@@ -1272,6 +1279,31 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
           ? this.t.translate('explorer.toastErrorMoveConflict')
           : this.t.translate('explorer.toastErrorMove');
         this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: msg });
+      },
+    });
+  }
+
+  deleteCurrentFile(): void {
+    const path = this.selectedPath();
+    const label = this.selectedLabel();
+    if (!path) return;
+    this.confirmationService.confirm({
+      message: this.t.translate('explorer.confirmDeleteMessage', { name: label }),
+      header: this.t.translate('explorer.confirmDeleteHeader'),
+      icon: 'pi pi-trash',
+      accept: () => {
+        this.fileService.deleteFile(path).subscribe({
+          next: () => {
+            this.selectedPath.set(null);
+            this.selectedLabel.set('');
+            this.isDirty.set(false);
+            if (this.editor) this.editor.action(replaceAll(''));
+            this.reloadTree();
+            this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryDeleted'), detail: this.t.translate('explorer.toastSuccessDeleted', { name: label }) });
+          },
+          error: () =>
+            this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorDelete') }),
+        });
       },
     });
   }
