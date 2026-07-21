@@ -3,6 +3,7 @@ import { NgClass } from '@angular/common';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { DialogModule } from 'primeng/dialog';
 import { PaginatorModule, PaginatorState } from 'primeng/paginator';
+import { Router } from '@angular/router';
 import { ApiService, SyncEvent } from '../services/api.service';
 import { Conflict, FileHistoryEntry, SyncResult } from '../types';
 
@@ -54,7 +55,7 @@ const FIRST_PAGE = 0;
           <div class="entry-card">
             <div class="entry-row">
               <span class="source-badge" [ngClass]="sourceClass(entry.source)">{{ sourceLabel(entry.source) }}</span>
-              <span class="file-path" [title]="entry.path">{{ entry.path }}</span>
+              <span class="file-path" [title]="entry.path" role="link" tabindex="0" (click)="openFile(entry.path)" (keydown.enter)="openFile(entry.path)">{{ entry.path }}</span>
               <span class="stat-added">+{{ entry.linesAdded }}</span>
               <span class="stat-deleted">-{{ entry.linesDeleted }}</span>
               <span class="entry-date">{{ formatDate(entry.createdAt) }}</span>
@@ -149,7 +150,8 @@ const FIRST_PAGE = 0;
     .source-local { background: #dbeafe; color: #1e40af; }
     .source-job { background: #ede9fe; color: #6d28d9; }
     .source-webdav { background: #dcfce7; color: #166534; }
-    .file-path { flex: 1; font-family: monospace; font-size: 0.8rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-path { flex: 1; font-family: monospace; font-size: 0.8rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: var(--app-primary); }
+    .file-path:hover { text-decoration: underline; }
     .stat-added { color: #22863a; font-weight: 600; }
     .stat-deleted { color: #cb2431; font-weight: 600; }
     .entry-date { color: var(--app-text-muted); font-size: 0.75rem; }
@@ -183,6 +185,7 @@ const FIRST_PAGE = 0;
 export class GitHistoryComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly t = inject(TranslocoService);
+  private readonly router = inject(Router);
 
   readonly entries = signal<FileHistoryEntry[]>([]);
   readonly totalElements = signal(0);
@@ -371,6 +374,10 @@ export class GitHistoryComponent implements OnInit {
       case 'WEBDAV_PULL': return 'source-webdav';
       default: return 'source-job';
     }
+  }
+
+  openFile(path: string): void {
+    this.router.navigate(['explorer', ...path.split('/')]);
   }
 
   formatDate(dateStr: string): string {
