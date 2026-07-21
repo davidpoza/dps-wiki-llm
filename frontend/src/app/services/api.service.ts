@@ -144,6 +144,10 @@ export class ApiService {
     return this.http.post<EnqueueResponse>('/api/ingest/upload', form);
   }
 
+  ingestText(content: string, title: string, mode: JobMode = 'unattended'): Observable<EnqueueResponse> {
+    return this.http.post<EnqueueResponse>('/api/ingest/text', { content, title, mode });
+  }
+
   getJobs(): Observable<JobSummary[]> {
     return this.http.get<JobSummary[]>('/api/jobs');
   }

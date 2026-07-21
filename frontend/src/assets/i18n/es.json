@@ -52,7 +52,12 @@
     "urlPlaceholder": "https://…",
     "jobEnqueued": "Trabajo encolado: {{ id }} — revisa el progreso en la pestaña Trabajos.",
     "uploadFailed": "Error al subir el fichero",
-    "ingestFailed": "Error al ingestar la URL"
+    "ingestFailed": "Error al ingestar la URL",
+    "pasteMarkdown": "Pegar Markdown",
+    "pasteTitlePlaceholder": "Título del documento (opcional)",
+    "pastePlaceholder": "Pega aquí tu Markdown…",
+    "ingestText": "Ingestar texto",
+    "textTooLarge": "El contenido supera el límite de 2 MB"
   },
   "jobs": {
     "empty": "Sin trabajos. Ingesta un documento o haz una pregunta para empezar.",

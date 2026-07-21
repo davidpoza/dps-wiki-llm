@@ -65,6 +65,21 @@ public class RawIntakeService {
         return rawPath;
     }
 
+    public String ingestText(String content, String title) throws IOException {
+        if (content == null || content.isBlank()) {
+            throw new IllegalArgumentException("Markdown content must not be empty");
+        }
+        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > MAX_MARKDOWN_BYTES) {
+            throw new IllegalArgumentException("Markdown content exceeds size limit");
+        }
+        String base = (title != null && !title.isBlank()) ? title : "clipboard";
+        String slug = TextUtil.slugify(base, "clipboard");
+        String rawPath = "raw/inbox/" + Instant.now().toString().replace(":", "-") + "-" + slug + ".md";
+        writeRaw(rawPath, content);
+        return rawPath;
+    }
+
     /**
      * Fetch a URL through the {@code web-extractor} microservice (real browser
      * rendering) and persist the resulting structured markdown with YAML

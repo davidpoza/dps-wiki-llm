@@ -6,6 +6,7 @@ import com.dpswikillm.domain.JobMode;
 import com.dpswikillm.domain.JobType;
 import com.dpswikillm.dto.EnqueueJobRequest;
 import com.dpswikillm.dto.EnqueueJobResponse;
+import com.dpswikillm.dto.IngestTextRequest;
 import com.dpswikillm.dto.JobSummary;
 import com.dpswikillm.dto.ReviewRequest;
 import com.dpswikillm.domain.SearchResult;
@@ -114,6 +115,13 @@ public class JobController {
     public EnqueueJobResponse enqueueMarkdownUpload(@RequestParam("file") MultipartFile file,
                                                     @RequestParam(value = "mode", required = false) JobMode mode) throws IOException {
         return queueService.enqueue(JobType.INGEST, mode == null ? JobMode.unattended : mode, rawIntakeService.ingestFile(file));
+    }
+
+    @PostMapping("/ingest/text")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public EnqueueJobResponse enqueueIngestText(@Valid @RequestBody IngestTextRequest request) throws IOException {
+        return queueService.enqueue(JobType.INGEST, request.mode() == null ? JobMode.unattended : request.mode(),
+                rawIntakeService.ingestText(request.content(), request.title()));
     }
 
     @PostMapping("/answer")

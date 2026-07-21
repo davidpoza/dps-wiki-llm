@@ -4,6 +4,7 @@ import { ButtonModule } from 'primeng/button';
 import { InputText } from 'primeng/inputtext';
 import { SelectButton } from 'primeng/selectbutton';
 import { TagModule } from 'primeng/tag';
+import { TextareaModule } from 'primeng/textarea';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { ApiService } from '../services/api.service';
 import { JobMode } from '../types';
@@ -11,7 +12,7 @@ import { JobMode } from '../types';
 @Component({
   selector: 'app-ingest',
   standalone: true,
-  imports: [FormsModule, ButtonModule, InputText, SelectButton, TagModule, TranslocoPipe],
+  imports: [FormsModule, ButtonModule, InputText, SelectButton, TagModule, TextareaModule, TranslocoPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="ingest">
@@ -48,6 +49,22 @@ import { JobMode } from '../types';
         </div>
       </div>
 
+      <div class="section">
+        <div class="section-title">{{ 'ingest.pasteMarkdown' | transloco }}</div>
+        <input pInputText type="text" [ngModel]="mdTitle()" (ngModelChange)="mdTitle.set($event)"
+               [placeholder]="'ingest.pasteTitlePlaceholder' | transloco" class="url-input" />
+        <textarea pTextarea [ngModel]="mdText()" (ngModelChange)="mdText.set($event)"
+                  [placeholder]="'ingest.pastePlaceholder' | transloco"
+                  rows="8" class="md-textarea"></textarea>
+        @if (mdTooLarge()) {
+          <span class="size-warning">{{ 'ingest.textTooLarge' | transloco }}</span>
+        }
+        <div>
+          <button pButton type="button" [label]="'ingest.ingestText' | transloco" icon="pi pi-clipboard"
+                  [disabled]="!mdText().trim() || mdTooLarge() || busy()" (click)="ingestMdText()"></button>
+        </div>
+      </div>
+
       @if (lastJobId()) {
         <div class="enqueue-notice">
           {{ 'ingest.jobEnqueued' | transloco: { id: lastJobId() } }}
@@ -79,6 +96,8 @@ import { JobMode } from '../types';
     }
     code { font-family: monospace; font-size: 0.8em; }
     .error { color: var(--app-error-text); font-size: 0.85rem; padding: 8px; background: var(--app-error-bg); border-radius: 4px; }
+    .md-textarea { width: 100%; font-family: monospace; font-size: 0.85rem; resize: vertical; }
+    .size-warning { font-size: 0.82rem; color: var(--app-error-text); }
   `]
 })
 export class IngestComponent {
@@ -88,9 +107,13 @@ export class IngestComponent {
   readonly mode = signal<JobMode>('unattended');
   readonly url = signal('');
   readonly selectedFile = signal<File | null>(null);
+  readonly mdText = signal('');
+  readonly mdTitle = signal('');
   readonly busy = signal(false);
   readonly lastJobId = signal<string | null>(null);
   readonly errorMessage = signal<string | null>(null);
+
+  readonly mdTooLarge = computed(() => new TextEncoder().encode(this.mdText()).length > 2_097_152);
 
   readonly modeOptions = computed(() => [
     { label: this.t.translate('ingest.modeOptions.unattended'), value: 'unattended' },
@@ -116,6 +139,25 @@ export class IngestComponent {
       },
       error: err => {
         this.errorMessage.set(err.message ?? this.t.translate('ingest.uploadFailed'));
+        this.busy.set(false);
+      },
+    });
+  }
+
+  ingestMdText(): void {
+    const content = this.mdText().trim();
+    if (!content || this.mdTooLarge()) return;
+    this.busy.set(true);
+    this.errorMessage.set(null);
+    this.api.ingestText(content, this.mdTitle().trim(), this.mode()).subscribe({
+      next: res => {
+        this.lastJobId.set(res.jobId);
+        this.mdText.set('');
+        this.mdTitle.set('');
+        this.busy.set(false);
+      },
+      error: err => {
+        this.errorMessage.set(err.message ?? this.t.translate('ingest.ingestFailed'));
         this.busy.set(false);
       },
     });

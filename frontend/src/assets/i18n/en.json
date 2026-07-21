@@ -52,7 +52,12 @@
     "urlPlaceholder": "https://…",
     "jobEnqueued": "Job enqueued: {{ id }} — watch progress in the Jobs tab.",
     "uploadFailed": "Upload failed",
-    "ingestFailed": "Ingest failed"
+    "ingestFailed": "Ingest failed",
+    "pasteMarkdown": "Paste Markdown",
+    "pasteTitlePlaceholder": "Document title (optional)",
+    "pastePlaceholder": "Paste your Markdown here…",
+    "ingestText": "Ingest text",
+    "textTooLarge": "Content exceeds the 2 MB limit"
   },
   "jobs": {
     "empty": "No jobs yet. Ingest a document or ask a question to get started.",
