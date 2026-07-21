@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { SelectButtonModule } from 'primeng/selectbutton';
@@ -86,6 +86,36 @@ interface PromptState extends Prompt {
             }
             @if (keywordsError()) {
               <span class="feedback error">Error al generar keywords</span>
+            }
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2>Health Check</h2>
+          <p class="section-desc">Reconcilia todo el vault: genera los embeddings que falten en <code>wiki/topics</code>, <code>wiki/concepts</code> y <code>wiki/sources</code>, y descubre conexiones nuevas entre notas de <code>wiki/concepts</code> y <code>wiki/sources</code> añadiendo los enlaces y sus backlinks en la sección «Related». Es el mismo proceso de descubrimiento del ingest, aplicado a todo el vault. Los cambios son reversibles desde el historial.</p>
+          <div class="reindex-row">
+            <p-button
+              label="Lanzar Health Check"
+              size="small"
+              [loading]="healthChecking()"
+              [disabled]="healthChecking()"
+              (onClick)="startHealthCheck()"
+            />
+            @if (healthChecking()) {
+              <span class="reindex-progress">
+                @if (hcPhase() === 'embeddings') {
+                  Generando embeddings {{ hcProcessed() }}/{{ hcTotal() }} ({{ hcPercent() }}%)
+                } @else {
+                  Buscando conexiones {{ hcProcessed() }}/{{ hcTotal() }} ({{ hcPercent() }}%)
+                }
+                &nbsp;·&nbsp; embeddings {{ hcEmbeddings() }} · conexiones {{ hcConnections() }}
+              </span>
+            }
+            @if (hcDone()) {
+              <span class="feedback success">Health Check completado · embeddings construidos: {{ hcEmbeddings() }} · conexiones encontradas: {{ hcConnections() }}</span>
+            }
+            @if (hcError()) {
+              <span class="feedback error">Error en el Health Check</span>
             }
           </div>
         </section>
@@ -239,6 +269,19 @@ export class SettingsComponent implements OnInit {
   readonly keywordsSkipped = signal(0);
   readonly keywordsDone = signal(false);
   readonly keywordsError = signal<string | null>(null);
+  readonly healthChecking = signal(false);
+  readonly hcPhase = signal<'embeddings' | 'connections' | 'done'>('embeddings');
+  readonly hcProcessed = signal(0);
+  readonly hcTotal = signal(0);
+  readonly hcEmbeddings = signal(0);
+  readonly hcConnections = signal(0);
+  readonly hcDone = signal(false);
+  readonly hcError = signal<string | null>(null);
+  readonly hcPercent = computed(() => {
+    const total = this.hcTotal();
+    return total > 0 ? Math.round((this.hcProcessed() / total) * 100) : 100;
+  });
+
   resourceFolder = '';
   readonly resourceSaving = signal(false);
   readonly resourceSaved = signal(false);
@@ -337,6 +380,36 @@ export class SettingsComponent implements OnInit {
       error: (err: Error) => {
         this.generatingKeywords.set(false);
         this.keywordsError.set(err.message ?? 'Error desconocido');
+      }
+    });
+  }
+
+  startHealthCheck(): void {
+    this.healthChecking.set(true);
+    this.hcDone.set(false);
+    this.hcError.set(null);
+    this.hcPhase.set('embeddings');
+    this.hcProcessed.set(0);
+    this.hcTotal.set(0);
+    this.hcEmbeddings.set(0);
+    this.hcConnections.set(0);
+
+    this.api.runHealthCheck().subscribe({
+      next: (progress) => {
+        this.hcPhase.set(progress.phase);
+        this.hcProcessed.set(progress.processed);
+        this.hcTotal.set(progress.total);
+        this.hcEmbeddings.set(progress.embeddingsBuilt);
+        this.hcConnections.set(progress.connectionsFound);
+      },
+      complete: () => {
+        this.healthChecking.set(false);
+        this.hcDone.set(true);
+        setTimeout(() => this.hcDone.set(false), 8000);
+      },
+      error: (err: Error) => {
+        this.healthChecking.set(false);
+        this.hcError.set(err.message ?? 'Error desconocido');
       }
     });
   }

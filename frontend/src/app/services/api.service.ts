@@ -77,6 +77,14 @@ export interface KeywordGenerationProgress {
   skipped: number;
 }
 
+export interface HealthCheckProgress {
+  phase: 'embeddings' | 'connections' | 'done';
+  processed: number;
+  total: number;
+  embeddingsBuilt: number;
+  connectionsFound: number;
+}
+
 export interface DiscoveredLink {
   path: string;
   title: string;
@@ -282,6 +290,42 @@ export class ApiService {
       es.addEventListener('done', (e: MessageEvent) => {
         completed = true;
         observer.next(JSON.parse(e.data) as KeywordGenerationProgress);
+        es.close();
+        observer.complete();
+      });
+      es.addEventListener('error', (e: MessageEvent) => {
+        completed = true;
+        const data = e.data
+          ? (JSON.parse(e.data) as { message: string })
+          : { message: 'Error desconocido' };
+        es.close();
+        observer.error(new Error(data.message));
+      });
+      es.onerror = () => {
+        es.close();
+        if (!completed) {
+          observer.error(new Error('Error de conexión'));
+        }
+      };
+      return () => es.close();
+    });
+  }
+
+  runHealthCheck(): Observable<HealthCheckProgress> {
+    return new Observable((observer: Observer<HealthCheckProgress>) => {
+      const token = this.auth.token();
+      const url = token
+        ? `/api/settings/health-check?token=${encodeURIComponent(token)}`
+        : '/api/settings/health-check';
+      const es = new EventSource(url);
+      let completed = false;
+
+      es.addEventListener('progress', (e: MessageEvent) => {
+        observer.next(JSON.parse(e.data) as HealthCheckProgress);
+      });
+      es.addEventListener('done', (e: MessageEvent) => {
+        completed = true;
+        observer.next(JSON.parse(e.data) as HealthCheckProgress);
         es.close();
         observer.complete();
       });

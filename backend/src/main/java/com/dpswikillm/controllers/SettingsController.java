@@ -1,8 +1,10 @@
 package com.dpswikillm.controllers;
 
+import com.dpswikillm.dto.HealthCheckProgress;
 import com.dpswikillm.dto.KeywordGenerationProgress;
 import com.dpswikillm.dto.ReindexProgress;
 import com.dpswikillm.dto.ResourceSettingsDto;
+import com.dpswikillm.services.HealthCheckService;
 import com.dpswikillm.services.KeywordGenerationService;
 import com.dpswikillm.services.ReindexService;
 import com.dpswikillm.services.ResourceSettingsService;
@@ -25,12 +27,15 @@ public class SettingsController {
     private final ReindexService reindexService;
     private final ResourceSettingsService resourceSettingsService;
     private final KeywordGenerationService keywordGenerationService;
+    private final HealthCheckService healthCheckService;
 
     public SettingsController(ReindexService reindexService, ResourceSettingsService resourceSettingsService,
-                             KeywordGenerationService keywordGenerationService) {
+                             KeywordGenerationService keywordGenerationService,
+                             HealthCheckService healthCheckService) {
         this.reindexService = reindexService;
         this.resourceSettingsService = resourceSettingsService;
         this.keywordGenerationService = keywordGenerationService;
+        this.healthCheckService = healthCheckService;
     }
 
     @GetMapping("/resources")
@@ -91,6 +96,31 @@ public class SettingsController {
                     }
                 });
                 emitter.send(SseEmitter.event().name("done").data(lastProgress.get()));
+                emitter.complete();
+            } catch (Exception ex) {
+                try {
+                    emitter.send(SseEmitter.event().name("error").data(new ErrorMessage(ex.getMessage())));
+                } catch (IOException | IllegalStateException ignored) {
+                }
+                emitter.complete();
+            }
+        });
+        return emitter;
+    }
+
+    @GetMapping(value = "/health-check", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter healthCheck() {
+        SseEmitter emitter = new SseEmitter(0L);
+        CompletableFuture.runAsync(() -> {
+            try {
+                HealthCheckProgress result = healthCheckService.run(progress -> {
+                    try {
+                        emitter.send(SseEmitter.event().name("progress").data(progress));
+                    } catch (IOException | IllegalStateException ex) {
+                        throw new IllegalStateException("SSE send failed", ex);
+                    }
+                });
+                emitter.send(SseEmitter.event().name("done").data(result));
                 emitter.complete();
             } catch (Exception ex) {
                 try {
