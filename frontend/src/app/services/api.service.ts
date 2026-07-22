@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable, Observer } from 'rxjs';
-import { FileHistoryEntry, HistoryPage, SyncResult, Conflict, JobMode } from '../types';
+import { ConceptProposal, FileHistoryEntry, HistoryPage, SyncResult, Conflict, JobMode } from '../types';
 import { AuthService } from './auth.service';
 
 export interface EnqueueResponse {
@@ -63,6 +63,7 @@ export interface JobSummary {
   completedAt?: string;
   error?: string;
   affectedPaths?: string[];
+  conceptProposals?: ConceptProposal[];
 }
 
 export interface ReindexProgress {

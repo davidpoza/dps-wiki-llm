@@ -146,7 +146,7 @@ class JobRevertServiceTests {
         when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> invocation.getArgument(0));
         OperationRepository operationRepository = mock(OperationRepository.class);
         when(operationRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        JobLifecycleService lifecycleService = new JobLifecycleService(jobRepository, mock(JobEventService.class));
+        JobLifecycleService lifecycleService = new JobLifecycleService(jobRepository, mock(JobEventService.class), new com.fasterxml.jackson.databind.ObjectMapper());
 
         return new JobRevertService(
                 jobRepository,

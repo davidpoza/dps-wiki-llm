@@ -57,7 +57,7 @@ const FIRST_PAGE = 0;
               <button class="editor-btn" [title]="entry.path" (click)="openFile(entry.path)">
                 <i class="pi pi-file-edit"></i>
               </button>
-              <span class="file-path">{{ entry.path }}</span>
+              <span class="file-path" (click)="openFile(entry.path)">{{ entry.path }}</span>
             </div>
             <div class="meta-row">
               <span class="source-badge" [ngClass]="sourceClass(entry.source)">{{ sourceLabel(entry.source) }}</span>
@@ -154,7 +154,8 @@ const FIRST_PAGE = 0;
     .editor-btn { flex-shrink: 0; display: flex; align-items: center; justify-content: center; min-width: 28px; min-height: 28px; padding: 0.2rem; cursor: pointer; border: none; background: transparent; color: var(--app-primary); border-radius: 4px; }
     .editor-btn:hover { background: var(--app-primary-soft); }
     .editor-btn .pi { font-size: 0.9rem; }
-    .file-path { font-family: monospace; font-size: 0.8rem; word-break: break-all; line-height: 1.4; padding-top: 0.15rem; }
+    .file-path { font-family: monospace; font-size: 0.8rem; word-break: break-all; line-height: 1.4; padding-top: 0.15rem; cursor: pointer; color: var(--app-primary); }
+    .file-path:hover { text-decoration: underline; }
     .meta-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.8rem; }
     .source-badge { font-size: 0.7rem; font-weight: 600; padding: 0.1rem 0.45rem; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
     .source-local { background: #dbeafe; color: #1e40af; }

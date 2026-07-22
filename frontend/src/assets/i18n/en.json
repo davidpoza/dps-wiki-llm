@@ -63,7 +63,10 @@
     "empty": "No jobs yet. Ingest a document or ask a question to get started.",
     "revert": "Revert",
     "files": "Files",
-    "awaitingReview": "This job is awaiting your review. Switch to the Review tab."
+    "awaitingReview": "This job is awaiting your review. Switch to the Review tab.",
+    "conceptProposals": "Proposed concepts",
+    "conceptNew": "new",
+    "conceptMerged": "merged"
   },
   "review": {
     "empty": "No jobs awaiting review.",

@@ -1,5 +1,5 @@
 import { inject, Injectable, OnDestroy, signal } from '@angular/core';
-import { JobState, JobStatus, ScanActivity, SseJobEvent } from '../types';
+import { ConceptProposal, JobState, JobStatus, ScanActivity, SseJobEvent } from '../types';
 import { ApiService, JobSummary } from './api.service';
 import { AuthService } from './auth.service';
 
@@ -35,6 +35,7 @@ export class JobsStore implements OnDestroy {
             status: j.status as JobStatus,
             phases: [],
             files: (j.affectedPaths ?? []).map(path => ({ path, action: 'modified' as const })),
+            conceptProposals: j.conceptProposals ?? [],
             error: j.error,
             createdAt: j.createdAt,
             completedAt: j.completedAt ?? undefined,
@@ -88,12 +89,20 @@ export class JobsStore implements OnDestroy {
         queuePosition: event.queuePosition,
         phases: [],
         files: [],
+        conceptProposals: [],
       };
 
       const next: JobState = { ...existing, status, queuePosition: event.queuePosition };
 
       if (event.step === 'file' && event.path) {
         next.files = [...existing.files, { path: event.path, action: event.action ?? 'read' }];
+      } else if (event.step === 'concept-proposal' && event.result) {
+        try {
+          const proposal = JSON.parse(event.result) as ConceptProposal;
+          next.conceptProposals = [...(existing.conceptProposals ?? []), proposal];
+        } catch {
+          // ignore malformed proposal
+        }
       } else if (event.step?.endsWith('-scan') && event.message) {
         const isEmbedding = event.step === 'embedding-scan';
         const label = isEmbedding ? 'embeddings' : 'scanning';

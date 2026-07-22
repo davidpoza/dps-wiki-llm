@@ -42,6 +42,13 @@ export interface Conflict {
 }
 export type JobStatus = 'QUEUED' | 'STARTED' | 'PROGRESS' | 'AWAITING_REVIEW' | 'COMPLETED' | 'FAILED' | 'REVERTED' | 'CANCELLED';
 
+export interface ConceptProposal {
+  proposedPath: string;
+  proposedTitle: string;
+  deduplicated: boolean;
+  resolvedPath?: string | null;
+}
+
 export interface JobPhase {
   step: string;
   message: string;
@@ -77,6 +84,7 @@ export interface JobState {
   queuePosition?: number;
   phases: JobPhase[];
   files: JobFileEvent[];
+  conceptProposals: ConceptProposal[];
   currentActivity?: ScanActivity | null;
   result?: string;
   error?: string;

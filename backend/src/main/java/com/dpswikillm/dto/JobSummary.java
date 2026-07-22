@@ -11,5 +11,6 @@ public record JobSummary(
         Instant createdAt,
         Instant completedAt,
         String error,
-        List<String> affectedPaths
+        List<String> affectedPaths,
+        List<ConceptProposal> conceptProposals
 ) {}

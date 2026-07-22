@@ -4,6 +4,7 @@ import com.dpswikillm.domain.Job;
 import com.dpswikillm.domain.JobConnectionCandidate;
 import com.dpswikillm.domain.JobMode;
 import com.dpswikillm.domain.JobType;
+import com.dpswikillm.dto.ConceptProposal;
 import com.dpswikillm.dto.EnqueueJobRequest;
 import com.dpswikillm.dto.EnqueueJobResponse;
 import com.dpswikillm.dto.IngestTextRequest;
@@ -75,7 +76,7 @@ public class JobController {
     public java.util.List<JobSummary> listJobs() {
         return jobRepository.findTop50ByOrderByCreatedAtDesc().stream()
                 .map(j -> new JobSummary(j.getId(), j.getType().name(), j.getStatus().name(),
-                        j.getCreatedAt(), j.getCompletedAt(), j.getError(), parseAffectedPaths(j)))
+                        j.getCreatedAt(), j.getCompletedAt(), j.getError(), parseAffectedPaths(j), parseConceptProposals(j)))
                 .toList();
     }
 
@@ -84,6 +85,16 @@ public class JobController {
         if (raw == null || raw.isBlank()) return List.of();
         try {
             return objectMapper.readValue(raw, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private List<ConceptProposal> parseConceptProposals(Job job) {
+        String raw = job.getConceptProposals();
+        if (raw == null || raw.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(raw, new TypeReference<List<ConceptProposal>>() {});
         } catch (Exception e) {
             return List.of();
         }

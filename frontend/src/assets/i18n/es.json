@@ -63,7 +63,10 @@
     "empty": "Sin trabajos. Ingesta un documento o haz una pregunta para empezar.",
     "revert": "Revertir",
     "files": "Ficheros",
-    "awaitingReview": "Este trabajo está esperando tu revisión. Cambia a la pestaña Revisión."
+    "awaitingReview": "Este trabajo está esperando tu revisión. Cambia a la pestaña Revisión.",
+    "conceptProposals": "Conceptos propuestos",
+    "conceptNew": "nuevo",
+    "conceptMerged": "fusionado"
   },
   "review": {
     "empty": "Sin trabajos pendientes de revisión.",

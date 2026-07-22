@@ -5,6 +5,8 @@ import com.dpswikillm.domain.MutationActionType;
 import com.dpswikillm.domain.MutationPlan;
 import com.dpswikillm.domain.SearchResult;
 import com.dpswikillm.dto.ChatMessage;
+import com.dpswikillm.dto.ConceptProposal;
+import com.dpswikillm.dto.ConceptResolutionResult;
 import com.dpswikillm.repositories.AppSettingRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -57,35 +59,44 @@ public class ConceptResolutionService {
         this.objectMapper = objectMapper;
     }
 
-    public MutationPlan resolve(MutationPlan plan) {
+    public ConceptResolutionResult resolve(MutationPlan plan) {
         double threshold = readThreshold();
         List<MutationAction> resolved = new ArrayList<>();
+        List<ConceptProposal> proposals = new ArrayList<>();
         for (MutationAction action : plan.pageActions() == null ? List.<MutationAction>of() : plan.pageActions()) {
-            resolved.add(resolveAction(action, threshold));
+            ResolvedAction result = resolveAction(action, threshold);
+            resolved.add(result.action());
+            if (result.proposal() != null) {
+                proposals.add(result.proposal());
+            }
         }
-        return new MutationPlan(plan.planId(), resolved);
+        return new ConceptResolutionResult(new MutationPlan(plan.planId(), resolved), proposals);
     }
 
-    private MutationAction resolveAction(MutationAction action, double threshold) {
+    private record ResolvedAction(MutationAction action, ConceptProposal proposal) {}
+
+    private ResolvedAction resolveAction(MutationAction action, double threshold) {
         if (action.action() != MutationActionType.create || action.path() == null
                 || !action.path().startsWith("wiki/concepts/")) {
-            return action;
+            return new ResolvedAction(action, null);
         }
         String conceptName = slugToName(action.path());
+        String proposedTitle = action.title() != null ? action.title() : conceptName;
         List<SearchResult> candidates = semanticSearchService
                 .searchByType(conceptName, CONCEPT_DOC_TYPE, JUDGE_CANDIDATE_LIMIT)
                 .stream()
                 .filter(r -> r.score() >= threshold)
                 .toList();
         if (candidates.isEmpty()) {
-            return action;
+            return new ResolvedAction(action, new ConceptProposal(action.path(), proposedTitle, false, null));
         }
         String matchedPath = callJudge(conceptName, candidates);
         if (matchedPath == null) {
-            return action;
+            return new ResolvedAction(action, new ConceptProposal(action.path(), proposedTitle, false, null));
         }
         log.info("Concept '{}' matched to existing '{}' — rewriting create → update", action.path(), matchedPath);
-        return buildUpdateAction(action, matchedPath);
+        MutationAction updated = buildUpdateAction(action, matchedPath);
+        return new ResolvedAction(updated, new ConceptProposal(action.path(), proposedTitle, true, matchedPath));
     }
 
     private String callJudge(String conceptName, List<SearchResult> candidates) {

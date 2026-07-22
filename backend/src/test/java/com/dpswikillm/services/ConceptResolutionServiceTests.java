@@ -16,6 +16,7 @@ import com.dpswikillm.domain.MutationAction;
 import com.dpswikillm.domain.MutationActionType;
 import com.dpswikillm.domain.MutationPlan;
 import com.dpswikillm.domain.SearchResult;
+import com.dpswikillm.dto.ConceptResolutionResult;
 import com.dpswikillm.repositories.AppSettingRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
@@ -71,12 +72,14 @@ class ConceptResolutionServiceTests {
         when(semanticSearch.searchByType(eq("ml"), eq("concept"), anyInt())).thenReturn(List.of(existing));
         when(llmClient.chatJson(any())).thenReturn("{\"match\": \"wiki/concepts/machine-learning.md\"}");
 
-        MutationPlan resolved = service.resolve(plan);
+        ConceptResolutionResult resolution = service.resolve(plan);
 
-        assertThat(resolved.pageActions()).hasSize(1);
-        MutationAction result = resolved.pageActions().getFirst();
+        assertThat(resolution.plan().pageActions()).hasSize(1);
+        MutationAction result = resolution.plan().pageActions().getFirst();
         assertThat(result.action()).isEqualTo(MutationActionType.update);
         assertThat(result.path()).isEqualTo("wiki/concepts/machine-learning.md");
+        assertThat(resolution.proposals()).hasSize(1);
+        assertThat(resolution.proposals().getFirst().deduplicated()).isTrue();
     }
 
     @Test
@@ -88,10 +91,11 @@ class ConceptResolutionServiceTests {
 
         when(semanticSearch.searchByType(anyString(), anyString(), anyInt())).thenReturn(List.of());
 
-        MutationPlan resolved = service.resolve(plan);
+        ConceptResolutionResult resolution = service.resolve(plan);
 
-        assertThat(resolved.pageActions().getFirst().action()).isEqualTo(MutationActionType.create);
-        assertThat(resolved.pageActions().getFirst().path()).isEqualTo("wiki/concepts/vector-clock.md");
+        assertThat(resolution.plan().pageActions().getFirst().action()).isEqualTo(MutationActionType.create);
+        assertThat(resolution.plan().pageActions().getFirst().path()).isEqualTo("wiki/concepts/vector-clock.md");
+        assertThat(resolution.proposals().getFirst().deduplicated()).isFalse();
         verify(llmClient, never()).chatJson(any());
     }
 
@@ -106,9 +110,9 @@ class ConceptResolutionServiceTests {
         when(semanticSearch.searchByType(anyString(), anyString(), anyInt())).thenReturn(List.of(nearby));
         when(llmClient.chatJson(any())).thenReturn("{\"match\": null}");
 
-        MutationPlan resolved = service.resolve(plan);
+        ConceptResolutionResult resolution = service.resolve(plan);
 
-        assertThat(resolved.pageActions().getFirst().action()).isEqualTo(MutationActionType.create);
+        assertThat(resolution.plan().pageActions().getFirst().action()).isEqualTo(MutationActionType.create);
     }
 
     @Test
@@ -125,9 +129,9 @@ class ConceptResolutionServiceTests {
             return "{\"match\": \"wiki/concepts/immutability.md\"}";
         });
 
-        MutationPlan resolved = service.resolve(plan);
+        ConceptResolutionResult resolution = service.resolve(plan);
 
-        assertThat(resolved.pageActions().getFirst().action()).isEqualTo(MutationActionType.create);
+        assertThat(resolution.plan().pageActions().getFirst().action()).isEqualTo(MutationActionType.create);
     }
 
     @Test
@@ -154,9 +158,9 @@ class ConceptResolutionServiceTests {
         when(semanticSearch.searchByType(anyString(), anyString(), anyInt())).thenReturn(List.of(existing));
         when(llmClient.chatJson(any())).thenReturn("{\"match\": \"wiki/concepts/machine-learning.md\"}");
 
-        MutationPlan resolved = service.resolve(plan);
+        ConceptResolutionResult resolution = service.resolve(plan);
 
-        MutationAction result = resolved.pageActions().getFirst();
+        MutationAction result = resolution.plan().pageActions().getFirst();
         assertThat(result.frontmatter()).containsKey("aliases");
         @SuppressWarnings("unchecked")
         List<String> aliases = (List<String>) result.frontmatter().get("aliases");
@@ -186,12 +190,12 @@ class ConceptResolutionServiceTests {
         when(semanticSearch.searchByType(anyString(), anyString(), anyInt())).thenReturn(List.of(existing));
         when(llmClient.chatJson(any())).thenReturn("{\"match\": \"wiki/concepts/machine-learning.md\"}");
 
-        MutationPlan resolved = service.resolve(plan);
+        ConceptResolutionResult resolution = service.resolve(plan);
 
         // When alias already exists in the target file, we don't include it in the frontmatter
         // update — mergeAndRender will preserve the existing aliases from the file unchanged.
-        assertThat(resolved.pageActions().getFirst().frontmatter()).doesNotContainKey("aliases");
-        assertThat(resolved.pageActions().getFirst().action()).isEqualTo(MutationActionType.update);
+        assertThat(resolution.plan().pageActions().getFirst().frontmatter()).doesNotContainKey("aliases");
+        assertThat(resolution.plan().pageActions().getFirst().action()).isEqualTo(MutationActionType.update);
     }
 
     @Test
@@ -216,9 +220,9 @@ class ConceptResolutionServiceTests {
         SearchResult nearby = new SearchResult("wiki/concepts/machine-learning.md", "Machine Learning", "concept", 0.87, "AI field.");
         when(semanticSearch.searchByType(anyString(), anyString(), anyInt())).thenReturn(List.of(nearby));
 
-        MutationPlan resolved = highThresholdService.resolve(plan);
+        ConceptResolutionResult resolution = highThresholdService.resolve(plan);
 
-        assertThat(resolved.pageActions().getFirst().action()).isEqualTo(MutationActionType.create);
+        assertThat(resolution.plan().pageActions().getFirst().action()).isEqualTo(MutationActionType.create);
         verify(llmClient, never()).chatJson(any());
     }
 }

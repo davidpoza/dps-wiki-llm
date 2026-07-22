@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 import { PaginatorModule, PaginatorState } from 'primeng/paginator';
@@ -55,7 +56,7 @@ const PAGE_SIZE = 10;
               <div class="scan-activity">
                 <span class="scan-label">{{ job.currentActivity.label }}</span>
                 @if (job.currentActivity.path) {
-                  <span class="scan-path">{{ job.currentActivity.path }}</span>
+                  <button class="path-btn" (click)="openFile(job.currentActivity.path)">{{ job.currentActivity.path }}</button>
                 }
                 <span class="scan-percent">({{ job.currentActivity.percent }}%)</span>
               </div>
@@ -67,7 +68,27 @@ const PAGE_SIZE = 10;
                 @for (f of job.files; track f.path) {
                   <div class="file-entry">
                     <span class="file-action" [class]="'action-' + f.action">{{ f.action }}</span>
-                    <span class="file-path">{{ f.path }}</span>
+                    <button class="path-btn" (click)="openFile(f.path)">{{ f.path }}</button>
+                  </div>
+                }
+              </div>
+            }
+
+            @if (job.conceptProposals?.length > 0) {
+              <div class="concept-proposals">
+                <div class="concept-proposals-title">{{ 'jobs.conceptProposals' | transloco }}</div>
+                @for (p of job.conceptProposals; track p.proposedPath) {
+                  <div class="concept-proposal-entry">
+                    <span class="concept-badge" [class]="p.deduplicated ? 'badge-merged' : 'badge-new'">
+                      {{ p.deduplicated ? ('jobs.conceptMerged' | transloco) : ('jobs.conceptNew' | transloco) }}
+                    </span>
+                    <span class="concept-title">{{ p.proposedTitle }}</span>
+                    @if (p.deduplicated && p.resolvedPath) {
+                      <span class="concept-arrow">→</span>
+                      <button class="path-btn" (click)="openFile(p.resolvedPath!)">{{ p.resolvedPath }}</button>
+                    } @else {
+                      <button class="path-btn" (click)="openFile(p.proposedPath)">{{ p.proposedPath }}</button>
+                    }
                   </div>
                 }
               </div>
@@ -125,18 +146,27 @@ const PAGE_SIZE = 10;
     .action-update { background: var(--app-primary); }
     .action-read { background: #94a3b8; }
     .action-modified { background: #8b5cf6; }
-    .file-path { font-family: monospace; }
+    .path-btn { font-family: monospace; font-size: 0.8rem; background: none; border: none; padding: 0; color: var(--app-primary); cursor: pointer; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .path-btn:hover { text-decoration: underline; }
     .job-error { color: var(--app-error-text); font-size: 0.85rem; padding: 6px; background: var(--app-error-bg); border-radius: 4px; }
     .review-notice { color: var(--app-warning-text); font-size: 0.85rem; padding: 6px; background: var(--app-warning-bg); border-radius: 4px; }
     .scan-activity { display: flex; gap: 8px; align-items: baseline; font-size: 0.8rem; }
     .scan-label { color: var(--app-text-muted); font-weight: 500; min-width: 60px; }
-    .scan-path { font-family: monospace; color: var(--app-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .scan-percent { color: var(--app-text-muted); white-space: nowrap; }
+    .concept-proposals { font-size: 0.82rem; display: grid; gap: 4px; }
+    .concept-proposals-title { font-weight: 600; color: var(--app-text-muted); margin-bottom: 2px; }
+    .concept-proposal-entry { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+    .concept-badge { font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
+    .badge-new { background: #dcfce7; color: #166534; }
+    .badge-merged { background: #ede9fe; color: #6d28d9; }
+    .concept-title { font-weight: 500; color: var(--app-text); }
+    .concept-arrow { color: var(--app-text-muted); }
   `]
 })
 export class JobsViewerComponent {
   private readonly api = inject(ApiService);
   private readonly store = inject(JobsStore);
+  private readonly router = inject(Router);
 
   readonly pageSize = PAGE_SIZE;
   readonly first = signal(0);
@@ -188,5 +218,9 @@ export class JobsViewerComponent {
 
   cancel(jobId: string): void {
     this.api.cancelJob(jobId).subscribe({ error: err => console.error('Cancel failed', err) });
+  }
+
+  openFile(path: string): void {
+    this.router.navigate(['explorer', ...path.split('/')]);
   }
 }

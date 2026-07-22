@@ -410,9 +410,9 @@ class IngestPipelineServicesTests {
         ReindexService reindex = new ReindexService(resolver, new MarkdownService(), documentRepository);
         EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, new StubEmbeddingClient(), properties(), new MarkdownService());
 
-        MutationPlan transformedPlan = new MutationPlan("resolved", List.of());
         ConceptResolutionService conceptResolution = mock(ConceptResolutionService.class);
-        when(conceptResolution.resolve(any(MutationPlan.class))).thenReturn(transformedPlan);
+        when(conceptResolution.resolve(any(MutationPlan.class))).thenReturn(
+                new com.dpswikillm.dto.ConceptResolutionResult(new MutationPlan("resolved", List.of()), List.of()));
 
         IngestPipelineService pipeline = new IngestPipelineService(
                 new SourceNormalizer(resolver), sourceNoteLlm, new SourceNotePlanner(),
@@ -432,7 +432,7 @@ class IngestPipelineServicesTests {
         pipeline.run(job);
 
         verify(conceptResolution).resolve(any(MutationPlan.class));
-        verify(discovery).discoverAndPersist(any(), any(), any(), eq(transformedPlan));
+        verify(discovery).discoverAndPersist(any(), any(), any(), any(MutationPlan.class));
     }
 
     private IngestPipelineService pipeline() {

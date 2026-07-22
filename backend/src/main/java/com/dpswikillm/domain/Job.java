@@ -42,6 +42,10 @@ public class Job {
     @Column(columnDefinition = "jsonb")
     private String result;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private String conceptProposals = "[]";
+
     private String error;
     private Instant createdAt = Instant.now();
     private Instant updatedAt = Instant.now();
@@ -137,6 +141,14 @@ public class Job {
 
     public void setResult(String result) {
         this.result = result;
+    }
+
+    public String getConceptProposals() {
+        return conceptProposals;
+    }
+
+    public void setConceptProposals(String conceptProposals) {
+        this.conceptProposals = conceptProposals;
     }
 
     public String getError() {

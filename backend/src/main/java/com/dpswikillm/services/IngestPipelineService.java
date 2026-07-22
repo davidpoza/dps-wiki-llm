@@ -9,6 +9,7 @@ import com.dpswikillm.domain.MutationPlan;
 import com.dpswikillm.domain.MutationResult;
 import com.dpswikillm.domain.NormalizedSourcePayload;
 import com.dpswikillm.domain.Snapshot;
+import com.dpswikillm.dto.ConceptResolutionResult;
 import com.dpswikillm.repositories.JobRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -123,8 +124,9 @@ public class IngestPipelineService {
             MutationPlan llmPlan = requestOptionalPlan(payload, sourceNotePath);
             GuardrailResult guarded = guardrailService.guardrail(llmPlan, payload.rawPath(), sourceNotePath);
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "concept-resolution", "Resolving concept duplicates");
-            MutationPlan resolvedPlan = conceptResolutionService.resolve(guarded.plan());
-            var candidates = connectionDiscoveryService.discoverAndPersist(job, payload, sourceNotePath, resolvedPlan);
+            ConceptResolutionResult conceptResult = conceptResolutionService.resolve(guarded.plan());
+            lifecycleService.conceptProposals(job, conceptResult.proposals());
+            var candidates = connectionDiscoveryService.discoverAndPersist(job, payload, sourceNotePath, conceptResult.plan());
 
             if (job.getMode() == JobMode.validated) {
                 snapshotService.recordAfter(snapshot, payload.rawPath());
