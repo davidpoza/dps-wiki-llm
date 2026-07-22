@@ -145,16 +145,20 @@ export class JobsStore implements OnDestroy {
   }
 
   private refetchJob(jobId: string): void {
-    this.api.getJob(jobId).subscribe({
-      next: job => {
+    this.api.getJobs().subscribe({
+      next: jobs => {
+        const job = jobs.find(j => j.id === jobId);
+        if (!job) return;
         this.jobs.update(map => {
           const updated = new Map(map);
           const existing = updated.get(jobId);
           if (existing) {
             updated.set(jobId, {
               ...existing,
-              result: job.result ?? existing.result,
               error: job.error ?? existing.error,
+              conceptProposals: (job.conceptProposals?.length ?? 0) > 0
+                ? job.conceptProposals!
+                : existing.conceptProposals,
             });
           }
           return updated;

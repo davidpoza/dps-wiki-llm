@@ -63,13 +63,18 @@ public class ConceptResolutionService {
         double threshold = readThreshold();
         List<MutationAction> resolved = new ArrayList<>();
         List<ConceptProposal> proposals = new ArrayList<>();
-        for (MutationAction action : plan.pageActions() == null ? List.<MutationAction>of() : plan.pageActions()) {
+        List<MutationAction> actions = plan.pageActions() == null ? List.<MutationAction>of() : plan.pageActions();
+        log.info("Concept resolution: processing {} plan actions", actions.size());
+        for (MutationAction action : actions) {
+            log.info("  action={} path={}", action.action(), action.path());
             ResolvedAction result = resolveAction(action, threshold);
             resolved.add(result.action());
             if (result.proposal() != null) {
                 proposals.add(result.proposal());
+                log.info("  → proposal generated: {} (deduplicated={})", result.proposal().proposedPath(), result.proposal().deduplicated());
             }
         }
+        log.info("Concept resolution complete: {} proposal(s) generated", proposals.size());
         return new ConceptResolutionResult(new MutationPlan(plan.planId(), resolved), proposals);
     }
 

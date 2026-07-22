@@ -18,11 +18,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class IngestPipelineService {
+    private static final Logger log = LoggerFactory.getLogger(IngestPipelineService.class);
     private final SourceNormalizer sourceNormalizer;
     private final SourceNoteLlmService sourceNoteLlmService;
     private final SourceNotePlanner sourceNotePlanner;
@@ -122,7 +125,17 @@ public class IngestPipelineService {
 
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "connection-discovery", "Requesting optional connection plan");
             MutationPlan llmPlan = requestOptionalPlan(payload, sourceNotePath);
+            log.info("Job {}: LLM plan has {} action(s)", job.getId(),
+                    llmPlan.pageActions() == null ? 0 : llmPlan.pageActions().size());
+            if (llmPlan.pageActions() != null) {
+                for (var a : llmPlan.pageActions()) {
+                    log.info("  LLM action: {} {}", a.action(), a.path());
+                }
+            }
             GuardrailResult guarded = guardrailService.guardrail(llmPlan, payload.rawPath(), sourceNotePath);
+            if (!guarded.rejections().isEmpty()) {
+                log.info("Job {}: guardrail rejected {} action(s): {}", job.getId(), guarded.rejections().size(), guarded.rejections());
+            }
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "concept-resolution", "Resolving concept duplicates");
             ConceptResolutionResult conceptResult = conceptResolutionService.resolve(guarded.plan());
             lifecycleService.conceptProposals(job, conceptResult.proposals());
