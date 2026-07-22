@@ -74,7 +74,7 @@ const PAGE_SIZE = 10;
               </div>
             }
 
-            @if (job.conceptProposals?.length > 0) {
+            @if (job.conceptProposals.length > 0) {
               <div class="concept-proposals">
                 <div class="concept-proposals-title">{{ 'jobs.conceptProposals' | transloco }}</div>
                 @for (p of job.conceptProposals; track p.proposedPath) {
