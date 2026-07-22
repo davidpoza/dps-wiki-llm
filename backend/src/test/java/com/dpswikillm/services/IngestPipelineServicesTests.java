@@ -263,7 +263,8 @@ class IngestPipelineServicesTests {
         PromptService ps = mock(PromptService.class);
         when(ps.getText(anyString())).thenReturn("system prompt");
         ConceptResolutionService conceptRes = mock(ConceptResolutionService.class);
-        when(conceptRes.resolve(any(MutationPlan.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(conceptRes.resolve(any(MutationPlan.class))).thenAnswer(inv ->
+                new com.dpswikillm.dto.ConceptResolutionResult(inv.getArgument(0), List.of()));
         IngestPipelineService pipeline = new IngestPipelineService(
                 new SourceNormalizer(resolver),
                 new SourceNoteLlmService(llm, new JsonExtractionService(new ObjectMapper()), ps, new RetryingLlmExecutor()),
@@ -467,7 +468,8 @@ class IngestPipelineServicesTests {
         ReindexService reindex = new ReindexService(resolver, new MarkdownService(), documentRepository);
         EmbeddingIndexService embeddings = new EmbeddingIndexService(documentRepository, embeddingClient, properties(), new MarkdownService());
         ConceptResolutionService conceptResolution = mock(ConceptResolutionService.class);
-        when(conceptResolution.resolve(any(MutationPlan.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(conceptResolution.resolve(any(MutationPlan.class))).thenAnswer(inv ->
+                new com.dpswikillm.dto.ConceptResolutionResult(inv.getArgument(0), List.of()));
         return new PipelineHarness(new IngestPipelineService(
                 new SourceNormalizer(resolver),
                 sourceNoteLlm,

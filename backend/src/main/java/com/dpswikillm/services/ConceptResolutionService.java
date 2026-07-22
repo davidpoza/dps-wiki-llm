@@ -76,8 +76,16 @@ public class ConceptResolutionService {
     private record ResolvedAction(MutationAction action, ConceptProposal proposal) {}
 
     private ResolvedAction resolveAction(MutationAction action, double threshold) {
-        if (action.action() != MutationActionType.create || action.path() == null
-                || !action.path().startsWith("wiki/concepts/")) {
+        if (action.path() == null || !action.path().startsWith("wiki/concepts/")) {
+            return new ResolvedAction(action, null);
+        }
+        if (action.action() == MutationActionType.noop) {
+            // Guardrail rejected this concept create — still surface it as a proposal
+            String conceptName = slugToName(action.path());
+            String proposedTitle = action.title() != null ? action.title() : conceptName;
+            return new ResolvedAction(action, new ConceptProposal(action.path(), proposedTitle, false, null));
+        }
+        if (action.action() != MutationActionType.create) {
             return new ResolvedAction(action, null);
         }
         String conceptName = slugToName(action.path());

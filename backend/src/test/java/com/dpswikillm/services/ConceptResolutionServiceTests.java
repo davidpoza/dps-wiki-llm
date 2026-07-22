@@ -100,6 +100,24 @@ class ConceptResolutionServiceTests {
     }
 
     @Test
+    void guardrailRejectedNoop_stillGeneratesProposal() {
+        // Simulates a concept create that the guardrail converted to noop
+        MutationAction action = new MutationAction(MutationActionType.noop, "wiki/concepts/vector-clock.md",
+                "Vector Clock", Map.of("type", "concept"),
+                Map.of("Sources", List.of("[[wiki/sources/source.md]]")), "key-vc");
+        MutationPlan plan = new MutationPlan("p1", List.of(action));
+
+        ConceptResolutionResult resolution = service.resolve(plan);
+
+        assertThat(resolution.plan().pageActions().getFirst().action()).isEqualTo(MutationActionType.noop);
+        assertThat(resolution.proposals()).hasSize(1);
+        assertThat(resolution.proposals().getFirst().proposedPath()).isEqualTo("wiki/concepts/vector-clock.md");
+        assertThat(resolution.proposals().getFirst().proposedTitle()).isEqualTo("Vector Clock");
+        assertThat(resolution.proposals().getFirst().deduplicated()).isFalse();
+        verify(llmClient, never()).chatJson(any());
+    }
+
+    @Test
     void judgeSaysNoMatch_createKept() {
         MutationAction action = new MutationAction(MutationActionType.create, "wiki/concepts/consistency.md",
                 "Consistency", Map.of("type", "concept"),

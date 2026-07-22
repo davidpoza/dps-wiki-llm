@@ -62,6 +62,7 @@ public class JobLifecycleService {
 
     @Transactional
     public void conceptProposals(Job job, List<ConceptProposal> proposals) {
+        log.info("Job {}: {} concept proposal(s) to store and broadcast", job.getId(), proposals.size());
         try {
             job.setConceptProposals(objectMapper.writeValueAsString(proposals));
         } catch (JsonProcessingException e) {
