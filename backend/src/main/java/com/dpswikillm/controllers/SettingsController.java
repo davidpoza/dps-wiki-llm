@@ -1,18 +1,25 @@
 package com.dpswikillm.controllers;
 
+import com.dpswikillm.dto.BrokenLinkDeleteRequest;
+import com.dpswikillm.dto.BrokenLinkDeleteResult;
+import com.dpswikillm.dto.BrokenLinkScanProgress;
+import com.dpswikillm.dto.BrokenLinkScanResult;
 import com.dpswikillm.dto.HealthCheckProgress;
 import com.dpswikillm.dto.KeywordGenerationProgress;
 import com.dpswikillm.dto.ReindexProgress;
 import com.dpswikillm.dto.ResourceSettingsDto;
+import com.dpswikillm.services.BrokenLinkScanService;
 import com.dpswikillm.services.HealthCheckService;
 import com.dpswikillm.services.KeywordGenerationService;
 import com.dpswikillm.services.ReindexService;
 import com.dpswikillm.services.ResourceSettingsService;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,14 +35,17 @@ public class SettingsController {
     private final ResourceSettingsService resourceSettingsService;
     private final KeywordGenerationService keywordGenerationService;
     private final HealthCheckService healthCheckService;
+    private final BrokenLinkScanService brokenLinkScanService;
 
     public SettingsController(ReindexService reindexService, ResourceSettingsService resourceSettingsService,
                              KeywordGenerationService keywordGenerationService,
-                             HealthCheckService healthCheckService) {
+                             HealthCheckService healthCheckService,
+                             BrokenLinkScanService brokenLinkScanService) {
         this.reindexService = reindexService;
         this.resourceSettingsService = resourceSettingsService;
         this.keywordGenerationService = keywordGenerationService;
         this.healthCheckService = healthCheckService;
+        this.brokenLinkScanService = brokenLinkScanService;
     }
 
     @GetMapping("/resources")
@@ -131,6 +141,42 @@ public class SettingsController {
             }
         });
         return emitter;
+    }
+
+    @GetMapping(value = "/broken-links/scan", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter scanBrokenLinks() {
+        SseEmitter emitter = new SseEmitter(0L);
+        CompletableFuture.runAsync(() -> {
+            try {
+                AtomicReference<BrokenLinkScanProgress> lastProgress =
+                        new AtomicReference<>(new BrokenLinkScanProgress(0, 0, ""));
+                BrokenLinkScanResult result = brokenLinkScanService.scan(progress -> {
+                    lastProgress.set(progress);
+                    try {
+                        emitter.send(SseEmitter.event().name("progress").data(progress));
+                    } catch (IOException | IllegalStateException ex) {
+                        throw new IllegalStateException("SSE send failed", ex);
+                    }
+                });
+                emitter.send(SseEmitter.event().name("result").data(result));
+                emitter.send(SseEmitter.event().name("done").data("{}"));
+                emitter.complete();
+            } catch (Exception ex) {
+                try {
+                    emitter.send(SseEmitter.event().name("error").data(new ErrorMessage(ex.getMessage())));
+                } catch (IOException | IllegalStateException ignored) {
+                }
+                emitter.complete();
+            }
+        });
+        return emitter;
+    }
+
+    @DeleteMapping("/broken-links")
+    public BrokenLinkDeleteResult deleteBrokenLinks(@RequestBody BrokenLinkDeleteRequest request) {
+        int deleted = brokenLinkScanService.deleteLinks(
+                request.entries() != null ? request.entries() : List.of());
+        return new BrokenLinkDeleteResult(deleted);
     }
 
     private record ErrorMessage(String message) {}

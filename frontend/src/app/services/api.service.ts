@@ -110,6 +110,26 @@ export interface ResourceSettings {
   resourceFolder: string;
 }
 
+export interface BrokenLinkEntry {
+  sourceFile: string;
+  link: string;
+  displayAlias: string | null;
+}
+
+export interface BrokenLinkScanProgress {
+  type: 'progress';
+  processed: number;
+  total: number;
+  file: string;
+}
+
+export interface BrokenLinkScanResult {
+  type: 'result';
+  brokenLinks: BrokenLinkEntry[];
+}
+
+export type BrokenLinkScanEvent = BrokenLinkScanProgress | BrokenLinkScanResult;
+
 export interface SyncProgress {
   type: 'progress';
   processed: number;
@@ -349,6 +369,46 @@ export class ApiService {
       };
       return () => es.close();
     });
+  }
+
+  scanBrokenLinks(): Observable<BrokenLinkScanEvent> {
+    return new Observable((observer: Observer<BrokenLinkScanEvent>) => {
+      const token = this.auth.token();
+      const url = token
+        ? `/api/settings/broken-links/scan?token=${encodeURIComponent(token)}`
+        : '/api/settings/broken-links/scan';
+      const es = new EventSource(url);
+      let completed = false;
+
+      es.addEventListener('progress', (e: MessageEvent) => {
+        const data = JSON.parse(e.data) as { processed: number; total: number; file: string };
+        observer.next({ type: 'progress', ...data });
+      });
+      es.addEventListener('result', (e: MessageEvent) => {
+        const data = JSON.parse(e.data) as { brokenLinks: BrokenLinkEntry[] };
+        observer.next({ type: 'result', brokenLinks: data.brokenLinks });
+      });
+      es.addEventListener('done', () => {
+        completed = true;
+        es.close();
+        observer.complete();
+      });
+      es.addEventListener('error', (e: MessageEvent) => {
+        completed = true;
+        const data = e.data ? (JSON.parse(e.data) as { message: string }) : { message: 'Error desconocido' };
+        es.close();
+        observer.error(new Error(data.message));
+      });
+      es.onerror = () => {
+        es.close();
+        if (!completed) observer.error(new Error('Error de conexión'));
+      };
+      return () => es.close();
+    });
+  }
+
+  deleteBrokenLinks(entries: { sourceFile: string; link: string }[]): Observable<{ deleted: number }> {
+    return this.http.delete<{ deleted: number }>('/api/settings/broken-links', { body: { entries } });
   }
 
   getActuatorInfo(): Observable<{ build?: { version?: string } }> {

@@ -2,10 +2,11 @@ import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } 
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { SelectButtonModule } from 'primeng/selectbutton';
-import { ApiService, Prompt } from '../services/api.service';
+import { ApiService, BrokenLinkEntry, BrokenLinkScanEvent, Prompt } from '../services/api.service';
 import { NavComponent } from './nav.component';
 import { ThemeService } from '../services/theme.service';
 import { APP_VERSION } from '../version';
+import { BrokenLinksModalComponent } from './broken-links-modal.component';
 
 interface PromptState extends Prompt {
   saving: boolean;
@@ -16,7 +17,7 @@ interface PromptState extends Prompt {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [FormsModule, ButtonModule, SelectButtonModule, NavComponent],
+  imports: [FormsModule, ButtonModule, SelectButtonModule, NavComponent, BrokenLinksModalComponent],
   template: `
     <main class="app-shell">
       <app-nav />
@@ -191,6 +192,42 @@ interface PromptState extends Prompt {
           }
         </section>
 
+        <section class="settings-section">
+          <h2>Enlaces rotos</h2>
+          <p class="section-desc">Busca enlaces wiki <code>[[slug]]</code> en la sección «Related» de todas las notas que apuntan a ficheros inexistentes. Al terminar puedes seleccionar cuáles eliminar.</p>
+          <div class="reindex-row">
+            <p-button
+              label="Buscar enlaces rotos"
+              size="small"
+              [loading]="brokenLinkScanning()"
+              [disabled]="brokenLinkScanning()"
+              (onClick)="startBrokenLinksScan()"
+            />
+            @if (brokenLinkScanning()) {
+              <span class="reindex-progress">
+                Ficheros procesados {{ blProcessed() }}/{{ blTotal() }}
+              </span>
+            }
+            @if (blDone()) {
+              <span class="feedback success">No se encontraron enlaces rotos</span>
+            }
+            @if (blDeleted() !== null) {
+              <span class="feedback success">{{ blDeleted() }} enlace(s) eliminado(s)</span>
+            }
+            @if (blError()) {
+              <span class="feedback error">Error al buscar enlaces rotos</span>
+            }
+          </div>
+        </section>
+
+        @if (showBrokenLinksModal()) {
+          <app-broken-links-modal
+            [brokenLinks]="brokenLinks()"
+            (cancel)="showBrokenLinksModal.set(false)"
+            (confirmed)="onBrokenLinksConfirmed($event)"
+          />
+        }
+
         <footer class="version-footer">
           Frontend: v{{ frontendVersion }} &nbsp;|&nbsp; Backend: v{{ backendVersion() }}
         </footer>
@@ -286,6 +323,15 @@ export class SettingsComponent implements OnInit {
   readonly resourceSaving = signal(false);
   readonly resourceSaved = signal(false);
   readonly resourceError = signal<string | null>(null);
+
+  readonly brokenLinkScanning = signal(false);
+  readonly blProcessed = signal(0);
+  readonly blTotal = signal(0);
+  readonly blDone = signal(false);
+  readonly blError = signal<string | null>(null);
+  readonly brokenLinks = signal<BrokenLinkEntry[]>([]);
+  readonly showBrokenLinksModal = signal(false);
+  readonly blDeleted = signal<number | null>(null);
 
   ngOnInit(): void {
     this.api.getActuatorInfo().subscribe({
@@ -410,6 +456,53 @@ export class SettingsComponent implements OnInit {
       error: (err: Error) => {
         this.healthChecking.set(false);
         this.hcError.set(err.message ?? 'Error desconocido');
+      }
+    });
+  }
+
+  startBrokenLinksScan(): void {
+    this.brokenLinkScanning.set(true);
+    this.blDone.set(false);
+    this.blError.set(null);
+    this.blDeleted.set(null);
+    this.blProcessed.set(0);
+    this.blTotal.set(0);
+    this.brokenLinks.set([]);
+
+    this.api.scanBrokenLinks().subscribe({
+      next: (event: BrokenLinkScanEvent) => {
+        if (event.type === 'progress') {
+          this.blProcessed.set(event.processed);
+          this.blTotal.set(event.total);
+        } else if (event.type === 'result') {
+          this.brokenLinks.set(event.brokenLinks);
+        }
+      },
+      complete: () => {
+        this.brokenLinkScanning.set(false);
+        if (this.brokenLinks().length > 0) {
+          this.showBrokenLinksModal.set(true);
+        } else {
+          this.blDone.set(true);
+          setTimeout(() => this.blDone.set(false), 5000);
+        }
+      },
+      error: (err: Error) => {
+        this.brokenLinkScanning.set(false);
+        this.blError.set(err.message ?? 'Error desconocido');
+      }
+    });
+  }
+
+  onBrokenLinksConfirmed(entries: { sourceFile: string; link: string }[]): void {
+    this.showBrokenLinksModal.set(false);
+    this.api.deleteBrokenLinks(entries).subscribe({
+      next: (result) => {
+        this.blDeleted.set(result.deleted);
+        setTimeout(() => this.blDeleted.set(null), 5000);
+      },
+      error: () => {
+        this.blError.set('Error al eliminar los enlaces.');
       }
     });
   }
