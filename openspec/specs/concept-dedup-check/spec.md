@@ -1,5 +1,8 @@
-## ADDED Requirements
+# concept-dedup-check Specification
 
+## Purpose
+TBD - created by archiving change ingest-concept-dedup. Update Purpose after archive.
+## Requirements
 ### Requirement: Verificación de existencia antes de crear un concept
 Antes de aplicar una acción `create` para un concept, el sistema SHALL verificar si ya existe un archivo en `wiki/concepts/<slug>.md` donde `<slug>` es el nombre de archivo derivado del `path` propuesto. Si el archivo existe, el sistema SHALL cambiar la acción de `create` a `update`.
 
@@ -12,15 +15,19 @@ Antes de aplicar una acción `create` para un concept, el sistema SHALL verifica
 - **THEN** la acción permanece como `create` y se crea el archivo
 
 ### Requirement: Los slugs de concepts siguen nomenclatura canónica
-El sistema SHALL validar que el slug propuesto en `page_actions[].path` para concepts sea kebab-case, en inglés y en forma singular. Slugs que no cumplan esta regla SHALL ser rechazados con log de error y la acción convertida a `noop`.
+El sistema SHALL validar que el slug propuesto en `page_actions[].path` para concepts sea kebab-case, en inglés y en forma singular. Cuando el slug esté en plural y la forma singular sea derivable mediante heurística (eliminar sufijo `-s` o `-es` en palabras inglesas comunes), el sistema SHALL normalizar automáticamente el slug a singular y continuar con la acción normalizada. Solo cuando la normalización sea ambigua o incierta el sistema SHALL convertir la acción a `noop` y registrar una advertencia.
 
-#### Scenario: Slug en plural propuesto por el LLM
+#### Scenario: Slug en plural derivable a singular
 - **WHEN** el plan propone `wiki/concepts/mental-models.md`
-- **THEN** el sistema rechaza la acción, la convierte en `noop` y registra una advertencia indicando que el slug debe ser singular (`mental-model`)
+- **THEN** el sistema normaliza automáticamente el slug a `mental-model`, continúa la resolución con el path corregido y registra un log de tipo `INFO` indicando la normalización aplicada
+
+#### Scenario: Slug en plural ambiguo
+- **WHEN** el plan propone `wiki/concepts/analyses.md` (plural irregular de "analysis")
+- **THEN** el sistema no puede derivar la forma singular con certeza, convierte la acción en `noop` y registra una advertencia con el slug propuesto
 
 #### Scenario: Slug correcto
 - **WHEN** el plan propone `wiki/concepts/mental-model.md`
-- **THEN** el sistema acepta la acción y procede con create o update según existencia del archivo
+- **THEN** el sistema acepta el path sin modificación y procede con create o update según existencia del archivo
 
 ### Requirement: Advertencia en health-check para concepts candidatos a topic
 El comando `health-check` SHALL calcular el número de wikilinks entrantes y salientes de cada concept. Si ese número supera `CONCEPT_TOPIC_CANDIDATE_THRESHOLD` (default 8, configurable via variable de entorno), SHALL emitir un aviso de tipo `"concept-topic-candidate"` en el reporte de resultados. El sistema no SHALL tomar ninguna acción automática sobre esos concepts.
@@ -39,3 +46,4 @@ El script `tools/reclassify-by-links.ts` y su entrada en `package.json` SHALL se
 #### Scenario: Intento de usar reclassify-by-links
 - **WHEN** se intenta ejecutar `npm run reclassify-by-links`
 - **THEN** el comando no existe y falla con error de npm (script not found)
+
