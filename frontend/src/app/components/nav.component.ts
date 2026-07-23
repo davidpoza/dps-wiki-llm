@@ -45,94 +45,116 @@ interface NavItem {
       <div class="nav-backdrop" (click)="close()"></div>
     }
   `,
-  styles: [`
-    .app-nav {
-      position: sticky;
-      top: 0;
-      z-index: 50;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 24px;
-      background: var(--app-surface);
-      border-bottom: 1px solid var(--app-border);
-    }
-    .nav-brand {
-      font-weight: 700;
-      font-size: 1.05rem;
-      color: var(--app-text);
-      text-decoration: none;
-      white-space: nowrap;
-    }
-    .nav-toggle {
-      display: none;
-      margin-left: auto;
-      align-items: center;
-      justify-content: center;
-      background: none;
-      border: none;
-      color: var(--app-text);
-      font-size: 1.3rem;
-      line-height: 1;
-      cursor: pointer;
-      padding: 6px 8px;
-      border-radius: 8px;
-    }
-    .nav-toggle:hover { background: var(--app-surface-muted); }
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      flex: 1;
-      min-width: 0;
-    }
-    .nav-link {
-      padding: 8px 14px;
-      border-radius: 8px;
-      color: var(--app-text-muted);
-      text-decoration: none;
-      font-size: 0.9rem;
-      font-weight: 500;
-      white-space: nowrap;
-      transition: background 0.15s, color 0.15s;
-    }
-    .nav-link:hover { color: var(--app-text); background: var(--app-surface-muted); }
-    .nav-link.active { color: var(--app-primary); background: var(--app-primary-soft); }
-    .nav-profile {
-      margin-left: auto;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .nav-backdrop { display: none; }
-
-    @media (max-width: 768px) {
-      .nav-toggle { display: inline-flex; }
-      .nav-links {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        display: none;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 2px;
-        padding: 8px;
+  styles: [
+    `
+      .app-nav {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 24px;
         background: var(--app-surface);
         border-bottom: 1px solid var(--app-border);
-        box-shadow: var(--app-shadow);
       }
-      .nav-links.open { display: flex; }
-      .nav-link { padding: 12px 14px; }
-      .nav-profile { margin-left: 0; }
+      .nav-brand {
+        font-weight: 700;
+        font-size: 1.05rem;
+        color: var(--app-text);
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .nav-toggle {
+        display: none;
+        margin-left: auto;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        color: var(--app-text);
+        font-size: 1.3rem;
+        line-height: 1;
+        cursor: pointer;
+        padding: 6px 8px;
+        border-radius: 8px;
+      }
+      .nav-toggle:hover {
+        background: var(--app-surface-muted);
+      }
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex: 1;
+        min-width: 0;
+      }
+      .nav-link {
+        padding: 8px 14px;
+        border-radius: 8px;
+        color: var(--app-text-muted);
+        text-decoration: none;
+        font-size: 0.9rem;
+        font-weight: 500;
+        white-space: nowrap;
+        transition:
+          background 0.15s,
+          color 0.15s;
+      }
+      .nav-link:hover {
+        color: var(--app-text);
+        background: var(--app-surface-muted);
+      }
+      .nav-link.active {
+        color: var(--app-primary);
+        background: var(--app-primary-soft);
+      }
+      .nav-profile {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
       .nav-backdrop {
-        display: block;
-        position: fixed;
-        inset: 0;
-        z-index: 40;
+        display: none;
       }
-    }
-  `]
+
+      @media (max-width: 768px) {
+        .nav-toggle {
+          display: inline-flex;
+        }
+        .nav-links {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          display: none;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 2px;
+          padding: 8px;
+          background: var(--app-surface);
+          border-bottom: 1px solid var(--app-border);
+          box-shadow: var(--app-shadow);
+        }
+        .nav-links.open {
+          display: flex;
+        }
+        .nav-link {
+          padding: 12px 14px;
+        }
+        .nav-profile {
+          margin-left: 0;
+        }
+        .nav-backdrop {
+          display: block;
+          position: fixed;
+          inset: 0;
+          z-index: 40;
+        }
+      }
+    `,
+  ],
 })
 export class NavComponent {
   private readonly auth = inject(AuthService);
@@ -151,7 +173,7 @@ export class NavComponent {
   ];
 
   toggle(): void {
-    this.menuOpen.update(v => !v);
+    this.menuOpen.update((v) => !v);
   }
 
   close(): void {

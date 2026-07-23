@@ -18,7 +18,13 @@ import { JobMode } from '../types';
     <div class="ingest">
       <div class="mode-row">
         <span class="label">{{ 'ingest.mode' | transloco }}</span>
-        <p-selectButton [options]="modeOptions()" [ngModel]="mode()" (ngModelChange)="mode.set($event)" optionLabel="label" optionValue="value" />
+        <p-selectButton
+          [options]="modeOptions()"
+          [ngModel]="mode()"
+          (ngModelChange)="mode.set($event)"
+          optionLabel="label"
+          optionValue="value"
+        />
         <span class="mode-hint">
           @if (mode() === 'validated') {
             {{ 'ingest.modeValidated' | transloco }}
@@ -29,11 +35,25 @@ import { JobMode } from '../types';
       </div>
 
       <div class="section">
-        <div class="section-title">{{ 'ingest.uploadFile' | transloco }} <span class="section-hint">{{ 'ingest.uploadHint' | transloco }}</span></div>
+        <div class="section-title">
+          {{ 'ingest.uploadFile' | transloco }} <span class="section-hint">{{ 'ingest.uploadHint' | transloco }}</span>
+        </div>
         <div class="upload-row">
-          <input type="file" accept=".pdf,.md,.markdown" (change)="onFileChange($event)" class="file-input" #fileInput />
-          <button pButton type="button" [label]="'ingest.ingestFile' | transloco" icon="pi pi-upload"
-                  [disabled]="!selectedFile() || busy()" (click)="ingestFile(fileInput)"></button>
+          <input
+            type="file"
+            accept=".pdf,.md,.markdown"
+            (change)="onFileChange($event)"
+            class="file-input"
+            #fileInput
+          />
+          <button
+            pButton
+            type="button"
+            [label]="'ingest.ingestFile' | transloco"
+            icon="pi pi-upload"
+            [disabled]="!selectedFile() || busy()"
+            (click)="ingestFile(fileInput)"
+          ></button>
         </div>
         @if (selectedFile()) {
           <span class="file-name">{{ selectedFile()!.name }}</span>
@@ -43,25 +63,55 @@ import { JobMode } from '../types';
       <div class="section">
         <div class="section-title">{{ 'ingest.ingestLink' | transloco }}</div>
         <div class="url-row">
-          <input pInputText type="url" [ngModel]="url()" (ngModelChange)="url.set($event)" [placeholder]="'ingest.urlPlaceholder' | transloco" class="url-input" />
-          <button pButton type="button" [label]="'ingest.ingestUrl' | transloco" icon="pi pi-link"
-                  [disabled]="!url().trim() || busy()" (click)="ingestUrl()"></button>
+          <input
+            pInputText
+            type="url"
+            [ngModel]="url()"
+            (ngModelChange)="url.set($event)"
+            [placeholder]="'ingest.urlPlaceholder' | transloco"
+            class="url-input"
+          />
+          <button
+            pButton
+            type="button"
+            [label]="'ingest.ingestUrl' | transloco"
+            icon="pi pi-link"
+            [disabled]="!url().trim() || busy()"
+            (click)="ingestUrl()"
+          ></button>
         </div>
       </div>
 
       <div class="section">
         <div class="section-title">{{ 'ingest.pasteMarkdown' | transloco }}</div>
-        <input pInputText type="text" [ngModel]="mdTitle()" (ngModelChange)="mdTitle.set($event)"
-               [placeholder]="'ingest.pasteTitlePlaceholder' | transloco" class="url-input" />
-        <textarea pTextarea [ngModel]="mdText()" (ngModelChange)="mdText.set($event)"
-                  [placeholder]="'ingest.pastePlaceholder' | transloco"
-                  rows="8" class="md-textarea"></textarea>
+        <input
+          pInputText
+          type="text"
+          [ngModel]="mdTitle()"
+          (ngModelChange)="mdTitle.set($event)"
+          [placeholder]="'ingest.pasteTitlePlaceholder' | transloco"
+          class="url-input"
+        />
+        <textarea
+          pTextarea
+          [ngModel]="mdText()"
+          (ngModelChange)="mdText.set($event)"
+          [placeholder]="'ingest.pastePlaceholder' | transloco"
+          rows="8"
+          class="md-textarea"
+        ></textarea>
         @if (mdTooLarge()) {
           <span class="size-warning">{{ 'ingest.textTooLarge' | transloco }}</span>
         }
         <div>
-          <button pButton type="button" [label]="'ingest.ingestText' | transloco" icon="pi pi-clipboard"
-                  [disabled]="!mdText().trim() || mdTooLarge() || busy()" (click)="ingestMdText()"></button>
+          <button
+            pButton
+            type="button"
+            [label]="'ingest.ingestText' | transloco"
+            icon="pi pi-clipboard"
+            [disabled]="!mdText().trim() || mdTooLarge() || busy()"
+            (click)="ingestMdText()"
+          ></button>
         </div>
       </div>
 
@@ -75,30 +125,88 @@ import { JobMode } from '../types';
       }
     </div>
   `,
-  styles: [`
-    .ingest { display: grid; gap: 20px; }
-    .mode-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
-    .label { font-weight: 600; color: var(--app-text-muted); }
-    .mode-hint { font-size: 0.82rem; color: var(--app-text-muted); }
-    .section-hint { font-size: 0.78rem; font-weight: 400; color: var(--app-text-subtle); margin-left: 6px; }
-    .section { display: grid; gap: 10px; }
-    .section-title { font-weight: 600; }
-    .upload-row, .url-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    .url-input { flex: 1; min-width: 200px; }
-    .file-input { flex: 1; }
-    .file-name { font-size: 0.82rem; color: var(--app-text-muted); font-family: monospace; }
-    .enqueue-notice {
-      font-size: 0.85rem;
-      padding: 10px;
-      background: var(--app-primary-soft);
-      border-radius: 6px;
-      border: 1px solid var(--app-primary);
-    }
-    code { font-family: monospace; font-size: 0.8em; }
-    .error { color: var(--app-error-text); font-size: 0.85rem; padding: 8px; background: var(--app-error-bg); border-radius: 4px; }
-    .md-textarea { width: 100%; font-family: monospace; font-size: 0.85rem; resize: vertical; }
-    .size-warning { font-size: 0.82rem; color: var(--app-error-text); }
-  `]
+  styles: [
+    `
+      .ingest {
+        display: grid;
+        gap: 20px;
+      }
+      .mode-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .label {
+        font-weight: 600;
+        color: var(--app-text-muted);
+      }
+      .mode-hint {
+        font-size: 0.82rem;
+        color: var(--app-text-muted);
+      }
+      .section-hint {
+        font-size: 0.78rem;
+        font-weight: 400;
+        color: var(--app-text-subtle);
+        margin-left: 6px;
+      }
+      .section {
+        display: grid;
+        gap: 10px;
+      }
+      .section-title {
+        font-weight: 600;
+      }
+      .upload-row,
+      .url-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .url-input {
+        flex: 1;
+        min-width: 200px;
+      }
+      .file-input {
+        flex: 1;
+      }
+      .file-name {
+        font-size: 0.82rem;
+        color: var(--app-text-muted);
+        font-family: monospace;
+      }
+      .enqueue-notice {
+        font-size: 0.85rem;
+        padding: 10px;
+        background: var(--app-primary-soft);
+        border-radius: 6px;
+        border: 1px solid var(--app-primary);
+      }
+      code {
+        font-family: monospace;
+        font-size: 0.8em;
+      }
+      .error {
+        color: var(--app-error-text);
+        font-size: 0.85rem;
+        padding: 8px;
+        background: var(--app-error-bg);
+        border-radius: 4px;
+      }
+      .md-textarea {
+        width: 100%;
+        font-family: monospace;
+        font-size: 0.85rem;
+        resize: vertical;
+      }
+      .size-warning {
+        font-size: 0.82rem;
+        color: var(--app-error-text);
+      }
+    `,
+  ],
 })
 export class IngestComponent {
   private readonly api = inject(ApiService);
@@ -131,13 +239,13 @@ export class IngestComponent {
     this.busy.set(true);
     this.errorMessage.set(null);
     this.api.uploadFile(file, this.mode()).subscribe({
-      next: res => {
+      next: (res) => {
         this.lastJobId.set(res.jobId);
         this.selectedFile.set(null);
         fileInput.value = '';
         this.busy.set(false);
       },
-      error: err => {
+      error: (err) => {
         this.errorMessage.set(err.message ?? this.t.translate('ingest.uploadFailed'));
         this.busy.set(false);
       },
@@ -150,13 +258,13 @@ export class IngestComponent {
     this.busy.set(true);
     this.errorMessage.set(null);
     this.api.ingestText(content, this.mdTitle().trim(), this.mode()).subscribe({
-      next: res => {
+      next: (res) => {
         this.lastJobId.set(res.jobId);
         this.mdText.set('');
         this.mdTitle.set('');
         this.busy.set(false);
       },
-      error: err => {
+      error: (err) => {
         this.errorMessage.set(err.message ?? this.t.translate('ingest.ingestFailed'));
         this.busy.set(false);
       },
@@ -169,12 +277,12 @@ export class IngestComponent {
     this.busy.set(true);
     this.errorMessage.set(null);
     this.api.enqueueIngestUrl(url, this.mode()).subscribe({
-      next: res => {
+      next: (res) => {
         this.lastJobId.set(res.jobId);
         this.url.set('');
         this.busy.set(false);
       },
-      error: err => {
+      error: (err) => {
         this.errorMessage.set(err.message ?? this.t.translate('ingest.ingestFailed'));
         this.busy.set(false);
       },

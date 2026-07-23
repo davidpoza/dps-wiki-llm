@@ -42,7 +42,7 @@ type Tab = 'jobs' | 'ingest' | 'chat' | 'review' | 'git';
     </main>
   `,
   styleUrl: './home.component.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HomeComponent implements OnInit {
   private readonly store = inject(JobsStore);
@@ -55,7 +55,7 @@ export class HomeComponent implements OnInit {
 
   ngOnInit(): void {
     this.store.connect();
-    this.route.url.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(segments => {
+    this.route.url.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((segments) => {
       const tab = segments[0]?.path as Tab | undefined;
       if (tab && this.tabs.includes(tab)) {
         this.activeTab.set(tab);

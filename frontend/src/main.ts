@@ -35,9 +35,12 @@ const activeLang = detectLang();
 
 function initializeTheme(): void {
   const stored = localStorage.getItem('dps-wiki-theme');
-  const theme = stored === 'light' || stored === 'dark'
-    ? stored
-    : window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const theme =
+    stored === 'light' || stored === 'dark'
+      ? stored
+      : window.matchMedia?.('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
   document.documentElement.classList.toggle('dark', theme === 'dark');
   document.documentElement.style.colorScheme = theme;
 }
@@ -55,8 +58,18 @@ bootstrapApplication(AppComponent, {
       { path: 'chat', component: HomeComponent, canActivate: [authGuard] },
       { path: 'review', component: HomeComponent, canActivate: [authGuard] },
       { path: 'git', component: HomeComponent, canActivate: [authGuard] },
-      { path: 'explorer', component: ExplorerComponent, canActivate: [authGuard], canDeactivate: [unsavedChangesGuard] },
-      { path: 'explorer/**', component: ExplorerComponent, canActivate: [authGuard], canDeactivate: [unsavedChangesGuard] },
+      {
+        path: 'explorer',
+        component: ExplorerComponent,
+        canActivate: [authGuard],
+        canDeactivate: [unsavedChangesGuard],
+      },
+      {
+        path: 'explorer/**',
+        component: ExplorerComponent,
+        canActivate: [authGuard],
+        canDeactivate: [unsavedChangesGuard],
+      },
       { path: 'settings', component: SettingsComponent, canActivate: [authGuard] },
       { path: 'profile', component: ProfileComponent, canActivate: [authGuard] },
     ]),
@@ -65,9 +78,9 @@ bootstrapApplication(AppComponent, {
       theme: {
         preset: Aura,
         options: {
-          darkModeSelector: '.dark'
-        }
-      }
+          darkModeSelector: '.dark',
+        },
+      },
     }),
     provideTransloco({
       config: {
@@ -84,5 +97,5 @@ bootstrapApplication(AppComponent, {
       deps: [TranslocoService],
       multi: true,
     },
-  ]
+  ],
 }).catch((err: unknown) => console.error(err));

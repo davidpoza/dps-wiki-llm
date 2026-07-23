@@ -55,7 +55,23 @@ import { FormsModule } from '@angular/forms';
 @Component({
   selector: 'app-explorer',
   standalone: true,
-  imports: [TreeModule, ButtonModule, ContextMenuModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe, NgClass, TranslocoPipe, ProgressBarModule, NavComponent, Checkbox, FormsModule],
+  imports: [
+    TreeModule,
+    ButtonModule,
+    ContextMenuModule,
+    ToastModule,
+    ConfirmDialogModule,
+    ToolbarModule,
+    DialogModule,
+    InputTextModule,
+    SlicePipe,
+    NgClass,
+    TranslocoPipe,
+    ProgressBarModule,
+    NavComponent,
+    Checkbox,
+    FormsModule,
+  ],
   providers: [MessageService, ConfirmationService],
   template: `
     <p-toast />
@@ -80,7 +96,9 @@ import { FormsModule } from '@angular/forms';
             [text]="true"
             severity="secondary"
             size="small"
-            [title]="treePanelCollapsed() ? ('explorer.expandPanel' | transloco) : ('explorer.collapsePanel' | transloco)"
+            [title]="
+              treePanelCollapsed() ? ('explorer.expandPanel' | transloco) : ('explorer.collapsePanel' | transloco)
+            "
             (onClick)="toggleTreePanel()"
           />
         </nav>
@@ -112,11 +130,7 @@ import { FormsModule } from '@angular/forms';
           }
         </aside>
 
-        <div
-          class="resizer"
-          [class.active]="isResizing"
-          (mousedown)="onResizerMouseDown($event)"
-        ></div>
+        <div class="resizer" [class.active]="isResizing" (mousedown)="onResizerMouseDown($event)"></div>
 
         <section class="editor-panel">
           @if (selectedPath()) {
@@ -260,9 +274,13 @@ import { FormsModule } from '@angular/forms';
           <div class="wikilink-dropdown-empty">{{ 'explorer.noResults' | transloco }}</div>
         }
         @for (file of wikilinkSuggestions(); track file.data) {
-          <div class="wikilink-dropdown-item" (mousedown)="$event.preventDefault()" (click)="insertWikilinkFromSuggestion(file)">
+          <div
+            class="wikilink-dropdown-item"
+            (mousedown)="$event.preventDefault()"
+            (click)="insertWikilinkFromSuggestion(file)"
+          >
             <i class="pi pi-file"></i>
-            <span>{{ (file.label ?? '') | slice:0:-3 }}</span>
+            <span>{{ file.label ?? '' | slice: 0 : -3 }}</span>
           </div>
         }
       </div>
@@ -325,8 +343,18 @@ import { FormsModule } from '@angular/forms';
         />
       </div>
       <ng-template pTemplate="footer">
-        <p-button [label]="'common.cancel' | transloco" severity="secondary" size="small" (onClick)="showRenameDialog.set(false)" />
-        <p-button [label]="'explorer.rename' | transloco" size="small" [disabled]="!renameValue().trim()" (onClick)="confirmRename()" />
+        <p-button
+          [label]="'common.cancel' | transloco"
+          severity="secondary"
+          size="small"
+          (onClick)="showRenameDialog.set(false)"
+        />
+        <p-button
+          [label]="'explorer.rename' | transloco"
+          size="small"
+          [disabled]="!renameValue().trim()"
+          (onClick)="confirmRename()"
+        />
       </ng-template>
     </p-dialog>
 
@@ -349,8 +377,18 @@ import { FormsModule } from '@angular/forms';
         />
       </div>
       <ng-template pTemplate="footer">
-        <p-button [label]="'common.cancel' | transloco" severity="secondary" size="small" (onClick)="showCreateDialog.set(false)" />
-        <p-button [label]="'explorer.create' | transloco" size="small" [disabled]="!createFileName().trim()" (onClick)="confirmCreate()" />
+        <p-button
+          [label]="'common.cancel' | transloco"
+          severity="secondary"
+          size="small"
+          (onClick)="showCreateDialog.set(false)"
+        />
+        <p-button
+          [label]="'explorer.create' | transloco"
+          size="small"
+          [disabled]="!createFileName().trim()"
+          (onClick)="confirmCreate()"
+        />
       </ng-template>
     </p-dialog>
 
@@ -373,8 +411,18 @@ import { FormsModule } from '@angular/forms';
         />
       </div>
       <ng-template pTemplate="footer">
-        <p-button [label]="'common.cancel' | transloco" severity="secondary" size="small" (onClick)="showCreateDirDialog.set(false)" />
-        <p-button [label]="'explorer.create' | transloco" size="small" [disabled]="!createDirName().trim()" (onClick)="confirmCreateDir()" />
+        <p-button
+          [label]="'common.cancel' | transloco"
+          severity="secondary"
+          size="small"
+          (onClick)="showCreateDirDialog.set(false)"
+        />
+        <p-button
+          [label]="'explorer.create' | transloco"
+          size="small"
+          [disabled]="!createDirName().trim()"
+          (onClick)="confirmCreateDir()"
+        />
       </ng-template>
     </p-dialog>
 
@@ -405,7 +453,12 @@ import { FormsModule } from '@angular/forms';
         }
       </div>
       <ng-template pTemplate="footer">
-        <p-button [label]="'common.cancel' | transloco" severity="secondary" size="small" (onClick)="showMoveDialog.set(false)" />
+        <p-button
+          [label]="'common.cancel' | transloco"
+          severity="secondary"
+          size="small"
+          (onClick)="showMoveDialog.set(false)"
+        />
         <p-button [label]="'explorer.moveHere' | transloco" size="small" (onClick)="confirmMove()" />
       </ng-template>
     </p-dialog>
@@ -470,7 +523,12 @@ import { FormsModule } from '@angular/forms';
         }
       </div>
       <ng-template pTemplate="footer">
-        <p-button [label]="'explorer.linkDiscoveryClose' | transloco" severity="secondary" size="small" (onClick)="showLinkDiscovery.set(false)" />
+        <p-button
+          [label]="'explorer.linkDiscoveryClose' | transloco"
+          severity="secondary"
+          size="small"
+          (onClick)="showLinkDiscovery.set(false)"
+        />
         <p-button
           label="Añadir a Related"
           severity="primary"
@@ -511,488 +569,752 @@ import { FormsModule } from '@angular/forms';
         </div>
       </div>
       <ng-template pTemplate="footer">
-        <p-button [label]="'common.cancel' | transloco" severity="secondary" size="small" (onClick)="showVersions.set(false)" />
-        <p-button [label]="'versions.restore' | transloco" size="small" [disabled]="!previewVersionId()" (onClick)="restoreVersion()" />
+        <p-button
+          [label]="'common.cancel' | transloco"
+          severity="secondary"
+          size="small"
+          (onClick)="showVersions.set(false)"
+        />
+        <p-button
+          [label]="'versions.restore' | transloco"
+          size="small"
+          [disabled]="!previewVersionId()"
+          (onClick)="restoreVersion()"
+        />
       </ng-template>
     </p-dialog>
   `,
-  styles: [`
-    :host {
-      display: block;
-      height: 100vh;
-      height: 100dvh;
-      overflow: hidden;
-    }
-    .explorer-shell {
-      height: 100vh;
-      height: 100dvh;
-      overflow: hidden;
-      background: var(--app-bg);
-      color: var(--app-text);
-      display: flex;
-      flex-direction: column;
-    }
-    .explorer-layout {
-      display: flex;
-      flex: 1;
-      min-height: 0;
-      overflow: hidden;
-    }
-    .file-tree-panel {
-      flex-shrink: 0;
-      border-right: none;
-      background: var(--app-surface);
-      overflow: hidden;
-      padding: 8px;
-      transition: width 0.2s ease;
-      display: flex;
-      flex-direction: column;
-    }
-    .file-tree-panel.collapsed {
-      padding: 0;
-      overflow: hidden;
-    }
-    .sidebar-toolbar {
-      flex-shrink: 0;
-      width: 40px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 6px 0;
-      gap: 2px;
-      border-right: 1px solid var(--app-border);
-      background: var(--app-surface-muted);
-    }
-    .resizer {
-      flex-shrink: 0;
-      width: 5px;
-      background: var(--app-border);
-      cursor: col-resize;
-      transition: background 0.15s;
-    }
-    .resizer:hover, .resizer.active {
-      background: var(--app-text-subtle);
-    }
-    @media (max-width: 767px) {
-      .resizer { display: none; }
-    }
-    .wikilink-dropdown {
-      position: fixed;
-      z-index: 9999;
-      background: var(--app-surface);
-      border: 1px solid var(--app-border-strong);
-      border-radius: 6px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-      min-width: 240px;
-      max-width: 380px;
-      max-height: 280px;
-      overflow-y: auto;
-      padding: 4px 0;
-    }
-    .wikilink-dropdown-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 7px 14px;
-      cursor: pointer;
-      font-size: 0.875rem;
-      color: var(--app-text);
-      transition: background 0.1s;
-    }
-    .wikilink-dropdown-item:hover {
-      background: var(--app-surface-subtle);
-    }
-    .wikilink-dropdown-item .pi {
-      color: var(--app-text-muted);
-      font-size: 0.8rem;
-      flex-shrink: 0;
-    }
-    .wikilink-dropdown-empty {
-      padding: 12px 14px;
-      font-size: 0.875rem;
-      color: var(--app-text-muted);
-    }
-    .search-box {
-      margin-bottom: 12px;
-    }
-    .search-box input {
-      width: 100%;
-    }
-    .search-results {
-      max-height: 360px;
-      overflow-y: auto;
-    }
-    .search-result {
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-      padding: 8px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.875rem;
-      color: var(--app-text);
-      transition: background 0.1s;
-    }
-    .search-result:hover {
-      background: var(--app-surface-subtle);
-    }
-    .search-result.is-active {
-      background: var(--app-primary-soft);
-      color: var(--app-primary);
-    }
-    .search-result .pi {
-      color: var(--app-text-muted);
-      font-size: 0.8rem;
-      flex-shrink: 0;
-    }
-    .search-result-info {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      flex: 1;
-    }
-    .search-result-path {
-      font-size: 0.75rem;
-      color: var(--app-text-muted);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .search-empty {
-      text-align: center;
-      color: var(--app-text-muted);
-      font-size: 0.875rem;
-      padding: 24px 0;
-    }
-    .tree-label {
-      display: block;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      max-width: 100%;
-    }
-    :host ::ng-deep .file-tree-panel .p-tree-node-label {
-      overflow: hidden;
-      min-width: 0;
-      flex: 1;
-    }
-    .empty-msg { color: var(--app-text-muted); font-size: 0.85rem; padding: 8px; }
-    .editor-panel {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .editor-header {
-      display: flex;
-      flex-direction: column;
-      padding: 6px 12px;
-      border-bottom: 1px solid var(--app-border);
-      background: var(--app-surface);
-      gap: 2px;
-    }
-    .editor-title {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      min-width: 0;
-      min-height: 28px;
-    }
-    .file-path {
-      display: flex;
-      align-items: baseline;
-      min-width: 0;
-      overflow: hidden;
-    }
-    .file-path-dir {
-      font-size: 0.875rem;
-      font-weight: 400;
-      color: var(--app-text-muted);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      min-width: 0;
-    }
-    .file-title {
-      font-size: 0.875rem;
-      font-weight: 500;
-      white-space: nowrap;
-      color: var(--app-text);
-      flex-shrink: 0;
-    }
-    .dirty-dot {
-      color: var(--p-primary-color, #10b981);
-      font-size: 0.6rem;
-      line-height: 1;
-      flex-shrink: 0;
-    }
-    .editor-actions {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      align-self: flex-end;
-    }
-    .toolbar-group {
-      display: flex;
-      align-items: center;
-      gap: 2px;
-    }
-    .actions-divider {
-      width: 1px;
-      height: 18px;
-      background: var(--app-border);
-      margin: 0 6px;
-      flex-shrink: 0;
-    }
-    .doc-actions {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .milkdown-container {
-      flex: 1;
-      overflow-y: auto;
-      padding: 16px;
-      background: var(--app-surface);
-    }
-    .milkdown-container.hidden { display: none; }
-    .placeholder {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--app-text-muted);
-      font-size: 0.95rem;
-    }
-    :host ::ng-deep .milkdown { outline: none; min-height: 100%; }
-    :host ::ng-deep .milkdown .editor { outline: none; min-height: 400px; }
-    :host ::ng-deep .milkdown a { cursor: pointer; color: var(--app-primary); text-decoration: underline; }
-    :host ::ng-deep .milkdown a:hover { color: var(--app-primary-hover); }
-    :host ::ng-deep .wikilink-token {
-      color: var(--app-primary);
-      background: var(--app-primary-soft);
-      border-radius: 3px;
-      padding: 1px 2px;
-      cursor: pointer;
-      font-weight: 500;
-    }
-    :host ::ng-deep .wikilink-token:hover {
-      background: var(--app-primary-soft-hover);
-      text-decoration: underline;
-    }
-    :host ::ng-deep .milkdown h1 { font-size: 2em; font-weight: 700; margin: 0.5em 0 0.3em; line-height: 1.2; }
-    :host ::ng-deep .milkdown h2 { font-size: 1.5em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.3; }
-    :host ::ng-deep .milkdown h3 { font-size: 1.25em; font-weight: 600; margin: 0.7em 0 0.3em; line-height: 1.4; }
-    :host ::ng-deep .milkdown h4 { font-size: 1.05em; font-weight: 600; margin: 0.8em 0 0.25em; }
-    :host ::ng-deep .milkdown h5 { font-size: 0.9em; font-weight: 600; margin: 0.9em 0 0.25em; }
-    :host ::ng-deep .milkdown h6 { font-size: 0.85em; font-weight: 600; margin: 0.9em 0 0.25em; color: var(--app-text-muted); }
-    :host ::ng-deep .milkdown blockquote {
-      border-left: 4px solid var(--app-primary);
-      margin: 0.75em 0;
-      padding: 0.4em 1em;
-      background: var(--app-primary-soft);
-      color: var(--app-text);
-      border-radius: 0 4px 4px 0;
-    }
-    :host ::ng-deep .milkdown ul { list-style: disc; padding-left: 1.75em; margin: 0.5em 0; }
-    :host ::ng-deep .milkdown ol { list-style: decimal; padding-left: 1.75em; margin: 0.5em 0; }
-    :host ::ng-deep .milkdown li { margin: 0.2em 0; }
-    :host ::ng-deep .milkdown pre {
-      background: var(--app-surface-subtle);
-      border-radius: 6px;
-      padding: 0.9em 1em;
-      overflow-x: auto;
-      margin: 0.75em 0;
-    }
-    :host ::ng-deep .milkdown pre code {
-      font-family: 'Fira Code', 'Cascadia Code', monospace;
-      font-size: 0.85em;
-      background: none;
-      padding: 0;
-      border-radius: 0;
-    }
-    :host ::ng-deep .milkdown code {
-      font-family: 'Fira Code', 'Cascadia Code', monospace;
-      font-size: 0.85em;
-      background: var(--app-surface-subtle);
-      padding: 0.15em 0.35em;
-      border-radius: 3px;
-    }
-    :host ::ng-deep .milkdown hr {
-      border: none;
-      border-top: 2px solid var(--app-border);
-      margin: 1.5em 0;
-    }
-    :host ::ng-deep .milkdown table {
-      border-collapse: collapse;
-      width: 100%;
-      margin: 1em 0;
-      overflow-x: auto;
-      display: block;
-    }
-    :host ::ng-deep .milkdown table th,
-    :host ::ng-deep .milkdown table td {
-      border: 1px solid var(--app-border);
-      padding: 0.45em 0.75em;
-      text-align: left;
-      vertical-align: top;
-    }
-    :host ::ng-deep .milkdown table thead th {
-      background: var(--app-surface-subtle);
-      font-weight: 600;
-      color: var(--app-text);
-    }
-    :host ::ng-deep .milkdown table tbody tr:nth-child(even) {
-      background: var(--app-surface-hover);
-    }
-    :host ::ng-deep .obsidian-image-embed-hidden { display: none; }
-    :host ::ng-deep .obsidian-image-preview {
-      margin: 18px auto;
-      max-width: min(100%, 860px);
-      padding: 10px;
-      border: 1px solid var(--app-border);
-      border-radius: 8px;
-      background: var(--app-surface-subtle);
-      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
-      cursor: text;
-    }
-    :host ::ng-deep .obsidian-image-preview img {
-      display: block;
-      width: 100%;
-      max-height: 70vh;
-      object-fit: contain;
-      border-radius: 5px;
-    }
-    :host ::ng-deep .obsidian-image-preview.is-error {
-      color: var(--app-error-text);
-      font-size: 0.875rem;
-      text-align: center;
-    }
-    .frontmatter-panel {
-      background: var(--app-surface-subtle);
-      border-bottom: 1px solid var(--app-border-strong);
-      padding: 0;
-    }
-    .frontmatter-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 6px 16px;
-    }
-    .frontmatter-title {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--app-text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .fm-actions { display: flex; gap: 4px; align-items: center; }
-    .fm-toggle {
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 0.75rem;
-      color: var(--app-text-muted);
-      padding: 2px 6px;
-      border-radius: 3px;
-    }
-    .fm-toggle:hover { background: var(--app-border); color: var(--app-text); }
-    .fm-toggle.active { background: var(--app-border); color: var(--app-text); }
-    .frontmatter-entries {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding: 4px 16px 10px;
-    }
-    .fm-entry { display: flex; gap: 6px; align-items: baseline; }
-    .fm-key {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--app-text-muted);
-    }
-    .fm-value {
-      font-size: 0.8rem;
-      color: var(--app-text);
-    }
-    .fm-editor { padding: 4px 16px 10px; }
-    .fm-yaml-textarea {
-      width: 100%;
-      min-height: 100px;
-      font-family: 'Fira Code', 'Cascadia Code', monospace;
-      font-size: 0.8rem;
-      line-height: 1.5;
-      padding: 8px;
-      border: 1px solid var(--app-border-strong);
-      border-radius: 4px;
-      resize: vertical;
-      background: var(--app-surface);
-      color: var(--app-text);
-      outline: none;
-    }
-    .fm-yaml-textarea:focus { border-color: var(--app-primary); }
-    .fm-yaml-textarea.error { border-color: var(--app-error-text); }
-    .fm-yaml-error {
-      display: block;
-      font-size: 0.75rem;
-      color: var(--app-error-text);
-      margin-top: 4px;
-    }
-    .move-help { margin: 0 0 8px; font-size: 0.85rem; color: var(--app-text-muted); }
-    .move-tree-wrap { border: 1px solid var(--app-border-strong); border-radius: 6px; max-height: 300px; overflow-y: auto; padding: 4px 0; }
-    .move-root-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      cursor: pointer;
-      font-size: 0.875rem;
-      border-bottom: 1px solid var(--app-border);
-    }
-    .move-root-item:hover { background: var(--app-surface-subtle); }
-    .move-root-item.selected { background: var(--app-primary-soft); font-weight: 600; color: var(--app-primary); }
-    .versions-layout { display: flex; gap: 12px; height: 460px; }
-    .versions-list { width: 240px; flex-shrink: 0; overflow-y: auto; border: 1px solid var(--app-border); border-radius: 6px; }
-    .version-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--app-border); font-size: 0.8rem; }
-    .version-item:hover { background: var(--app-surface-subtle); }
-    .version-item.active { background: var(--app-primary-soft); }
-    .v-date { color: var(--app-text); }
-    .v-source { font-size: 0.7rem; font-weight: 600; padding: 0.05rem 0.4rem; border-radius: 10px; align-self: flex-start; text-transform: uppercase; letter-spacing: 0.03em; }
-    .source-local { background: #dbeafe; color: #1e40af; }
-    .source-job { background: #ede9fe; color: #6d28d9; }
-    .source-webdav { background: #dcfce7; color: #166534; }
-    .versions-preview { flex: 1; min-width: 0; overflow: auto; border: 1px solid var(--app-border); border-radius: 6px; }
-    .version-diff { margin: 0; font-size: 0.75rem; line-height: 1.45; background: #1e1e1e; color: #d4d4d4; padding: 0.6rem; white-space: normal; overflow-x: auto; min-height: 100%; }
-    .version-diff span { display: block; white-space: pre; }
-    .version-diff .line-add { background: #1a3a1a; color: #7ee787; }
-    .version-diff .line-del { background: #3a1a1a; color: #ff7b72; }
-    .versions-preview .hint, .versions-list .hint { padding: 16px; color: var(--app-text-muted); font-size: 0.85rem; }
-    .link-discovery-body { min-height: 80px; }
-    .ld-progress-area { display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
-    .ld-step-label { font-size: 0.875rem; color: var(--app-text-muted); }
-    :host ::ng-deep .ld-bar { height: 8px; border-radius: 4px; }
-    .ld-error, .ld-warn {
-      display: flex; align-items: flex-start; gap: 10px;
-      padding: 12px; border-radius: 6px; font-size: 0.875rem;
-    }
-    .ld-error { background: var(--app-error-bg); color: var(--app-error-text); }
-    .ld-warn { background: var(--app-primary-soft); color: var(--app-text); }
-    .ld-empty { color: var(--app-text-muted); font-size: 0.875rem; padding: 8px 0; }
-    .ld-results { display: flex; flex-direction: column; gap: 6px; max-height: 380px; overflow-y: auto; }
-    .ld-selection-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .ld-selection-count { font-size: 0.8rem; color: var(--app-text-muted); }
-    .ld-result-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 12px; border: 1px solid var(--app-border);
-      border-radius: 6px; cursor: default; transition: background 0.1s;
-    }
-    .ld-result-item:hover { background: var(--app-surface-subtle); }
-    .ld-result-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-    .ld-result-title { font-size: 0.875rem; font-weight: 500; color: var(--app-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .ld-result-path { font-size: 0.75rem; color: var(--app-text-muted); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .ld-result-score { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; margin-left: 12px; }
-    .ld-score-label { font-size: 0.65rem; color: var(--app-text-subtle); text-transform: uppercase; letter-spacing: 0.04em; }
-    .ld-score-value { font-size: 0.9rem; font-weight: 700; color: var(--app-primary); }
-  `],
+  styles: [
+    `
+      :host {
+        display: block;
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
+      }
+      .explorer-shell {
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
+        background: var(--app-bg);
+        color: var(--app-text);
+        display: flex;
+        flex-direction: column;
+      }
+      .explorer-layout {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .file-tree-panel {
+        flex-shrink: 0;
+        border-right: none;
+        background: var(--app-surface);
+        overflow: hidden;
+        padding: 8px;
+        transition: width 0.2s ease;
+        display: flex;
+        flex-direction: column;
+      }
+      .file-tree-panel.collapsed {
+        padding: 0;
+        overflow: hidden;
+      }
+      .sidebar-toolbar {
+        flex-shrink: 0;
+        width: 40px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 6px 0;
+        gap: 2px;
+        border-right: 1px solid var(--app-border);
+        background: var(--app-surface-muted);
+      }
+      .resizer {
+        flex-shrink: 0;
+        width: 5px;
+        background: var(--app-border);
+        cursor: col-resize;
+        transition: background 0.15s;
+      }
+      .resizer:hover,
+      .resizer.active {
+        background: var(--app-text-subtle);
+      }
+      @media (max-width: 767px) {
+        .resizer {
+          display: none;
+        }
+      }
+      .wikilink-dropdown {
+        position: fixed;
+        z-index: 9999;
+        background: var(--app-surface);
+        border: 1px solid var(--app-border-strong);
+        border-radius: 6px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        min-width: 240px;
+        max-width: 380px;
+        max-height: 280px;
+        overflow-y: auto;
+        padding: 4px 0;
+      }
+      .wikilink-dropdown-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 14px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        color: var(--app-text);
+        transition: background 0.1s;
+      }
+      .wikilink-dropdown-item:hover {
+        background: var(--app-surface-subtle);
+      }
+      .wikilink-dropdown-item .pi {
+        color: var(--app-text-muted);
+        font-size: 0.8rem;
+        flex-shrink: 0;
+      }
+      .wikilink-dropdown-empty {
+        padding: 12px 14px;
+        font-size: 0.875rem;
+        color: var(--app-text-muted);
+      }
+      .search-box {
+        margin-bottom: 12px;
+      }
+      .search-box input {
+        width: 100%;
+      }
+      .search-results {
+        max-height: 360px;
+        overflow-y: auto;
+      }
+      .search-result {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        color: var(--app-text);
+        transition: background 0.1s;
+      }
+      .search-result:hover {
+        background: var(--app-surface-subtle);
+      }
+      .search-result.is-active {
+        background: var(--app-primary-soft);
+        color: var(--app-primary);
+      }
+      .search-result .pi {
+        color: var(--app-text-muted);
+        font-size: 0.8rem;
+        flex-shrink: 0;
+      }
+      .search-result-info {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 1;
+      }
+      .search-result-path {
+        font-size: 0.75rem;
+        color: var(--app-text-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .search-empty {
+        text-align: center;
+        color: var(--app-text-muted);
+        font-size: 0.875rem;
+        padding: 24px 0;
+      }
+      .tree-label {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
+      }
+      :host ::ng-deep .file-tree-panel .p-tree-node-label {
+        overflow: hidden;
+        min-width: 0;
+        flex: 1;
+      }
+      .empty-msg {
+        color: var(--app-text-muted);
+        font-size: 0.85rem;
+        padding: 8px;
+      }
+      .editor-panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .editor-header {
+        display: flex;
+        flex-direction: column;
+        padding: 6px 12px;
+        border-bottom: 1px solid var(--app-border);
+        background: var(--app-surface);
+        gap: 2px;
+      }
+      .editor-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        min-height: 28px;
+      }
+      .file-path {
+        display: flex;
+        align-items: baseline;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .file-path-dir {
+        font-size: 0.875rem;
+        font-weight: 400;
+        color: var(--app-text-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .file-title {
+        font-size: 0.875rem;
+        font-weight: 500;
+        white-space: nowrap;
+        color: var(--app-text);
+        flex-shrink: 0;
+      }
+      .dirty-dot {
+        color: var(--p-primary-color, #10b981);
+        font-size: 0.6rem;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .editor-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        align-self: flex-end;
+      }
+      .toolbar-group {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+      }
+      .actions-divider {
+        width: 1px;
+        height: 18px;
+        background: var(--app-border);
+        margin: 0 6px;
+        flex-shrink: 0;
+      }
+      .doc-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .milkdown-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        background: var(--app-surface);
+      }
+      .milkdown-container.hidden {
+        display: none;
+      }
+      .placeholder {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--app-text-muted);
+        font-size: 0.95rem;
+      }
+      :host ::ng-deep .milkdown {
+        outline: none;
+        min-height: 100%;
+      }
+      :host ::ng-deep .milkdown .editor {
+        outline: none;
+        min-height: 400px;
+      }
+      :host ::ng-deep .milkdown a {
+        cursor: pointer;
+        color: var(--app-primary);
+        text-decoration: underline;
+      }
+      :host ::ng-deep .milkdown a:hover {
+        color: var(--app-primary-hover);
+      }
+      :host ::ng-deep .wikilink-token {
+        color: var(--app-primary);
+        background: var(--app-primary-soft);
+        border-radius: 3px;
+        padding: 1px 2px;
+        cursor: pointer;
+        font-weight: 500;
+      }
+      :host ::ng-deep .wikilink-token:hover {
+        background: var(--app-primary-soft-hover);
+        text-decoration: underline;
+      }
+      :host ::ng-deep .milkdown h1 {
+        font-size: 2em;
+        font-weight: 700;
+        margin: 0.5em 0 0.3em;
+        line-height: 1.2;
+      }
+      :host ::ng-deep .milkdown h2 {
+        font-size: 1.5em;
+        font-weight: 700;
+        margin: 0.6em 0 0.3em;
+        line-height: 1.3;
+      }
+      :host ::ng-deep .milkdown h3 {
+        font-size: 1.25em;
+        font-weight: 600;
+        margin: 0.7em 0 0.3em;
+        line-height: 1.4;
+      }
+      :host ::ng-deep .milkdown h4 {
+        font-size: 1.05em;
+        font-weight: 600;
+        margin: 0.8em 0 0.25em;
+      }
+      :host ::ng-deep .milkdown h5 {
+        font-size: 0.9em;
+        font-weight: 600;
+        margin: 0.9em 0 0.25em;
+      }
+      :host ::ng-deep .milkdown h6 {
+        font-size: 0.85em;
+        font-weight: 600;
+        margin: 0.9em 0 0.25em;
+        color: var(--app-text-muted);
+      }
+      :host ::ng-deep .milkdown blockquote {
+        border-left: 4px solid var(--app-primary);
+        margin: 0.75em 0;
+        padding: 0.4em 1em;
+        background: var(--app-primary-soft);
+        color: var(--app-text);
+        border-radius: 0 4px 4px 0;
+      }
+      :host ::ng-deep .milkdown ul {
+        list-style: disc;
+        padding-left: 1.75em;
+        margin: 0.5em 0;
+      }
+      :host ::ng-deep .milkdown ol {
+        list-style: decimal;
+        padding-left: 1.75em;
+        margin: 0.5em 0;
+      }
+      :host ::ng-deep .milkdown li {
+        margin: 0.2em 0;
+      }
+      :host ::ng-deep .milkdown pre {
+        background: var(--app-surface-subtle);
+        border-radius: 6px;
+        padding: 0.9em 1em;
+        overflow-x: auto;
+        margin: 0.75em 0;
+      }
+      :host ::ng-deep .milkdown pre code {
+        font-family: 'Fira Code', 'Cascadia Code', monospace;
+        font-size: 0.85em;
+        background: none;
+        padding: 0;
+        border-radius: 0;
+      }
+      :host ::ng-deep .milkdown code {
+        font-family: 'Fira Code', 'Cascadia Code', monospace;
+        font-size: 0.85em;
+        background: var(--app-surface-subtle);
+        padding: 0.15em 0.35em;
+        border-radius: 3px;
+      }
+      :host ::ng-deep .milkdown hr {
+        border: none;
+        border-top: 2px solid var(--app-border);
+        margin: 1.5em 0;
+      }
+      :host ::ng-deep .milkdown table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 1em 0;
+        overflow-x: auto;
+        display: block;
+      }
+      :host ::ng-deep .milkdown table th,
+      :host ::ng-deep .milkdown table td {
+        border: 1px solid var(--app-border);
+        padding: 0.45em 0.75em;
+        text-align: left;
+        vertical-align: top;
+      }
+      :host ::ng-deep .milkdown table thead th {
+        background: var(--app-surface-subtle);
+        font-weight: 600;
+        color: var(--app-text);
+      }
+      :host ::ng-deep .milkdown table tbody tr:nth-child(even) {
+        background: var(--app-surface-hover);
+      }
+      :host ::ng-deep .obsidian-image-embed-hidden {
+        display: none;
+      }
+      :host ::ng-deep .obsidian-image-preview {
+        margin: 18px auto;
+        max-width: min(100%, 860px);
+        padding: 10px;
+        border: 1px solid var(--app-border);
+        border-radius: 8px;
+        background: var(--app-surface-subtle);
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+        cursor: text;
+      }
+      :host ::ng-deep .obsidian-image-preview img {
+        display: block;
+        width: 100%;
+        max-height: 70vh;
+        object-fit: contain;
+        border-radius: 5px;
+      }
+      :host ::ng-deep .obsidian-image-preview.is-error {
+        color: var(--app-error-text);
+        font-size: 0.875rem;
+        text-align: center;
+      }
+      .frontmatter-panel {
+        background: var(--app-surface-subtle);
+        border-bottom: 1px solid var(--app-border-strong);
+        padding: 0;
+      }
+      .frontmatter-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 16px;
+      }
+      .frontmatter-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--app-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .fm-actions {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .fm-toggle {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 0.75rem;
+        color: var(--app-text-muted);
+        padding: 2px 6px;
+        border-radius: 3px;
+      }
+      .fm-toggle:hover {
+        background: var(--app-border);
+        color: var(--app-text);
+      }
+      .fm-toggle.active {
+        background: var(--app-border);
+        color: var(--app-text);
+      }
+      .frontmatter-entries {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 4px 16px 10px;
+      }
+      .fm-entry {
+        display: flex;
+        gap: 6px;
+        align-items: baseline;
+      }
+      .fm-key {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--app-text-muted);
+      }
+      .fm-value {
+        font-size: 0.8rem;
+        color: var(--app-text);
+      }
+      .fm-editor {
+        padding: 4px 16px 10px;
+      }
+      .fm-yaml-textarea {
+        width: 100%;
+        min-height: 100px;
+        font-family: 'Fira Code', 'Cascadia Code', monospace;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        padding: 8px;
+        border: 1px solid var(--app-border-strong);
+        border-radius: 4px;
+        resize: vertical;
+        background: var(--app-surface);
+        color: var(--app-text);
+        outline: none;
+      }
+      .fm-yaml-textarea:focus {
+        border-color: var(--app-primary);
+      }
+      .fm-yaml-textarea.error {
+        border-color: var(--app-error-text);
+      }
+      .fm-yaml-error {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--app-error-text);
+        margin-top: 4px;
+      }
+      .move-help {
+        margin: 0 0 8px;
+        font-size: 0.85rem;
+        color: var(--app-text-muted);
+      }
+      .move-tree-wrap {
+        border: 1px solid var(--app-border-strong);
+        border-radius: 6px;
+        max-height: 300px;
+        overflow-y: auto;
+        padding: 4px 0;
+      }
+      .move-root-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        border-bottom: 1px solid var(--app-border);
+      }
+      .move-root-item:hover {
+        background: var(--app-surface-subtle);
+      }
+      .move-root-item.selected {
+        background: var(--app-primary-soft);
+        font-weight: 600;
+        color: var(--app-primary);
+      }
+      .versions-layout {
+        display: flex;
+        gap: 12px;
+        height: 460px;
+      }
+      .versions-list {
+        width: 240px;
+        flex-shrink: 0;
+        overflow-y: auto;
+        border: 1px solid var(--app-border);
+        border-radius: 6px;
+      }
+      .version-item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 8px 12px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--app-border);
+        font-size: 0.8rem;
+      }
+      .version-item:hover {
+        background: var(--app-surface-subtle);
+      }
+      .version-item.active {
+        background: var(--app-primary-soft);
+      }
+      .v-date {
+        color: var(--app-text);
+      }
+      .v-source {
+        font-size: 0.7rem;
+        font-weight: 600;
+        padding: 0.05rem 0.4rem;
+        border-radius: 10px;
+        align-self: flex-start;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .source-local {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+      .source-job {
+        background: #ede9fe;
+        color: #6d28d9;
+      }
+      .source-webdav {
+        background: #dcfce7;
+        color: #166534;
+      }
+      .versions-preview {
+        flex: 1;
+        min-width: 0;
+        overflow: auto;
+        border: 1px solid var(--app-border);
+        border-radius: 6px;
+      }
+      .version-diff {
+        margin: 0;
+        font-size: 0.75rem;
+        line-height: 1.45;
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 0.6rem;
+        white-space: normal;
+        overflow-x: auto;
+        min-height: 100%;
+      }
+      .version-diff span {
+        display: block;
+        white-space: pre;
+      }
+      .version-diff .line-add {
+        background: #1a3a1a;
+        color: #7ee787;
+      }
+      .version-diff .line-del {
+        background: #3a1a1a;
+        color: #ff7b72;
+      }
+      .versions-preview .hint,
+      .versions-list .hint {
+        padding: 16px;
+        color: var(--app-text-muted);
+        font-size: 0.85rem;
+      }
+      .link-discovery-body {
+        min-height: 80px;
+      }
+      .ld-progress-area {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 8px 0;
+      }
+      .ld-step-label {
+        font-size: 0.875rem;
+        color: var(--app-text-muted);
+      }
+      :host ::ng-deep .ld-bar {
+        height: 8px;
+        border-radius: 4px;
+      }
+      .ld-error,
+      .ld-warn {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 12px;
+        border-radius: 6px;
+        font-size: 0.875rem;
+      }
+      .ld-error {
+        background: var(--app-error-bg);
+        color: var(--app-error-text);
+      }
+      .ld-warn {
+        background: var(--app-primary-soft);
+        color: var(--app-text);
+      }
+      .ld-empty {
+        color: var(--app-text-muted);
+        font-size: 0.875rem;
+        padding: 8px 0;
+      }
+      .ld-results {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 380px;
+        overflow-y: auto;
+      }
+      .ld-selection-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .ld-selection-count {
+        font-size: 0.8rem;
+        color: var(--app-text-muted);
+      }
+      .ld-result-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--app-border);
+        border-radius: 6px;
+        cursor: default;
+        transition: background 0.1s;
+      }
+      .ld-result-item:hover {
+        background: var(--app-surface-subtle);
+      }
+      .ld-result-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        flex: 1;
+      }
+      .ld-result-title {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--app-text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ld-result-path {
+        font-size: 0.75rem;
+        color: var(--app-text-muted);
+        font-family: monospace;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ld-result-score {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        flex-shrink: 0;
+        margin-left: 12px;
+      }
+      .ld-score-label {
+        font-size: 0.65rem;
+        color: var(--app-text-subtle);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .ld-score-value {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--app-primary);
+      }
+    `,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, UnsavedChangesAware {
@@ -1016,9 +1338,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     const path = this.selectedPath();
     if (!path) return null;
     const idx = path.lastIndexOf('/');
-    return idx === -1
-      ? { dir: '', name: path }
-      : { dir: path.slice(0, idx + 1), name: path.slice(idx + 1) };
+    return idx === -1 ? { dir: '', name: path } : { dir: path.slice(0, idx + 1), name: path.slice(idx + 1) };
   });
   readonly isDirty = signal(false);
   readonly frontmatter = signal<Record<string, unknown>>({});
@@ -1073,19 +1393,18 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   private previewContent = '';
   readonly dirTreeNodes = computed(() => {
     const filterDirs = (nodes: TreeNode[]): TreeNode[] =>
-      nodes.filter(n => !n.leaf).map(n => ({ ...n, children: filterDirs(n.children ?? []) }));
+      nodes.filter((n) => !n.leaf).map((n) => ({ ...n, children: filterDirs(n.children ?? []) }));
     return filterDirs(this.treeNodes());
   });
 
   readonly allFiles = computed(() => {
-    const flatten = (nodes: TreeNode[]): TreeNode[] =>
-      nodes.flatMap(n => n.leaf ? [n] : flatten(n.children ?? []));
+    const flatten = (nodes: TreeNode[]): TreeNode[] => nodes.flatMap((n) => (n.leaf ? [n] : flatten(n.children ?? [])));
     return flatten(this.treeNodes());
   });
 
   readonly filteredFiles = computed(() => {
     const q = this.searchQuery().toLowerCase().trim();
-    return q ? this.allFiles().filter(n => (n.data as string).toLowerCase().includes(q)) : this.allFiles();
+    return q ? this.allFiles().filter((n) => (n.data as string).toLowerCase().includes(q)) : this.allFiles();
   });
 
   selectedNode: TreeNode | null = null;
@@ -1098,7 +1417,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     if (q === null) return [];
     const lower = q.toLowerCase();
     return this.allFiles()
-      .filter(n => !lower || (n.label ?? '').toLowerCase().includes(lower))
+      .filter((n) => !lower || (n.label ?? '').toLowerCase().includes(lower))
       .slice(0, 12);
   });
 
@@ -1115,15 +1434,15 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   private navigatingFromTree = false;
 
   ngOnInit(): void {
-    this.route.url.pipe(
-      skip(1),
-      takeUntilDestroyed(this.destroyRef),
-    ).subscribe(segments => {
+    this.route.url.pipe(skip(1), takeUntilDestroyed(this.destroyRef)).subscribe((segments) => {
       if (this.navigatingFromTree) {
         this.navigatingFromTree = false;
         return;
       }
-      const filePath = segments.slice(1).map(s => s.path).join('/');
+      const filePath = segments
+        .slice(1)
+        .map((s) => s.path)
+        .join('/');
       if (filePath) this.loadFileByPath(filePath);
     });
   }
@@ -1144,17 +1463,21 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   private loadTree(): void {
     this.treeSubscription = this.fileService.getTree().subscribe({
-      next: nodes => {
+      next: (nodes) => {
         this.treeNodes.set(nodes);
         const currentPath = this.selectedPath();
         if (currentPath) {
-          const node = this.allFiles().find(n => n.data === currentPath);
+          const node = this.allFiles().find((n) => n.data === currentPath);
           if (node) this.selectedNode = node;
         }
         this.cdr.markForCheck();
       },
       error: () =>
-        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorLoadTree') }),
+        this.messageService.add({
+          severity: 'error',
+          summary: this.t.translate('common.error'),
+          detail: this.t.translate('explorer.toastErrorLoadTree'),
+        }),
     });
   }
 
@@ -1171,7 +1494,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   }
 
   private restoreExpanded(nodes: TreeNode[], expanded: Set<string>): TreeNode[] {
-    return nodes.map(n => ({
+    return nodes.map((n) => ({
       ...n,
       expanded: expanded.has(n.data as string),
       children: n.children ? this.restoreExpanded(n.children, expanded) : [],
@@ -1181,12 +1504,16 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   private reloadTree(): void {
     const expanded = this.getExpandedPaths(this.treeNodes());
     this.fileService.getTree().subscribe({
-      next: nodes => {
+      next: (nodes) => {
         this.treeNodes.set(this.restoreExpanded(nodes, expanded));
         this.cdr.markForCheck();
       },
       error: () =>
-        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorUpdateTree') }),
+        this.messageService.add({
+          severity: 'error',
+          summary: this.t.translate('common.error'),
+          detail: this.t.translate('explorer.toastErrorUpdateTree'),
+        }),
     });
   }
 
@@ -1215,12 +1542,17 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
           this.router.navigate(['explorer', ...segments]);
         }
         this.reloadTree();
-        this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryRenamed'), detail: this.t.translate('explorer.toastSuccessRenamed', { name: newName }) });
+        this.messageService.add({
+          severity: 'success',
+          summary: this.t.translate('explorer.toastSummaryRenamed'),
+          detail: this.t.translate('explorer.toastSuccessRenamed', { name: newName }),
+        });
       },
-      error: err => {
-        const msg = err.status === HttpStatusCode.Conflict
-          ? this.t.translate('explorer.toastErrorRenameConflict', { name: newName })
-          : this.t.translate('explorer.toastErrorRename');
+      error: (err) => {
+        const msg =
+          err.status === HttpStatusCode.Conflict
+            ? this.t.translate('explorer.toastErrorRenameConflict', { name: newName })
+            : this.t.translate('explorer.toastErrorRename');
         this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: msg });
       },
     });
@@ -1244,12 +1576,17 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         this.reloadTree();
         const newNode: TreeNode = { label: name, data: newPath, leaf: true };
         this.openFile(newNode);
-        this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryCreated'), detail: this.t.translate('explorer.toastSuccessFileCreated', { name }) });
+        this.messageService.add({
+          severity: 'success',
+          summary: this.t.translate('explorer.toastSummaryCreated'),
+          detail: this.t.translate('explorer.toastSuccessFileCreated', { name }),
+        });
       },
-      error: err => {
-        const msg = err.status === HttpStatusCode.Conflict
-          ? this.t.translate('explorer.toastErrorFileConflict', { name })
-          : this.t.translate('explorer.toastErrorFileCreate');
+      error: (err) => {
+        const msg =
+          err.status === HttpStatusCode.Conflict
+            ? this.t.translate('explorer.toastErrorFileConflict', { name })
+            : this.t.translate('explorer.toastErrorFileCreate');
         this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: msg });
       },
     });
@@ -1270,12 +1607,17 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     this.fileService.createDirectory(newPath).subscribe({
       next: () => {
         this.reloadTree();
-        this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryCreated'), detail: this.t.translate('explorer.toastSuccessDirCreated', { name }) });
+        this.messageService.add({
+          severity: 'success',
+          summary: this.t.translate('explorer.toastSummaryCreated'),
+          detail: this.t.translate('explorer.toastSuccessDirCreated', { name }),
+        });
       },
-      error: err => {
-        const msg = err.status === HttpStatusCode.Conflict
-          ? this.t.translate('explorer.toastErrorDirConflict', { name })
-          : this.t.translate('explorer.toastErrorDirCreate');
+      error: (err) => {
+        const msg =
+          err.status === HttpStatusCode.Conflict
+            ? this.t.translate('explorer.toastErrorDirConflict', { name })
+            : this.t.translate('explorer.toastErrorDirCreate');
         this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: msg });
       },
     });
@@ -1308,12 +1650,17 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         }
         this.reloadTree();
         const dest = targetDir || '/';
-        this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryMoved'), detail: this.t.translate('explorer.toastSuccessMoved', { name: filename, dest }) });
+        this.messageService.add({
+          severity: 'success',
+          summary: this.t.translate('explorer.toastSummaryMoved'),
+          detail: this.t.translate('explorer.toastSuccessMoved', { name: filename, dest }),
+        });
       },
-      error: err => {
-        const msg = err.status === HttpStatusCode.Conflict
-          ? this.t.translate('explorer.toastErrorMoveConflict')
-          : this.t.translate('explorer.toastErrorMove');
+      error: (err) => {
+        const msg =
+          err.status === HttpStatusCode.Conflict
+            ? this.t.translate('explorer.toastErrorMoveConflict')
+            : this.t.translate('explorer.toastErrorMove');
         this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: msg });
       },
     });
@@ -1335,10 +1682,18 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
             this.isDirty.set(false);
             if (this.editor) this.editor.action(replaceAll(''));
             this.reloadTree();
-            this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryDeleted'), detail: this.t.translate('explorer.toastSuccessDeleted', { name: label }) });
+            this.messageService.add({
+              severity: 'success',
+              summary: this.t.translate('explorer.toastSummaryDeleted'),
+              detail: this.t.translate('explorer.toastSuccessDeleted', { name: label }),
+            });
           },
           error: () =>
-            this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorDelete') }),
+            this.messageService.add({
+              severity: 'error',
+              summary: this.t.translate('common.error'),
+              detail: this.t.translate('explorer.toastErrorDelete'),
+            }),
         });
       },
     });
@@ -1361,10 +1716,18 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
               if (this.editor) this.editor.action(replaceAll(''));
             }
             this.reloadTree();
-            this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryDeleted'), detail: this.t.translate('explorer.toastSuccessDeleted', { name: node.label }) });
+            this.messageService.add({
+              severity: 'success',
+              summary: this.t.translate('explorer.toastSummaryDeleted'),
+              detail: this.t.translate('explorer.toastSuccessDeleted', { name: node.label }),
+            });
           },
           error: () =>
-            this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorDelete') }),
+            this.messageService.add({
+              severity: 'error',
+              summary: this.t.translate('common.error'),
+              detail: this.t.translate('explorer.toastErrorDelete'),
+            }),
         });
       },
     });
@@ -1372,7 +1735,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   private initEditor(): Promise<void> {
     return Editor.make()
-      .config(ctx => {
+      .config((ctx) => {
         ctx.set(rootCtx, this.editorContainer.nativeElement);
         ctx.set(defaultValueCtx, '');
         ctx.set(editorViewOptionsCtx, { attributes: { spellcheck: 'false' } });
@@ -1397,28 +1760,32 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
       .use(createMarkdownImagePlugin())
       .use(createMarkdownLinkPlugin())
       .use(createLivePreviewPlugin())
-      .use(createObsidianImagePreviewPlugin({
-        getResourceFolder: () => this.resourceFolder(),
-        getToken: () => this.auth.token(),
-      }))
-      .use(createWikilinkPlugin({
-        onNavigate: target => this.navigateToWikilink(target),
-        onAutocomplete: (query, coords, view) => {
-          this.editorView = view;
-          this.wikilinkQuery.set(query);
-          this.wikilinkCoords.set(coords);
-          this.cdr.markForCheck();
-        },
-      }))
+      .use(
+        createObsidianImagePreviewPlugin({
+          getResourceFolder: () => this.resourceFolder(),
+          getToken: () => this.auth.token(),
+        }),
+      )
+      .use(
+        createWikilinkPlugin({
+          onNavigate: (target) => this.navigateToWikilink(target),
+          onAutocomplete: (query, coords, view) => {
+            this.editorView = view;
+            this.wikilinkQuery.set(query);
+            this.wikilinkCoords.set(coords);
+            this.cdr.markForCheck();
+          },
+        }),
+      )
       .create()
-      .then(editor => {
+      .then((editor) => {
         this.editor = editor;
       });
   }
 
   private loadResourceSettings(): void {
     this.api.getResourceSettings().subscribe({
-      next: settings => {
+      next: (settings) => {
         this.resourceFolder.set(settings.resourceFolder);
         this.refreshObsidianImagePreview();
       },
@@ -1428,7 +1795,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   private refreshObsidianImagePreview(): void {
     if (!this.editor) return;
-    this.editor.action(ctx => {
+    this.editor.action((ctx) => {
       const view = ctx.get(editorViewCtx);
       view.dispatch(view.state.tr.setMeta(OBSIDIAN_IMAGE_PREVIEW_REFRESH, true));
     });
@@ -1437,13 +1804,16 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   private getFilePathFromRoute(): string | null {
     const segments = this.route.snapshot.url;
     if (segments.length <= 1) return null;
-    return segments.slice(1).map(s => s.path).join('/');
+    return segments
+      .slice(1)
+      .map((s) => s.path)
+      .join('/');
   }
 
   private loadFileByPath(path: string): void {
     const label = path.split('/').pop() ?? path;
     this.fileService.getContent(path).subscribe({
-      next: rawContent => {
+      next: (rawContent) => {
         const parsed = this.parseFrontmatter(rawContent);
         this.selectedPath.set(path);
         this.selectedLabel.set(label);
@@ -1457,12 +1827,16 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
           this.isLoading = true;
           this.editor.action(replaceAll(parsed.content));
         }
-        const node = this.allFiles().find(n => n.data === path);
+        const node = this.allFiles().find((n) => n.data === path);
         if (node) this.selectedNode = node;
         this.cdr.markForCheck();
       },
       error: () =>
-        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorLoadTree') }),
+        this.messageService.add({
+          severity: 'error',
+          summary: this.t.translate('common.error'),
+          detail: this.t.translate('explorer.toastErrorLoadTree'),
+        }),
     });
   }
 
@@ -1479,14 +1853,34 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     this.contextMenuNode.set(node);
     if (node.leaf) {
       this.contextMenuItems.set([
-        { label: this.t.translate('explorer.contextMenuRename'), icon: 'pi pi-pencil', command: () => this.openRenameDialog() },
-        { label: this.t.translate('explorer.contextMenuMove'), icon: 'pi pi-folder-open', command: () => this.openMoveDialog() },
-        { label: this.t.translate('explorer.contextMenuDelete'), icon: 'pi pi-trash', command: () => this.deleteNode() },
+        {
+          label: this.t.translate('explorer.contextMenuRename'),
+          icon: 'pi pi-pencil',
+          command: () => this.openRenameDialog(),
+        },
+        {
+          label: this.t.translate('explorer.contextMenuMove'),
+          icon: 'pi pi-folder-open',
+          command: () => this.openMoveDialog(),
+        },
+        {
+          label: this.t.translate('explorer.contextMenuDelete'),
+          icon: 'pi pi-trash',
+          command: () => this.deleteNode(),
+        },
       ]);
     } else {
       this.contextMenuItems.set([
-        { label: this.t.translate('explorer.contextMenuCreateFile'), icon: 'pi pi-file-plus', command: () => this.openCreateDialog() },
-        { label: this.t.translate('explorer.contextMenuCreateDir'), icon: 'pi pi-folder-plus', command: () => this.openCreateDirDialog() },
+        {
+          label: this.t.translate('explorer.contextMenuCreateFile'),
+          icon: 'pi pi-file-plus',
+          command: () => this.openCreateDialog(),
+        },
+        {
+          label: this.t.translate('explorer.contextMenuCreateDir'),
+          icon: 'pi pi-folder-plus',
+          command: () => this.openCreateDirDialog(),
+        },
       ]);
     }
   }
@@ -1531,7 +1925,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   private loadFile(node: TreeNode): void {
     const path = node.data as string;
     this.fileService.getContent(path).subscribe({
-      next: rawContent => {
+      next: (rawContent) => {
         const parsed = this.parseFrontmatter(rawContent);
         this.selectedPath.set(path);
         this.selectedLabel.set(node.label ?? path);
@@ -1548,12 +1942,16 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         this.cdr.markForCheck();
       },
       error: () =>
-        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorLoadTree') }),
+        this.messageService.add({
+          severity: 'error',
+          summary: this.t.translate('common.error'),
+          detail: this.t.translate('explorer.toastErrorLoadTree'),
+        }),
     });
   }
 
   toggleFrontmatter(): void {
-    this.showFrontmatter.update(v => !v);
+    this.showFrontmatter.update((v) => !v);
     if (!this.showFrontmatter()) this.editingFrontmatter.set(false);
   }
 
@@ -1562,7 +1960,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
       this.frontmatterRawYaml.set(stringifyYaml(this.frontmatter()));
       this.frontmatterYamlError.set(false);
     }
-    this.editingFrontmatter.update(v => !v);
+    this.editingFrontmatter.update((v) => !v);
   }
 
   onFrontmatterYamlChange(value: string): void {
@@ -1589,20 +1987,26 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   }
 
   toggleTreePanel(): void {
-    this.treePanelCollapsed.update(v => !v);
+    this.treePanelCollapsed.update((v) => !v);
   }
 
   navigateToWikilink(target: string): void {
     const label = target.toLowerCase();
-    const file = this.allFiles().find(n =>
-      (n.data as string ?? '').toLowerCase().replace(/\.md$/i, '') === label ||
-      (n.data as string ?? '').toLowerCase() === label
-    ) ?? this.allFiles().find(n =>
-      (n.label ?? '').toLowerCase().replace(/\.md$/i, '') === label ||
-      (n.label ?? '').toLowerCase() === label
-    );
+    const file =
+      this.allFiles().find(
+        (n) =>
+          ((n.data as string) ?? '').toLowerCase().replace(/\.md$/i, '') === label ||
+          ((n.data as string) ?? '').toLowerCase() === label,
+      ) ??
+      this.allFiles().find(
+        (n) => (n.label ?? '').toLowerCase().replace(/\.md$/i, '') === label || (n.label ?? '').toLowerCase() === label,
+      );
     if (!file) {
-      this.messageService.add({ severity: 'warn', summary: this.t.translate('explorer.toastSummaryBrokenLink'), detail: this.t.translate('explorer.toastBrokenLink', { target }) });
+      this.messageService.add({
+        severity: 'warn',
+        summary: this.t.translate('explorer.toastSummaryBrokenLink'),
+        detail: this.t.translate('explorer.toastBrokenLink', { target }),
+      });
       return;
     }
     if (this.isDirty()) {
@@ -1659,10 +2063,10 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     if (count === 0) return;
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      this.searchHighlightIndex.update(i => (i + 1) % count);
+      this.searchHighlightIndex.update((i) => (i + 1) % count);
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
-      this.searchHighlightIndex.update(i => (i <= 0 ? count - 1 : i - 1));
+      this.searchHighlightIndex.update((i) => (i <= 0 ? count - 1 : i - 1));
     } else if (event.key === 'Enter') {
       this.selectHighlightedResult();
     }
@@ -1772,7 +2176,8 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   insertTable(): void {
     if (!this.editor) return;
-    this.editor.action(ctx => {
+    this.editor.action((ctx) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const view = (ctx as any).get('editorView') as EditorView;
       if (view) insertTableAtCursor(view);
     });
@@ -1782,24 +2187,35 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     const path = this.selectedPath();
     if (!path) return;
     const fm = this.frontmatter();
-    const fullContent = Object.keys(fm).length > 0
-      ? this.stringifyWithFrontmatter(this.currentMarkdown, fm)
-      : this.currentMarkdown;
+    const fullContent =
+      Object.keys(fm).length > 0 ? this.stringifyWithFrontmatter(this.currentMarkdown, fm) : this.currentMarkdown;
     this.fileService.saveContent(path, fullContent).subscribe({
       next: () => {
         this.isDirty.set(false);
         this.rawFileContent = fullContent;
-        this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryGuardado'), detail: this.t.translate('explorer.toastSuccessSaved') });
+        this.messageService.add({
+          severity: 'success',
+          summary: this.t.translate('explorer.toastSummaryGuardado'),
+          detail: this.t.translate('explorer.toastSuccessSaved'),
+        });
         this.cdr.markForCheck();
       },
       error: (err) => {
         if (err?.status === HttpStatusCode.BadGateway) {
           // Saved locally + recorded in history, but not replicated to WebDAV.
           this.isDirty.set(false);
-          this.messageService.add({ severity: 'warn', summary: this.t.translate('explorer.toastSummaryGuardado'), detail: this.t.translate('explorer.toastSavedNotReplicated') });
+          this.messageService.add({
+            severity: 'warn',
+            summary: this.t.translate('explorer.toastSummaryGuardado'),
+            detail: this.t.translate('explorer.toastSavedNotReplicated'),
+          });
           this.cdr.markForCheck();
         } else {
-          this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorSave') });
+          this.messageService.add({
+            severity: 'error',
+            summary: this.t.translate('common.error'),
+            detail: this.t.translate('explorer.toastErrorSave'),
+          });
         }
       },
     });
@@ -1814,12 +2230,16 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     this.versions.set([]);
     this.showVersions.set(true);
     this.fileService.getVersions(path).subscribe({
-      next: versions => {
+      next: (versions) => {
         this.versions.set(versions);
         this.cdr.markForCheck();
       },
       error: () =>
-        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('versions.errorLoad') }),
+        this.messageService.add({
+          severity: 'error',
+          summary: this.t.translate('common.error'),
+          detail: this.t.translate('versions.errorLoad'),
+        }),
     });
   }
 
@@ -1827,7 +2247,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     const path = this.selectedPath();
     if (!path) return;
     this.fileService.getVersionContent(path, version.versionId).subscribe({
-      next: rawContent => {
+      next: (rawContent) => {
         const content = rawContent.replace(/\\\[\\\[([^\]]*)\\\]\\\]/g, '[[$1]]');
         this.previewVersionId.set(version.versionId);
         this.previewContent = content;
@@ -1835,7 +2255,11 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         this.cdr.markForCheck();
       },
       error: () =>
-        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('versions.errorLoad') }),
+        this.messageService.add({
+          severity: 'error',
+          summary: this.t.translate('common.error'),
+          detail: this.t.translate('versions.errorLoad'),
+        }),
     });
   }
 
@@ -1856,15 +2280,27 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         }
         this.isDirty.set(false);
         this.showVersions.set(false);
-        this.messageService.add({ severity: 'success', summary: this.t.translate('explorer.toastSummaryGuardado'), detail: this.t.translate('versions.restored') });
+        this.messageService.add({
+          severity: 'success',
+          summary: this.t.translate('explorer.toastSummaryGuardado'),
+          detail: this.t.translate('versions.restored'),
+        });
         this.cdr.markForCheck();
       },
       error: (err) => {
         if (err?.status === HttpStatusCode.BadGateway) {
           this.showVersions.set(false);
-          this.messageService.add({ severity: 'warn', summary: this.t.translate('explorer.toastSummaryGuardado'), detail: this.t.translate('explorer.toastSavedNotReplicated') });
+          this.messageService.add({
+            severity: 'warn',
+            summary: this.t.translate('explorer.toastSummaryGuardado'),
+            detail: this.t.translate('explorer.toastSavedNotReplicated'),
+          });
         } else {
-          this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail: this.t.translate('explorer.toastErrorSave') });
+          this.messageService.add({
+            severity: 'error',
+            summary: this.t.translate('common.error'),
+            detail: this.t.translate('explorer.toastErrorSave'),
+          });
         }
       },
     });
@@ -1872,9 +2308,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   private currentFullContent(): string {
     const fm = this.frontmatter();
-    return Object.keys(fm).length > 0
-      ? this.stringifyWithFrontmatter(this.currentMarkdown, fm)
-      : this.currentMarkdown;
+    return Object.keys(fm).length > 0 ? this.stringifyWithFrontmatter(this.currentMarkdown, fm) : this.currentMarkdown;
   }
 
   /** Minimal LCS-based line diff of the previewed version against the current content. */
@@ -1893,12 +2327,26 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     let i = 0;
     let j = 0;
     while (i < n && j < m) {
-      if (a[i] === b[j]) { out.push(' ' + a[i]); i++; j++; }
-      else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push('-' + a[i]); i++; }
-      else { out.push('+' + b[j]); j++; }
+      if (a[i] === b[j]) {
+        out.push(' ' + a[i]);
+        i++;
+        j++;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        out.push('-' + a[i]);
+        i++;
+      } else {
+        out.push('+' + b[j]);
+        j++;
+      }
     }
-    while (i < n) { out.push('-' + a[i]); i++; }
-    while (j < m) { out.push('+' + b[j]); j++; }
+    while (i < n) {
+      out.push('-' + a[i]);
+      i++;
+    }
+    while (j < m) {
+      out.push('+' + b[j]);
+      j++;
+    }
     return out;
   }
 
@@ -1914,9 +2362,12 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   sourceClass(source: string): string {
     switch (source) {
-      case 'LOCAL_EDIT': return 'source-local';
-      case 'WEBDAV_PULL': return 'source-webdav';
-      default: return 'source-job';
+      case 'LOCAL_EDIT':
+        return 'source-local';
+      case 'WEBDAV_PULL':
+        return 'source-webdav';
+      default:
+        return 'source-job';
     }
   }
 
@@ -1932,13 +2383,17 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     if (this.syncing()) return;
     this.syncing.set(true);
     this.api.syncWebdav().subscribe({
-      next: event => {
+      next: (event) => {
         if (event.type === 'done') {
           const { pulled, deleted, conflicts } = event.result;
           this.messageService.add({
             severity: conflicts.length > 0 ? 'warn' : 'success',
             summary: this.t.translate('sync.button'),
-            detail: this.t.translate('sync.summary', { pulled: pulled.length, deleted: deleted.length, conflicts: conflicts.length }),
+            detail: this.t.translate('sync.summary', {
+              pulled: pulled.length,
+              deleted: deleted.length,
+              conflicts: conflicts.length,
+            }),
           });
           if (pulled.length > 0 || deleted.length > 0) this.reloadTree();
         }
@@ -1949,9 +2404,8 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
       },
       error: (err: { code?: string; message?: string }) => {
         this.syncing.set(false);
-        const detail = err?.code === 'NOT_CONFIGURED'
-          ? this.t.translate('sync.notConfigured')
-          : this.t.translate('sync.error');
+        const detail =
+          err?.code === 'NOT_CONFIGURED' ? this.t.translate('sync.notConfigured') : this.t.translate('sync.error');
         this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail });
         this.cdr.markForCheck();
       },
@@ -1972,7 +2426,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     if (!hasKeywords) return;
     this.linkDiscoveryRunning.set(true);
     this.linkDiscoverySub = this.api.discoverLinks(path).subscribe({
-      next: event => {
+      next: (event) => {
         if (event.type === 'progress') {
           this.linkDiscoveryStep.set({ step: event.step, current: event.current, total: event.total });
         } else if (event.type === 'done') {
@@ -1996,7 +2450,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   }
 
   navigateToDiscoveredLink(path: string): void {
-    const node = this.allFiles().find(n => n.data === path);
+    const node = this.allFiles().find((n) => n.data === path);
     if (node) {
       this.showLinkDiscovery.set(false);
       this.openFile(node);
@@ -2008,7 +2462,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   }
 
   toggleLinkDiscovery(path: string): void {
-    this.linkDiscoverySelected.update(set => {
+    this.linkDiscoverySelected.update((set) => {
       const next = new Set(set);
       if (next.has(path)) next.delete(path);
       else next.add(path);
@@ -2020,7 +2474,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     if (this.linkDiscoveryAllSelected()) {
       this.linkDiscoverySelected.set(new Set());
     } else {
-      this.linkDiscoverySelected.set(new Set(this.linkDiscoveryResults().map(l => l.path)));
+      this.linkDiscoverySelected.set(new Set(this.linkDiscoveryResults().map((l) => l.path)));
     }
   }
 
@@ -2033,7 +2487,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     const selected = this.linkDiscoverySelected();
     if (selected.size === 0) return;
 
-    const slugsToAdd = Array.from(selected).map(p => this.slugFromPath(p));
+    const slugsToAdd = Array.from(selected).map((p) => this.slugFromPath(p));
     let markdown = this.currentMarkdown;
 
     const relatedMatch = markdown.match(/^## Related\s*\n([\s\S]*?)(?=^## |\s*$)/m);
@@ -2048,8 +2502,8 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
       }
 
       const newLines = slugsToAdd
-        .filter(s => !existingSlugs.has(s))
-        .map(s => `- [[${s}]]`)
+        .filter((s) => !existingSlugs.has(s))
+        .map((s) => `- [[${s}]]`)
         .join('\n');
 
       if (newLines) {
@@ -2057,7 +2511,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         markdown = markdown.slice(0, insertAt) + '\n' + newLines + markdown.slice(insertAt);
       }
     } else {
-      const newSection = '\n\n## Related\n' + slugsToAdd.map(s => `- [[${s}]]`).join('\n');
+      const newSection = '\n\n## Related\n' + slugsToAdd.map((s) => `- [[${s}]]`).join('\n');
       const sourcesIdx = markdown.search(/^## Sources\b/m);
       if (sourcesIdx !== -1) {
         markdown = markdown.slice(0, sourcesIdx).trimEnd() + newSection + '\n\n' + markdown.slice(sourcesIdx);
@@ -2086,11 +2540,12 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         a.click();
         URL.revokeObjectURL(url);
       },
-      error: () => this.messageService.add({
-        severity: 'error',
-        summary: this.t.translate('common.error'),
-        detail: this.t.translate('explorer.toastErrorPdf'),
-      }),
+      error: () =>
+        this.messageService.add({
+          severity: 'error',
+          summary: this.t.translate('common.error'),
+          detail: this.t.translate('explorer.toastErrorPdf'),
+        }),
     });
   }
 
@@ -2109,11 +2564,12 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     const enqueue = () => {
       this.api.enqueueEnrich(path).subscribe({
         next: () => this.router.navigate(['/jobs']),
-        error: () => this.messageService.add({
-          severity: 'error',
-          summary: this.t.translate('common.error'),
-          detail: this.t.translate('explorer.toastErrorEnrich'),
-        }),
+        error: () =>
+          this.messageService.add({
+            severity: 'error',
+            summary: this.t.translate('common.error'),
+            detail: this.t.translate('explorer.toastErrorEnrich'),
+          }),
       });
     };
     if (!this.isDirty()) {
@@ -2121,9 +2577,8 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
       return;
     }
     const fm = this.frontmatter();
-    const fullContent = Object.keys(fm).length > 0
-      ? this.stringifyWithFrontmatter(this.currentMarkdown, fm)
-      : this.currentMarkdown;
+    const fullContent =
+      Object.keys(fm).length > 0 ? this.stringifyWithFrontmatter(this.currentMarkdown, fm) : this.currentMarkdown;
     this.fileService.saveContent(path, fullContent).subscribe({
       next: () => {
         this.isDirty.set(false);
@@ -2131,12 +2586,12 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         this.cdr.markForCheck();
         enqueue();
       },
-      error: () => this.messageService.add({
-        severity: 'error',
-        summary: this.t.translate('common.error'),
-        detail: this.t.translate('explorer.toastErrorSave'),
-      }),
+      error: () =>
+        this.messageService.add({
+          severity: 'error',
+          summary: this.t.translate('common.error'),
+          detail: this.t.translate('explorer.toastErrorSave'),
+        }),
     });
   }
-
 }

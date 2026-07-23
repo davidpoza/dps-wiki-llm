@@ -14,7 +14,17 @@ import { NavComponent } from './nav.component';
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [FormsModule, ButtonModule, InputText, Password, TableModule, TagModule, TranslocoPipe, DatePipe, NavComponent],
+  imports: [
+    FormsModule,
+    ButtonModule,
+    InputText,
+    Password,
+    TableModule,
+    TagModule,
+    TranslocoPipe,
+    DatePipe,
+    NavComponent,
+  ],
   template: `
     <main class="app-shell">
       <app-nav />
@@ -38,16 +48,32 @@ import { NavComponent } from './nav.component';
           <form (ngSubmit)="submitPassword()">
             <div class="field">
               <label for="currentPassword">{{ 'profile.currentPassword' | transloco }}</label>
-              <p-password inputId="currentPassword" [(ngModel)]="currentPassword" name="currentPassword"
-                [feedback]="false" [toggleMask]="true" autocomplete="current-password" />
+              <p-password
+                inputId="currentPassword"
+                [(ngModel)]="currentPassword"
+                name="currentPassword"
+                [feedback]="false"
+                [toggleMask]="true"
+                autocomplete="current-password"
+              />
             </div>
             <div class="field">
               <label for="newPassword">{{ 'profile.newPassword' | transloco }}</label>
-              <p-password inputId="newPassword" [(ngModel)]="newPassword" name="newPassword"
-                [feedback]="true" [toggleMask]="true" autocomplete="new-password" />
+              <p-password
+                inputId="newPassword"
+                [(ngModel)]="newPassword"
+                name="newPassword"
+                [feedback]="true"
+                [toggleMask]="true"
+                autocomplete="new-password"
+              />
             </div>
-            @if (passwordError()) { <p class="error">{{ passwordError() }}</p> }
-            @if (passwordSaved()) { <p class="success">{{ 'profile.passwordChanged' | transloco }}</p> }
+            @if (passwordError()) {
+              <p class="error">{{ passwordError() }}</p>
+            }
+            @if (passwordSaved()) {
+              <p class="success">{{ 'profile.passwordChanged' | transloco }}</p>
+            }
             <p-button type="submit" [label]="'common.save' | transloco" [loading]="passwordLoading()" />
           </form>
         </section>
@@ -66,18 +92,35 @@ import { NavComponent } from './nav.component';
 
             @if (!twoFactorEnabled()) {
               @if (!setup()) {
-                <p-button [label]="'profile.enable2fa' | transloco" [loading]="twoFactorLoading()" (onClick)="startSetup()" />
+                <p-button
+                  [label]="'profile.enable2fa' | transloco"
+                  [loading]="twoFactorLoading()"
+                  (onClick)="startSetup()"
+                />
               } @else {
                 <p class="hint">{{ 'profile.scanQr' | transloco }}</p>
                 <img class="qr" [src]="setup()!.qrDataUri" alt="2FA QR code" />
                 <p class="secret">{{ setup()!.secret }}</p>
                 <div class="field">
                   <label for="confirmCode">{{ 'profile.enterCode' | transloco }}</label>
-                  <input pInputText id="confirmCode" [(ngModel)]="confirmCode" name="confirmCode" inputmode="numeric" autocomplete="one-time-code" />
+                  <input
+                    pInputText
+                    id="confirmCode"
+                    [(ngModel)]="confirmCode"
+                    name="confirmCode"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                  />
                 </div>
-                @if (twoFactorError()) { <p class="error">{{ twoFactorError() }}</p> }
+                @if (twoFactorError()) {
+                  <p class="error">{{ twoFactorError() }}</p>
+                }
                 <div class="actions">
-                  <p-button [label]="'profile.confirm' | transloco" [loading]="twoFactorLoading()" (onClick)="confirmSetup()" />
+                  <p-button
+                    [label]="'profile.confirm' | transloco"
+                    [loading]="twoFactorLoading()"
+                    (onClick)="confirmSetup()"
+                  />
                   <p-button [label]="'common.cancel' | transloco" severity="secondary" (onClick)="cancelSetup()" />
                 </div>
               }
@@ -85,10 +128,24 @@ import { NavComponent } from './nav.component';
               <p class="hint">{{ 'profile.disableHint' | transloco }}</p>
               <div class="field">
                 <label for="disableCode">{{ 'profile.enterCode' | transloco }}</label>
-                <input pInputText id="disableCode" [(ngModel)]="disableCode" name="disableCode" inputmode="numeric" autocomplete="one-time-code" />
+                <input
+                  pInputText
+                  id="disableCode"
+                  [(ngModel)]="disableCode"
+                  name="disableCode"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                />
               </div>
-              @if (twoFactorError()) { <p class="error">{{ twoFactorError() }}</p> }
-              <p-button [label]="'profile.disable2fa' | transloco" severity="danger" [loading]="twoFactorLoading()" (onClick)="disable()" />
+              @if (twoFactorError()) {
+                <p class="error">{{ twoFactorError() }}</p>
+              }
+              <p-button
+                [label]="'profile.disable2fa' | transloco"
+                severity="danger"
+                [loading]="twoFactorLoading()"
+                (onClick)="disable()"
+              />
             }
           }
         </section>
@@ -110,7 +167,7 @@ import { NavComponent } from './nav.component';
               </ng-template>
               <ng-template pTemplate="body" let-event>
                 <tr>
-                  <td>{{ event.createdAt | date:'dd/MM/yyyy HH:mm:ss' }}</td>
+                  <td>{{ event.createdAt | date: 'dd/MM/yyyy HH:mm:ss' }}</td>
                   <td>{{ event.ipAddress || '—' }}</td>
                   <td>{{ event.country || '—' }}</td>
                   <td>{{ event.city || '—' }}</td>
@@ -118,14 +175,21 @@ import { NavComponent } from './nav.component';
                     @if (event.success) {
                       <p-tag severity="success" [value]="'profile.loginHistorySuccess' | transloco" />
                     } @else {
-                      <p-tag severity="danger"
-                             [value]="('profile.loginHistoryFailed' | transloco) + (event.failureReason ? ' · ' + event.failureReason : '')" />
+                      <p-tag
+                        severity="danger"
+                        [value]="
+                          ('profile.loginHistoryFailed' | transloco) +
+                          (event.failureReason ? ' · ' + event.failureReason : '')
+                        "
+                      />
                     }
                   </td>
                 </tr>
               </ng-template>
               <ng-template pTemplate="emptymessage">
-                <tr><td colspan="5">{{ 'profile.loginHistoryEmpty' | transloco }}</td></tr>
+                <tr>
+                  <td colspan="5">{{ 'profile.loginHistoryEmpty' | transloco }}</td>
+                </tr>
               </ng-template>
             </p-table>
           }
@@ -133,32 +197,110 @@ import { NavComponent } from './nav.component';
       </section>
     </main>
   `,
-  styles: [`
-    .app-shell { height: 100vh; overflow-y: auto; background: var(--app-bg); color: var(--app-text); }
-    .workspace { max-width: 860px; margin: 0 auto; padding: 1.5rem; }
-    .page-head { margin-bottom: 1.5rem; }
-    .page-head h1 { margin: 0; }
-    .page-head p { margin: 0; font-size: .875rem; opacity: .7; }
-    .card { border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface);
-      padding: 1.25rem; margin-bottom: 1.25rem; box-shadow: var(--app-shadow); }
-    .card h2 { margin-top: 0; font-size: 1.1rem; }
-    .row { display: flex; justify-content: space-between; margin-bottom: 1rem; }
-    .label { opacity: .7; }
-    .value.on { color: var(--p-green-500); font-weight: 600; }
-    .field { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
-    .field label { font-size: .875rem; font-weight: 500; }
-    .actions { display: flex; gap: .5rem; }
-    .error { color: var(--p-red-500); font-size: .875rem; }
-    .success { color: var(--p-green-500); font-size: .875rem; }
-    .hint { font-size: .875rem; opacity: .8; }
-    .qr { display: block; width: 200px; height: 200px; margin: .5rem 0; }
-    .secret { font-family: monospace; letter-spacing: 1px; word-break: break-all; margin-bottom: 1rem; }
-    p-password, :host ::ng-deep .p-password, :host ::ng-deep .p-password input { width: 100%; }
-    :host ::ng-deep .history-table { font-size: .875rem; }
-    :host ::ng-deep .history-table th { font-weight: 600; white-space: nowrap; }
-    :host ::ng-deep .history-table td { vertical-align: middle; }
-  `],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  styles: [
+    `
+      .app-shell {
+        height: 100vh;
+        overflow-y: auto;
+        background: var(--app-bg);
+        color: var(--app-text);
+      }
+      .workspace {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 1.5rem;
+      }
+      .page-head {
+        margin-bottom: 1.5rem;
+      }
+      .page-head h1 {
+        margin: 0;
+      }
+      .page-head p {
+        margin: 0;
+        font-size: 0.875rem;
+        opacity: 0.7;
+      }
+      .card {
+        border: 1px solid var(--app-border);
+        border-radius: 8px;
+        background: var(--app-surface);
+        padding: 1.25rem;
+        margin-bottom: 1.25rem;
+        box-shadow: var(--app-shadow);
+      }
+      .card h2 {
+        margin-top: 0;
+        font-size: 1.1rem;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+      }
+      .label {
+        opacity: 0.7;
+      }
+      .value.on {
+        color: var(--p-green-500);
+        font-weight: 600;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        margin-bottom: 1rem;
+      }
+      .field label {
+        font-size: 0.875rem;
+        font-weight: 500;
+      }
+      .actions {
+        display: flex;
+        gap: 0.5rem;
+      }
+      .error {
+        color: var(--p-red-500);
+        font-size: 0.875rem;
+      }
+      .success {
+        color: var(--p-green-500);
+        font-size: 0.875rem;
+      }
+      .hint {
+        font-size: 0.875rem;
+        opacity: 0.8;
+      }
+      .qr {
+        display: block;
+        width: 200px;
+        height: 200px;
+        margin: 0.5rem 0;
+      }
+      .secret {
+        font-family: monospace;
+        letter-spacing: 1px;
+        word-break: break-all;
+        margin-bottom: 1rem;
+      }
+      p-password,
+      :host ::ng-deep .p-password,
+      :host ::ng-deep .p-password input {
+        width: 100%;
+      }
+      :host ::ng-deep .history-table {
+        font-size: 0.875rem;
+      }
+      :host ::ng-deep .history-table th {
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      :host ::ng-deep .history-table td {
+        vertical-align: middle;
+      }
+    `,
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProfileComponent implements OnInit {
   private readonly auth = inject(AuthService);

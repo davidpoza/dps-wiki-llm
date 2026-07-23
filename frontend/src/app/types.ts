@@ -59,7 +59,8 @@ export interface Conflict {
   localContent: string;
   remoteContent: string;
 }
-export type JobStatus = 'QUEUED' | 'STARTED' | 'PROGRESS' | 'AWAITING_REVIEW' | 'COMPLETED' | 'FAILED' | 'REVERTED' | 'CANCELLED';
+export type JobStatus =
+  'QUEUED' | 'STARTED' | 'PROGRESS' | 'AWAITING_REVIEW' | 'COMPLETED' | 'FAILED' | 'REVERTED' | 'CANCELLED';
 
 export interface ConceptProposal {
   proposedPath: string;

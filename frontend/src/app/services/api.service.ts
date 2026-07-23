@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable, Observer } from 'rxjs';
-import { ConceptProposal, FileHistoryEntry, HistoryPage, SyncResult, Conflict, JobMode } from '../types';
+import { ConceptProposal, HistoryPage, SyncResult, Conflict, JobMode } from '../types';
 import { AuthService } from './auth.service';
 
 export interface EnqueueResponse {
@@ -210,9 +210,7 @@ export class ApiService {
   syncWebdav(): Observable<SyncEvent> {
     return new Observable((observer: Observer<SyncEvent>) => {
       const token = this.auth.token();
-      const url = token
-        ? `/api/webdav/sync?token=${encodeURIComponent(token)}`
-        : '/api/webdav/sync';
+      const url = token ? `/api/webdav/sync?token=${encodeURIComponent(token)}` : '/api/webdav/sync';
       const es = new EventSource(url);
       let completed = false;
 
@@ -228,9 +226,7 @@ export class ApiService {
       });
       es.addEventListener('error', (e: MessageEvent) => {
         completed = true;
-        const data = e.data
-          ? (JSON.parse(e.data) as { code?: string; message?: string })
-          : {};
+        const data = e.data ? (JSON.parse(e.data) as { code?: string; message?: string }) : {};
         es.close();
         observer.error({ code: data.code, message: data.message ?? 'Error desconocido' });
       });
@@ -269,9 +265,7 @@ export class ApiService {
   reindex(): Observable<ReindexProgress> {
     return new Observable((observer: Observer<ReindexProgress>) => {
       const token = this.auth.token();
-      const url = token
-        ? `/api/settings/reindex?token=${encodeURIComponent(token)}`
-        : '/api/settings/reindex';
+      const url = token ? `/api/settings/reindex?token=${encodeURIComponent(token)}` : '/api/settings/reindex';
       const es = new EventSource(url);
       let completed = false;
 
@@ -286,9 +280,7 @@ export class ApiService {
       });
       es.addEventListener('error', (e: MessageEvent) => {
         completed = true;
-        const data = e.data
-          ? (JSON.parse(e.data) as { message: string })
-          : { message: 'Error desconocido' };
+        const data = e.data ? (JSON.parse(e.data) as { message: string }) : { message: 'Error desconocido' };
         es.close();
         observer.error(new Error(data.message));
       });
@@ -322,9 +314,7 @@ export class ApiService {
       });
       es.addEventListener('error', (e: MessageEvent) => {
         completed = true;
-        const data = e.data
-          ? (JSON.parse(e.data) as { message: string })
-          : { message: 'Error desconocido' };
+        const data = e.data ? (JSON.parse(e.data) as { message: string }) : { message: 'Error desconocido' };
         es.close();
         observer.error(new Error(data.message));
       });
@@ -358,9 +348,7 @@ export class ApiService {
       });
       es.addEventListener('error', (e: MessageEvent) => {
         completed = true;
-        const data = e.data
-          ? (JSON.parse(e.data) as { message: string })
-          : { message: 'Error desconocido' };
+        const data = e.data ? (JSON.parse(e.data) as { message: string }) : { message: 'Error desconocido' };
         es.close();
         observer.error(new Error(data.message));
       });
@@ -450,8 +438,6 @@ export class ApiService {
   }
 
   enqueueEnrich(path: string): Observable<EnqueueResponse> {
-    return this.http.post<EnqueueResponse>(
-      `/api/jobs/enrich?path=${encodeURIComponent(path)}`, null
-    );
+    return this.http.post<EnqueueResponse>(`/api/jobs/enrich?path=${encodeURIComponent(path)}`, null);
   }
 }

@@ -21,7 +21,10 @@ function buildResourcePath(target: string, resourceFolder: string): string | nul
     return cleanTarget.replace(/^\/+/, '');
   }
 
-  const folder = resourceFolder.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  const folder = resourceFolder
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
   if (!folder) return null;
   return cleanTarget;
 }
@@ -36,7 +39,11 @@ function selectionTouches(from: number, to: number, selFrom: number, selTo: numb
   return selFrom <= to && selTo >= from;
 }
 
-function buildDecorations(state: EditorState, getView: () => EditorView | null, options: ObsidianImagePreviewOptions): DecorationSet {
+function buildDecorations(
+  state: EditorState,
+  getView: () => EditorView | null,
+  options: ObsidianImagePreviewOptions,
+): DecorationSet {
   const decorations: Decoration[] = [];
   const resourceFolder = options.getResourceFolder();
   const token = options.getToken();
@@ -57,29 +64,35 @@ function buildDecorations(state: EditorState, getView: () => EditorView | null, 
       if (!path) continue;
 
       decorations.push(Decoration.inline(start, end, { class: 'obsidian-image-embed-hidden' }));
-      decorations.push(Decoration.widget(start, () => {
-        const figure = document.createElement('figure');
-        figure.className = 'obsidian-image-preview';
-        figure.title = rawEmbed;
-        figure.addEventListener('mousedown', event => {
-          const view = getView();
-          if (!view) return;
-          event.preventDefault();
-          view.focus();
-          view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(start + 1))));
-        });
+      decorations.push(
+        Decoration.widget(
+          start,
+          () => {
+            const figure = document.createElement('figure');
+            figure.className = 'obsidian-image-preview';
+            figure.title = rawEmbed;
+            figure.addEventListener('mousedown', (event) => {
+              const view = getView();
+              if (!view) return;
+              event.preventDefault();
+              view.focus();
+              view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(start + 1))));
+            });
 
-        const img = document.createElement('img');
-        img.src = resourceUrl(path, token);
-        img.alt = rawTarget;
-        img.loading = 'lazy';
-        img.addEventListener('error', () => {
-          figure.classList.add('is-error');
-          figure.title = `No se pudo cargar ${rawTarget}`;
-        });
-        figure.appendChild(img);
-        return figure;
-      }, { side: -1 }));
+            const img = document.createElement('img');
+            img.src = resourceUrl(path, token);
+            img.alt = rawTarget;
+            img.loading = 'lazy';
+            img.addEventListener('error', () => {
+              figure.classList.add('is-error');
+              figure.title = `No se pudo cargar ${rawTarget}`;
+            });
+            figure.appendChild(img);
+            return figure;
+          },
+          { side: -1 },
+        ),
+      );
     }
   });
 
@@ -101,15 +114,15 @@ export function createObsidianImagePreviewPlugin(options: ObsidianImagePreviewOp
         },
       },
       props: {
-        decorations: state => key.getState(state),
+        decorations: (state) => key.getState(state),
       },
-      view: view => {
+      view: (view) => {
         currentView = view;
         queueMicrotask(() => {
           view.dispatch(view.state.tr.setMeta(OBSIDIAN_IMAGE_PREVIEW_REFRESH, true));
         });
         return {
-          update: view => {
+          update: (view) => {
             currentView = view;
           },
           destroy: () => {

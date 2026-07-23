@@ -15,9 +15,7 @@ export interface TwoFactorChallenge {
 }
 
 /** Result of a password login: either fully logged in, or a pending 2FA challenge. */
-export type LoginResult =
-  | { status: 'logged-in' }
-  | { status: '2fa-required'; challengeToken: string };
+export type LoginResult = { status: 'logged-in' } | { status: '2fa-required'; challengeToken: string };
 
 export interface CurrentUser {
   username: string;
@@ -46,9 +44,7 @@ const USER_KEY = 'auth_user';
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly _token = signal<string | null>(localStorage.getItem(TOKEN_KEY));
-  private readonly _user = signal<CurrentUser | null>(
-    JSON.parse(localStorage.getItem(USER_KEY) ?? 'null')
-  );
+  private readonly _user = signal<CurrentUser | null>(JSON.parse(localStorage.getItem(USER_KEY) ?? 'null'));
 
   readonly currentUser = this._user.asReadonly();
   readonly isLoggedIn = computed(() => this._token() !== null);
@@ -58,7 +54,7 @@ export class AuthService {
 
   async login(username: string, password: string): Promise<LoginResult> {
     const res = await firstValueFrom(
-      this.http.post<AuthResponse | TwoFactorChallenge>('/api/auth/login', { username, password })
+      this.http.post<AuthResponse | TwoFactorChallenge>('/api/auth/login', { username, password }),
     );
     if ('twoFactorRequired' in res) {
       return { status: '2fa-required', challengeToken: res.challengeToken };
@@ -68,9 +64,7 @@ export class AuthService {
   }
 
   async verifyTwoFactor(challengeToken: string, code: string): Promise<void> {
-    const res = await firstValueFrom(
-      this.http.post<AuthResponse>('/api/auth/login/2fa', { challengeToken, code })
-    );
+    const res = await firstValueFrom(this.http.post<AuthResponse>('/api/auth/login/2fa', { challengeToken, code }));
     this.storeSession(res);
   }
 
@@ -82,22 +76,16 @@ export class AuthService {
   }
 
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    await firstValueFrom(
-      this.http.post('/api/auth/password', { currentPassword, newPassword })
-    );
+    await firstValueFrom(this.http.post('/api/auth/password', { currentPassword, newPassword }));
   }
 
   async fetchTwoFactorEnabled(): Promise<boolean> {
-    const me = await firstValueFrom(
-      this.http.get<{ twoFactorEnabled: boolean }>('/api/auth/me')
-    );
+    const me = await firstValueFrom(this.http.get<{ twoFactorEnabled: boolean }>('/api/auth/me'));
     return me.twoFactorEnabled;
   }
 
   async setupTwoFactor(): Promise<TwoFactorSetup> {
-    return firstValueFrom(
-      this.http.post<TwoFactorSetup>('/api/auth/2fa/setup', {})
-    );
+    return firstValueFrom(this.http.post<TwoFactorSetup>('/api/auth/2fa/setup', {}));
   }
 
   async confirmTwoFactor(code: string): Promise<void> {

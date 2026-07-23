@@ -42,7 +42,10 @@ interface PromptState extends Prompt {
 
         <section class="settings-section reindex-section">
           <h2>Índice del Vault</h2>
-          <p class="section-desc">Regenera el índice de documentos del vault. Úsalo si los ficheros han cambiado externamente y la búsqueda no refleja los cambios.</p>
+          <p class="section-desc">
+            Regenera el índice de documentos del vault. Úsalo si los ficheros han cambiado externamente y la búsqueda no
+            refleja los cambios.
+          </p>
           <div class="reindex-row">
             <p-button
               label="Reindexar"
@@ -52,9 +55,7 @@ interface PromptState extends Prompt {
               (onClick)="startReindex()"
             />
             @if (reindexing()) {
-              <span class="reindex-progress">
-                Ficheros procesados {{ reindexProcessed() }}/{{ reindexTotal() }}
-              </span>
+              <span class="reindex-progress"> Ficheros procesados {{ reindexProcessed() }}/{{ reindexTotal() }} </span>
             }
             @if (reindexDone()) {
               <span class="feedback success">Reindexación completada ({{ reindexTotal() }} ficheros)</span>
@@ -67,7 +68,11 @@ interface PromptState extends Prompt {
 
         <section class="settings-section">
           <h2>Keywords</h2>
-          <p class="section-desc">Genera el campo <code>keywords</code> (siempre en inglés) en el frontmatter de las notas de <code>wiki/concepts</code> y <code>wiki/sources</code> que aún no lo tienen. Usa la sección «Summary» y, si no existe, el resto del texto excluyendo «Sources», «Related» y «Links».</p>
+          <p class="section-desc">
+            Genera el campo <code>keywords</code> (siempre en inglés) en el frontmatter de las notas de
+            <code>wiki/concepts</code> y <code>wiki/sources</code> que aún no lo tienen. Usa la sección «Summary» y, si
+            no existe, el resto del texto excluyendo «Sources», «Related» y «Links».
+          </p>
           <div class="reindex-row">
             <p-button
               label="Generar keywords"
@@ -78,12 +83,14 @@ interface PromptState extends Prompt {
             />
             @if (generatingKeywords()) {
               <span class="reindex-progress">
-                Notas procesadas {{ keywordsProcessed() }}/{{ keywordsTotal() }}
-                &nbsp;·&nbsp; actualizadas {{ keywordsUpdated() }} · omitidas {{ keywordsSkipped() }}
+                Notas procesadas {{ keywordsProcessed() }}/{{ keywordsTotal() }} &nbsp;·&nbsp; actualizadas
+                {{ keywordsUpdated() }} · omitidas {{ keywordsSkipped() }}
               </span>
             }
             @if (keywordsDone()) {
-              <span class="feedback success">Keywords generadas ({{ keywordsUpdated() }} actualizadas, {{ keywordsSkipped() }} omitidas)</span>
+              <span class="feedback success"
+                >Keywords generadas ({{ keywordsUpdated() }} actualizadas, {{ keywordsSkipped() }} omitidas)</span
+              >
             }
             @if (keywordsError()) {
               <span class="feedback error">Error al generar keywords</span>
@@ -93,7 +100,13 @@ interface PromptState extends Prompt {
 
         <section class="settings-section">
           <h2>Health Check</h2>
-          <p class="section-desc">Reconcilia todo el vault: genera los embeddings que falten en <code>wiki/topics</code>, <code>wiki/concepts</code> y <code>wiki/sources</code>, y descubre conexiones nuevas entre notas de <code>wiki/concepts</code> y <code>wiki/sources</code> añadiendo los enlaces y sus backlinks en la sección «Related». Es el mismo proceso de descubrimiento del ingest, aplicado a todo el vault. Los cambios son reversibles desde el historial.</p>
+          <p class="section-desc">
+            Reconcilia todo el vault: genera los embeddings que falten en <code>wiki/topics</code>,
+            <code>wiki/concepts</code> y <code>wiki/sources</code>, y descubre conexiones nuevas entre notas de
+            <code>wiki/concepts</code> y <code>wiki/sources</code> añadiendo los enlaces y sus backlinks en la sección
+            «Related». Es el mismo proceso de descubrimiento del ingest, aplicado a todo el vault. Los cambios son
+            reversibles desde el historial.
+          </p>
           <div class="reindex-row">
             <p-button
               label="Lanzar Health Check"
@@ -113,7 +126,10 @@ interface PromptState extends Prompt {
               </span>
             }
             @if (hcDone()) {
-              <span class="feedback success">Health Check completado · embeddings construidos: {{ hcEmbeddings() }} · conexiones encontradas: {{ hcConnections() }}</span>
+              <span class="feedback success"
+                >Health Check completado · embeddings construidos: {{ hcEmbeddings() }} · conexiones encontradas:
+                {{ hcConnections() }}</span
+              >
             }
             @if (hcError()) {
               <span class="feedback error">Error en el Health Check</span>
@@ -123,7 +139,10 @@ interface PromptState extends Prompt {
 
         <section class="settings-section">
           <h2>Recursos</h2>
-          <p class="section-desc">Carpeta relativa al vault para resolver imágenes Obsidian sin ruta, como ![[Pasted image 20260618163907.png]].</p>
+          <p class="section-desc">
+            Carpeta relativa al vault para resolver imágenes Obsidian sin ruta, como ![[Pasted image
+            20260618163907.png]].
+          </p>
           <div class="resource-row">
             <label for="resource-folder" class="resource-label">Carpeta de recursos</label>
             <input
@@ -134,12 +153,7 @@ interface PromptState extends Prompt {
               [disabled]="resourceSaving()"
               placeholder="attachments"
             />
-            <p-button
-              label="Guardar"
-              size="small"
-              [loading]="resourceSaving()"
-              (onClick)="saveResourceSettings()"
-            />
+            <p-button label="Guardar" size="small" [loading]="resourceSaving()" (onClick)="saveResourceSettings()" />
           </div>
           @if (resourceSaved()) {
             <span class="feedback success">Recursos guardados correctamente</span>
@@ -151,7 +165,10 @@ interface PromptState extends Prompt {
 
         <section class="settings-section">
           <h2>Prompts del LLM</h2>
-          <p class="section-desc">Textos que se envían como instrucciones de sistema al modelo de lenguaje. Los cambios son efectivos de inmediato.</p>
+          <p class="section-desc">
+            Textos que se envían como instrucciones de sistema al modelo de lenguaje. Los cambios son efectivos de
+            inmediato.
+          </p>
 
           @if (loading()) {
             <p class="loading-msg">Cargando prompts…</p>
@@ -179,12 +196,7 @@ interface PromptState extends Prompt {
                     @if (prompt.error) {
                       <span class="feedback error">{{ prompt.error }}</span>
                     }
-                    <p-button
-                      label="Guardar"
-                      size="small"
-                      [loading]="prompt.saving"
-                      (onClick)="save(prompt)"
-                    />
+                    <p-button label="Guardar" size="small" [loading]="prompt.saving" (onClick)="save(prompt)" />
                   </div>
                 </div>
               }
@@ -194,7 +206,10 @@ interface PromptState extends Prompt {
 
         <section class="settings-section">
           <h2>Enlaces rotos</h2>
-          <p class="section-desc">Busca enlaces wiki <code>[[slug]]</code> en la sección «Related» de todas las notas que apuntan a ficheros inexistentes. Al terminar puedes seleccionar cuáles eliminar.</p>
+          <p class="section-desc">
+            Busca enlaces wiki <code>[[slug]]</code> en la sección «Related» de todas las notas que apuntan a ficheros
+            inexistentes. Al terminar puedes seleccionar cuáles eliminar.
+          </p>
           <div class="reindex-row">
             <p-button
               label="Buscar enlaces rotos"
@@ -204,9 +219,7 @@ interface PromptState extends Prompt {
               (onClick)="startBrokenLinksScan()"
             />
             @if (brokenLinkScanning()) {
-              <span class="reindex-progress">
-                Ficheros procesados {{ blProcessed() }}/{{ blTotal() }}
-              </span>
+              <span class="reindex-progress"> Ficheros procesados {{ blProcessed() }}/{{ blTotal() }} </span>
             }
             @if (blDone()) {
               <span class="feedback success">No se encontraron enlaces rotos</span>
@@ -234,49 +247,158 @@ interface PromptState extends Prompt {
       </section>
     </main>
   `,
-  styles: [`
-    .app-shell {
-      height: 100vh;
-      overflow-y: auto;
-      background: var(--app-bg);
-      color: var(--app-text);
-    }
-    .workspace {
-      width: min(900px, calc(100vw - 32px));
-      margin: 0 auto;
-      padding: 20px 0 40px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-    .page-head { margin-bottom: 4px; }
-    h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; }
-    h2 { margin: 0 0 6px; font-size: 1.1rem; }
-    p { margin: 4px 0 0; color: var(--app-text-muted); font-size: 0.875rem; }
-    .settings-section { background: var(--app-surface); border-radius: 10px; padding: 24px; box-shadow: var(--app-shadow); }
-    .section-desc { margin-bottom: 16px; }
-    .reindex-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-    .reindex-progress { font-size: 0.875rem; color: var(--app-text-muted); }
-    .resource-row { display: grid; grid-template-columns: 160px 1fr auto; align-items: center; gap: 12px; }
-    .resource-label { font-size: 0.9rem; font-weight: 600; color: var(--app-text); }
-    .resource-input { width: 100%; box-sizing: border-box; border: 1px solid var(--app-border-strong); border-radius: 6px; padding: 9px 10px; color: var(--app-text); background: var(--app-surface-muted); }
-    .resource-input:focus { outline: 2px solid var(--app-primary); border-color: var(--app-primary); }
-    .prompts-list { display: flex; flex-direction: column; gap: 20px; }
-    .prompt-card { border: 1px solid var(--app-border); border-radius: 8px; padding: 16px; }
-    .prompt-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
-    .prompt-name { font-weight: 600; font-size: 0.95rem; }
-    .prompt-key { font-size: 0.75rem; color: var(--app-text-subtle); font-family: monospace; background: var(--app-surface-subtle); padding: 2px 6px; border-radius: 4px; }
-    .prompt-textarea { width: 100%; box-sizing: border-box; font-family: monospace; font-size: 0.85rem; border: 1px solid var(--app-border-strong); border-radius: 6px; padding: 10px; resize: vertical; color: var(--app-text); background: var(--app-surface-muted); }
-    .prompt-textarea:focus { outline: 2px solid var(--app-primary); border-color: var(--app-primary); }
-    .prompt-textarea:disabled { opacity: 0.6; }
-    .prompt-footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 10px; }
-    .feedback { font-size: 0.85rem; }
-    .feedback.success { color: var(--app-success-text); }
-    .feedback.error { color: var(--app-error-text); }
-    .loading-msg, .empty-msg { color: var(--app-text-muted); }
-    .version-footer { text-align: center; font-size: 0.75rem; color: var(--app-text-subtle); padding-top: 8px; }
-  `],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  styles: [
+    `
+      .app-shell {
+        height: 100vh;
+        overflow-y: auto;
+        background: var(--app-bg);
+        color: var(--app-text);
+      }
+      .workspace {
+        width: min(900px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 20px 0 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .page-head {
+        margin-bottom: 4px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        line-height: 1.2;
+      }
+      h2 {
+        margin: 0 0 6px;
+        font-size: 1.1rem;
+      }
+      p {
+        margin: 4px 0 0;
+        color: var(--app-text-muted);
+        font-size: 0.875rem;
+      }
+      .settings-section {
+        background: var(--app-surface);
+        border-radius: 10px;
+        padding: 24px;
+        box-shadow: var(--app-shadow);
+      }
+      .section-desc {
+        margin-bottom: 16px;
+      }
+      .reindex-row {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .reindex-progress {
+        font-size: 0.875rem;
+        color: var(--app-text-muted);
+      }
+      .resource-row {
+        display: grid;
+        grid-template-columns: 160px 1fr auto;
+        align-items: center;
+        gap: 12px;
+      }
+      .resource-label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--app-text);
+      }
+      .resource-input {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid var(--app-border-strong);
+        border-radius: 6px;
+        padding: 9px 10px;
+        color: var(--app-text);
+        background: var(--app-surface-muted);
+      }
+      .resource-input:focus {
+        outline: 2px solid var(--app-primary);
+        border-color: var(--app-primary);
+      }
+      .prompts-list {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .prompt-card {
+        border: 1px solid var(--app-border);
+        border-radius: 8px;
+        padding: 16px;
+      }
+      .prompt-header {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .prompt-name {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+      .prompt-key {
+        font-size: 0.75rem;
+        color: var(--app-text-subtle);
+        font-family: monospace;
+        background: var(--app-surface-subtle);
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      .prompt-textarea {
+        width: 100%;
+        box-sizing: border-box;
+        font-family: monospace;
+        font-size: 0.85rem;
+        border: 1px solid var(--app-border-strong);
+        border-radius: 6px;
+        padding: 10px;
+        resize: vertical;
+        color: var(--app-text);
+        background: var(--app-surface-muted);
+      }
+      .prompt-textarea:focus {
+        outline: 2px solid var(--app-primary);
+        border-color: var(--app-primary);
+      }
+      .prompt-textarea:disabled {
+        opacity: 0.6;
+      }
+      .prompt-footer {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 10px;
+      }
+      .feedback {
+        font-size: 0.85rem;
+      }
+      .feedback.success {
+        color: var(--app-success-text);
+      }
+      .feedback.error {
+        color: var(--app-error-text);
+      }
+      .loading-msg,
+      .empty-msg {
+        color: var(--app-text-muted);
+      }
+      .version-footer {
+        text-align: center;
+        font-size: 0.75rem;
+        color: var(--app-text-subtle);
+        padding-top: 8px;
+      }
+    `,
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SettingsComponent implements OnInit {
   private readonly api = inject(ApiService);
@@ -345,17 +467,17 @@ export class SettingsComponent implements OnInit {
       },
       error: () => {
         this.resourceError.set('No se pudo cargar la configuración de recursos.');
-      }
+      },
     });
 
     this.api.getPrompts().subscribe({
       next: (data) => {
-        this.prompts.set(data.map(p => ({ ...p, saving: false, saved: false, error: null })));
+        this.prompts.set(data.map((p) => ({ ...p, saving: false, saved: false, error: null })));
         this.loading.set(false);
       },
       error: () => {
         this.loading.set(false);
-      }
+      },
     });
   }
 
@@ -374,7 +496,7 @@ export class SettingsComponent implements OnInit {
       error: () => {
         this.resourceSaving.set(false);
         this.resourceError.set('Ruta inválida. Debe ser relativa al vault.');
-      }
+      },
     });
   }
 
@@ -398,7 +520,7 @@ export class SettingsComponent implements OnInit {
       error: (err: Error) => {
         this.reindexing.set(false);
         this.reindexError.set(err.message ?? 'Error desconocido');
-      }
+      },
     });
   }
 
@@ -426,7 +548,7 @@ export class SettingsComponent implements OnInit {
       error: (err: Error) => {
         this.generatingKeywords.set(false);
         this.keywordsError.set(err.message ?? 'Error desconocido');
-      }
+      },
     });
   }
 
@@ -456,7 +578,7 @@ export class SettingsComponent implements OnInit {
       error: (err: Error) => {
         this.healthChecking.set(false);
         this.hcError.set(err.message ?? 'Error desconocido');
-      }
+      },
     });
   }
 
@@ -490,7 +612,7 @@ export class SettingsComponent implements OnInit {
       error: (err: Error) => {
         this.brokenLinkScanning.set(false);
         this.blError.set(err.message ?? 'Error desconocido');
-      }
+      },
     });
   }
 
@@ -503,7 +625,7 @@ export class SettingsComponent implements OnInit {
       },
       error: () => {
         this.blError.set('Error al eliminar los enlaces.');
-      }
+      },
     });
   }
 
@@ -511,24 +633,24 @@ export class SettingsComponent implements OnInit {
     prompt.saving = true;
     prompt.saved = false;
     prompt.error = null;
-    this.prompts.update(ps => [...ps]);
+    this.prompts.update((ps) => [...ps]);
 
     this.api.updatePrompt(prompt.key, prompt.text).subscribe({
       next: (updated) => {
         prompt.saving = false;
         prompt.saved = true;
         prompt.updatedAt = updated.updatedAt;
-        this.prompts.update(ps => [...ps]);
+        this.prompts.update((ps) => [...ps]);
         setTimeout(() => {
           prompt.saved = false;
-          this.prompts.update(ps => [...ps]);
+          this.prompts.update((ps) => [...ps]);
         }, 3000);
       },
       error: () => {
         prompt.saving = false;
         prompt.error = 'Error al guardar. Inténtalo de nuevo.';
-        this.prompts.update(ps => [...ps]);
-      }
+        this.prompts.update((ps) => [...ps]);
+      },
     });
   }
 

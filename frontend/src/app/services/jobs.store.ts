@@ -1,5 +1,5 @@
 import { inject, Injectable, OnDestroy, signal } from '@angular/core';
-import { ConceptProposal, JobState, JobStatus, ScanActivity, SseJobEvent } from '../types';
+import { ConceptProposal, JobState, JobStatus, SseJobEvent } from '../types';
 import { ApiService, JobSummary } from './api.service';
 import { AuthService } from './auth.service';
 
@@ -18,20 +18,21 @@ export class JobsStore implements OnDestroy {
       return;
     }
     this.api.getJobs().subscribe({
-      next: jobs => this.mergeHistory(jobs),
+      next: (jobs) => this.mergeHistory(jobs),
       error: () => {},
     });
     this.openEventSource();
   }
 
   private mergeHistory(jobs: JobSummary[]): void {
-    this.jobs.update(map => {
+    this.jobs.update((map) => {
       const updated = new Map(map);
       for (const j of jobs) {
         if (!updated.has(j.id)) {
-          const files = (j.fileEvents && j.fileEvents.length > 0)
-            ? j.fileEvents
-            : (j.affectedPaths ?? []).map(path => ({ path, action: 'modified' }));
+          const files =
+            j.fileEvents && j.fileEvents.length > 0
+              ? j.fileEvents
+              : (j.affectedPaths ?? []).map((path) => ({ path, action: 'modified' }));
           updated.set(j.id, {
             id: j.id,
             type: j.type,
@@ -68,7 +69,13 @@ export class JobsStore implements OnDestroy {
     this.eventSource = es;
 
     const statuses: JobStatus[] = [
-      'QUEUED', 'STARTED', 'PROGRESS', 'AWAITING_REVIEW', 'COMPLETED', 'FAILED', 'REVERTED'
+      'QUEUED',
+      'STARTED',
+      'PROGRESS',
+      'AWAITING_REVIEW',
+      'COMPLETED',
+      'FAILED',
+      'REVERTED',
     ];
     for (const status of statuses) {
       es.addEventListener(status, (e: MessageEvent) => this.handleEvent(e, status));
@@ -83,7 +90,7 @@ export class JobsStore implements OnDestroy {
 
   private handleEvent(e: MessageEvent, status: JobStatus): void {
     const event: SseJobEvent = JSON.parse(e.data);
-    this.jobs.update(map => {
+    this.jobs.update((map) => {
       const updated = new Map(map);
       const existing: JobState = updated.get(event.jobId) ?? {
         id: event.jobId,
@@ -137,7 +144,7 @@ export class JobsStore implements OnDestroy {
       this.refetchJob(event.jobId);
       const jobId = event.jobId;
       setTimeout(() => {
-        this.jobs.update(map => {
+        this.jobs.update((map) => {
           const m = new Map(map);
           const j = m.get(jobId);
           if (j) m.set(jobId, { ...j, currentActivity: null });
@@ -149,19 +156,18 @@ export class JobsStore implements OnDestroy {
 
   private refetchJob(jobId: string): void {
     this.api.getJobs().subscribe({
-      next: jobs => {
-        const job = jobs.find(j => j.id === jobId);
+      next: (jobs) => {
+        const job = jobs.find((j) => j.id === jobId);
         if (!job) return;
-        this.jobs.update(map => {
+        this.jobs.update((map) => {
           const updated = new Map(map);
           const existing = updated.get(jobId);
           if (existing) {
             updated.set(jobId, {
               ...existing,
               error: job.error ?? existing.error,
-              conceptProposals: (job.conceptProposals?.length ?? 0) > 0
-                ? job.conceptProposals!
-                : existing.conceptProposals,
+              conceptProposals:
+                (job.conceptProposals?.length ?? 0) > 0 ? job.conceptProposals! : existing.conceptProposals,
             });
           }
           return updated;

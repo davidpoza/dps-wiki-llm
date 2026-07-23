@@ -11,9 +11,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   const isLoginRequest = /\/api\/auth\/login(\/2fa)?$/.test(req.url);
 
-  const outgoing = (!token || isLoginRequest)
-    ? req
-    : req.clone({ setHeaders: { Authorization: `Bearer ${token}` } });
+  const outgoing = !token || isLoginRequest ? req : req.clone({ setHeaders: { Authorization: `Bearer ${token}` } });
 
   return next(outgoing).pipe(
     catchError((err: unknown) => {
@@ -22,6 +20,6 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         router.navigateByUrl('/login');
       }
       return throwError(() => err);
-    })
+    }),
   );
 };

@@ -55,12 +55,7 @@ import { ThemeService } from '../services/theme.service';
             @if (error()) {
               <p class="error">{{ error() }}</p>
             }
-            <p-button
-              type="submit"
-              [label]="'login.signIn' | transloco"
-              [loading]="loading()"
-              styleClass="w-full"
-            />
+            <p-button type="submit" [label]="'login.signIn' | transloco" [loading]="loading()" styleClass="w-full" />
           </form>
         } @else {
           <form (ngSubmit)="submitCode()" #cf="ngForm">
@@ -81,45 +76,71 @@ import { ThemeService } from '../services/theme.service';
             @if (error()) {
               <p class="error">{{ error() }}</p>
             }
-            <p-button
-              type="submit"
-              [label]="'login.verify' | transloco"
-              [loading]="loading()"
-              styleClass="w-full"
-            />
+            <p-button type="submit" [label]="'login.verify' | transloco" [loading]="loading()" styleClass="w-full" />
           </form>
         }
       </div>
     </div>
   `,
-  styles: [`
-    .login-wrapper {
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--app-bg);
-      color: var(--app-text);
-    }
-    .login-card {
-      position: relative;
-      width: 360px;
-      padding: 2rem;
-      border: 1px solid var(--app-border);
-      border-radius: 8px;
-      background: var(--app-surface);
-      box-shadow: var(--app-shadow);
-    }
-    :host ::ng-deep .theme-button { position: absolute; top: .75rem; right: .75rem; }
-    h2 { margin-bottom: 1.5rem; text-align: center; }
-    .hint { font-size: .875rem; margin-bottom: 1rem; text-align: center; }
-    .field { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
-    .field label { font-size: .875rem; font-weight: 500; }
-    .error { color: var(--p-red-500); font-size: .875rem; margin-bottom: .75rem; }
-    p-password { width: 100%; }
-    :host ::ng-deep .p-password { width: 100%; }
-    :host ::ng-deep .p-password input { width: 100%; }
-  `]
+  styles: [
+    `
+      .login-wrapper {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--app-bg);
+        color: var(--app-text);
+      }
+      .login-card {
+        position: relative;
+        width: 360px;
+        padding: 2rem;
+        border: 1px solid var(--app-border);
+        border-radius: 8px;
+        background: var(--app-surface);
+        box-shadow: var(--app-shadow);
+      }
+      :host ::ng-deep .theme-button {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+      }
+      h2 {
+        margin-bottom: 1.5rem;
+        text-align: center;
+      }
+      .hint {
+        font-size: 0.875rem;
+        margin-bottom: 1rem;
+        text-align: center;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        margin-bottom: 1rem;
+      }
+      .field label {
+        font-size: 0.875rem;
+        font-weight: 500;
+      }
+      .error {
+        color: var(--p-red-500);
+        font-size: 0.875rem;
+        margin-bottom: 0.75rem;
+      }
+      p-password {
+        width: 100%;
+      }
+      :host ::ng-deep .p-password {
+        width: 100%;
+      }
+      :host ::ng-deep .p-password input {
+        width: 100%;
+      }
+    `,
+  ],
 })
 export class LoginComponent {
   private readonly auth = inject(AuthService);

@@ -34,45 +34,45 @@ function buildDecorations(doc: Parameters<typeof DecorationSet.create>[0]): Deco
 }
 
 export function createWikilinkPlugin(options: WikilinkPluginOptions) {
-  return $prose(() =>
-    new Plugin({
-      key,
-      state: {
-        init: (_, { doc }) => buildDecorations(doc as Parameters<typeof DecorationSet.create>[0]),
-        apply: (tr, old) => tr.docChanged
-          ? buildDecorations(tr.doc as Parameters<typeof DecorationSet.create>[0])
-          : old,
-      },
-      props: {
-        decorations: state => key.getState(state),
-
-        handleClick: (view, _pos, event) => {
-          const el = event.target as HTMLElement;
-          if (!el.classList.contains('wikilink-token')) return false;
-          const raw = el.textContent ?? '';
-          const match = /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/.exec(raw);
-          if (!match) return false;
-          options.onNavigate(match[1].trim());
-          return true;
+  return $prose(
+    () =>
+      new Plugin({
+        key,
+        state: {
+          init: (_, { doc }) => buildDecorations(doc as Parameters<typeof DecorationSet.create>[0]),
+          apply: (tr, old) =>
+            tr.docChanged ? buildDecorations(tr.doc as Parameters<typeof DecorationSet.create>[0]) : old,
         },
-      },
+        props: {
+          decorations: (state) => key.getState(state),
 
-      view: () => ({
-        update: (view: EditorView) => {
-          const { $head } = view.state.selection;
-          const textBefore = $head.parent.textContent.slice(0, $head.parentOffset);
-          const match = textBefore.match(/\[\[([^\]|]*)$/);
-          const matchStart = match ? textBefore.length - match[0].length : -1;
-          const isEmbed = matchStart > 0 && textBefore.charAt(matchStart - 1) === '!';
-          if (match && !isEmbed) {
-            const coords = view.coordsAtPos($head.pos);
-            options.onAutocomplete(match[1], coords, view);
-          } else {
-            options.onAutocomplete(null, null, null);
-          }
+          handleClick: (view, _pos, event) => {
+            const el = event.target as HTMLElement;
+            if (!el.classList.contains('wikilink-token')) return false;
+            const raw = el.textContent ?? '';
+            const match = /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/.exec(raw);
+            if (!match) return false;
+            options.onNavigate(match[1].trim());
+            return true;
+          },
         },
-        destroy: () => options.onAutocomplete(null, null, null),
+
+        view: () => ({
+          update: (view: EditorView) => {
+            const { $head } = view.state.selection;
+            const textBefore = $head.parent.textContent.slice(0, $head.parentOffset);
+            const match = textBefore.match(/\[\[([^\]|]*)$/);
+            const matchStart = match ? textBefore.length - match[0].length : -1;
+            const isEmbed = matchStart > 0 && textBefore.charAt(matchStart - 1) === '!';
+            if (match && !isEmbed) {
+              const coords = view.coordsAtPos($head.pos);
+              options.onAutocomplete(match[1], coords, view);
+            } else {
+              options.onAutocomplete(null, null, null);
+            }
+          },
+          destroy: () => options.onAutocomplete(null, null, null),
+        }),
       }),
-    })
   );
 }

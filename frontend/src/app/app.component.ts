@@ -16,18 +16,20 @@ import { LoadingService } from './services/loading.service';
       </div>
     }
   `,
-  styles: [`
-    .global-spinner-overlay {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--app-overlay);
-      z-index: 9999;
-      pointer-events: none;
-    }
-  `]
+  styles: [
+    `
+      .global-spinner-overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--app-overlay);
+        z-index: 9999;
+        pointer-events: none;
+      }
+    `,
+  ],
 })
 export class AppComponent {
   readonly loading = inject(LoadingService);

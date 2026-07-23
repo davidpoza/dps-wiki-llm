@@ -74,12 +74,7 @@ interface FileGroup {
 
       <ng-template pTemplate="footer">
         <div class="modal-footer">
-          <p-button
-            label="Cancelar"
-            severity="secondary"
-            size="small"
-            (onClick)="cancel.emit()"
-          />
+          <p-button label="Cancelar" severity="secondary" size="small" (onClick)="cancel.emit()" />
           <p-button
             [label]="deleteLabel()"
             severity="danger"
@@ -91,25 +86,91 @@ interface FileGroup {
       </ng-template>
     </p-dialog>
   `,
-  styles: [`
-    .modal-body { padding: 4px 0; }
-    .modal-desc-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-    .modal-desc { margin: 0; font-size: 0.875rem; color: var(--app-text-muted); }
-    .groups-list { display: flex; flex-direction: column; gap: 16px; max-height: 50vh; overflow-y: auto; }
-    .file-group { border: 1px solid var(--app-border); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
-    .file-header { padding: 8px 14px; background: var(--app-surface-subtle); font-size: 0.8rem; font-family: monospace; color: var(--app-text-muted); border-bottom: 1px solid var(--app-border); }
-    .items-list { padding: 8px 14px; display: flex; flex-direction: column; gap: 8px; }
-    .link-item { display: flex; align-items: center; gap: 10px; }
-    .link-label { font-size: 0.875rem; color: var(--app-text); }
-    .link-slug { font-size: 0.75rem; color: var(--app-text-subtle); font-family: monospace; margin-left: 4px; }
-    .section-badge { font-size: 0.7rem; color: var(--app-text-muted); font-family: monospace; margin-left: 6px; background: var(--app-surface-subtle); border: 1px solid var(--app-border); border-radius: 4px; padding: 1px 4px; }
-    .modal-footer { display: flex; justify-content: flex-end; gap: 10px; }
-    .empty-msg { color: var(--app-text-muted); font-size: 0.875rem; }
-  `],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  styles: [
+    `
+      .modal-body {
+        padding: 4px 0;
+      }
+      .modal-desc-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .modal-desc {
+        margin: 0;
+        font-size: 0.875rem;
+        color: var(--app-text-muted);
+      }
+      .groups-list {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        max-height: 50vh;
+        overflow-y: auto;
+      }
+      .file-group {
+        border: 1px solid var(--app-border);
+        border-radius: 8px;
+        overflow: hidden;
+        flex-shrink: 0;
+      }
+      .file-header {
+        padding: 8px 14px;
+        background: var(--app-surface-subtle);
+        font-size: 0.8rem;
+        font-family: monospace;
+        color: var(--app-text-muted);
+        border-bottom: 1px solid var(--app-border);
+      }
+      .items-list {
+        padding: 8px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .link-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .link-label {
+        font-size: 0.875rem;
+        color: var(--app-text);
+      }
+      .link-slug {
+        font-size: 0.75rem;
+        color: var(--app-text-subtle);
+        font-family: monospace;
+        margin-left: 4px;
+      }
+      .section-badge {
+        font-size: 0.7rem;
+        color: var(--app-text-muted);
+        font-family: monospace;
+        margin-left: 6px;
+        background: var(--app-surface-subtle);
+        border: 1px solid var(--app-border);
+        border-radius: 4px;
+        padding: 1px 4px;
+      }
+      .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+      .empty-msg {
+        color: var(--app-text-muted);
+        font-size: 0.875rem;
+      }
+    `,
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BrokenLinksModalComponent {
   readonly brokenLinks = input.required<BrokenLinkEntry[]>();
+  // eslint-disable-next-line @angular-eslint/no-output-native
   readonly cancel = output<void>();
   readonly confirmed = output<{ sourceFile: string; link: string }[]>();
 
@@ -124,9 +185,7 @@ export class BrokenLinksModalComponent {
     return Array.from(map.entries()).map(([sourceFile, entries]) => ({ sourceFile, entries }));
   });
 
-  readonly allSelected = computed(() =>
-    this.selectedKeys().size === this.brokenLinks().length
-  );
+  readonly allSelected = computed(() => this.selectedKeys().size === this.brokenLinks().length);
 
   readonly deleteLabel = computed(() => {
     const n = this.selectedKeys().size;
@@ -135,7 +194,7 @@ export class BrokenLinksModalComponent {
 
   constructor() {
     effect(() => {
-      const keys = new Set(this.brokenLinks().map(e => this.entryKey(e)));
+      const keys = new Set(this.brokenLinks().map((e) => this.entryKey(e)));
       this.selectedKeys.set(keys);
     });
   }
@@ -150,7 +209,7 @@ export class BrokenLinksModalComponent {
 
   toggle(entry: BrokenLinkEntry): void {
     const key = this.entryKey(entry);
-    this.selectedKeys.update(keys => {
+    this.selectedKeys.update((keys) => {
       const next = new Set(keys);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -162,15 +221,15 @@ export class BrokenLinksModalComponent {
     if (this.allSelected()) {
       this.selectedKeys.set(new Set());
     } else {
-      this.selectedKeys.set(new Set(this.brokenLinks().map(e => this.entryKey(e))));
+      this.selectedKeys.set(new Set(this.brokenLinks().map((e) => this.entryKey(e))));
     }
   }
 
   onConfirm(): void {
     const keys = this.selectedKeys();
     const selected = this.brokenLinks()
-      .filter(e => e.sourceSection === 'Related' && keys.has(this.entryKey(e)))
-      .map(e => ({ sourceFile: e.sourceFile, link: e.link }));
+      .filter((e) => e.sourceSection === 'Related' && keys.has(this.entryKey(e)))
+      .map((e) => ({ sourceFile: e.sourceFile, link: e.link }));
     this.confirmed.emit(selected);
   }
 }
