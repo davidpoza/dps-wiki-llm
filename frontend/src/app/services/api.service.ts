@@ -287,6 +287,12 @@ export class ApiService {
     return this.http.get<ResourceSettings>('/api/settings/resources');
   }
 
+  uploadImage(file: File): Observable<{ path: string }> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<{ path: string }>('/api/files/upload-image', form);
+  }
+
   updateResourceSettings(resourceFolder: string): Observable<ResourceSettings> {
     return this.http.put<ResourceSettings>('/api/settings/resources', { resourceFolder });
   }

@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/files")
@@ -208,6 +209,19 @@ public class FileController {
         } catch (FileService.NoSuchFileException e) {
             return ResponseEntity.notFound().build();
         } catch (FileService.PdfExportException | UncheckedIOException | IllegalStateException e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @PostMapping("/upload-image")
+    public ResponseEntity<Map<String, String>> uploadImage(
+            @RequestParam("file") MultipartFile file) {
+        try {
+            String path = fileService.uploadImage(file);
+            return ResponseEntity.ok(Map.of("path", path));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        } catch (UncheckedIOException e) {
             return ResponseEntity.internalServerError().build();
         }
     }

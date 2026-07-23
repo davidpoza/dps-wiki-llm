@@ -29,6 +29,8 @@ import { createMarkdownLinkPlugin } from './markdown-link.plugin';
 import { createMarkdownImagePlugin } from './markdown-image.plugin';
 import { createLivePreviewPlugin, insertTableAtCursor } from './live-preview.plugin';
 import { createObsidianImagePreviewPlugin, OBSIDIAN_IMAGE_PREVIEW_REFRESH } from './obsidian-image-preview.plugin';
+import { createClipboardImagePlugin } from './clipboard-image.plugin';
+import { createImageResourceViewPlugin } from './image-resource-view.plugin';
 import type { EditorView } from '@milkdown/prose/view';
 import { TreeNode, ConfirmationService, MessageService, MenuItem } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -1760,6 +1762,18 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
       .use(createMarkdownImagePlugin())
       .use(createMarkdownLinkPlugin())
       .use(createLivePreviewPlugin())
+      .use(createImageResourceViewPlugin({ getToken: () => this.auth.token() }))
+      .use(
+        createClipboardImagePlugin({
+          uploadImage: (file) => this.api.uploadImage(file),
+          onError: (msg) =>
+            this.messageService.add({
+              severity: 'error',
+              summary: this.t.translate('common.error'),
+              detail: msg,
+            }),
+        }),
+      )
       .use(
         createObsidianImagePreviewPlugin({
           getResourceFolder: () => this.resourceFolder(),

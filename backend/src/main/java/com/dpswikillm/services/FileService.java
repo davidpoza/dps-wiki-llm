@@ -10,8 +10,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.web.multipart.MultipartFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -538,6 +541,38 @@ public class FileService {
         // VaultPathResolver.normalizeRelativePath already enforces no traversal
         String normalized = pathResolver.normalizeRelativePath(relativePath);
         return pathResolver.resolve(normalized);
+    }
+
+    private static final Map<String, String> MIME_TO_EXT =
+            Map.of(
+                    "image/png", ".png",
+                    "image/jpeg", ".jpg",
+                    "image/gif", ".gif",
+                    "image/webp", ".webp");
+
+    public String uploadImage(MultipartFile file) {
+        String mime = file.getContentType();
+        String ext = mime != null ? MIME_TO_EXT.get(mime.toLowerCase()) : null;
+        if (ext == null) {
+            throw new IllegalArgumentException("Unsupported image type: " + mime);
+        }
+        String resourceFolder = resourceSettingsService.getResourceFolder();
+        if (resourceFolder.isBlank()) {
+            throw new IllegalArgumentException("Resource folder is not configured");
+        }
+        String filename = UUID.randomUUID() + ext;
+        Path dir = pathResolver.resolve(resourceFolder);
+        Path target = dir.resolve(filename).normalize();
+        if (!target.startsWith(pathResolver.vaultRoot())) {
+            throw new IllegalArgumentException("Target path escapes vault root");
+        }
+        try {
+            Files.createDirectories(dir);
+            Files.write(target, file.getBytes());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return resourceFolder + "/" + filename;
     }
 
     public static final class NoSuchFileException extends RuntimeException {
