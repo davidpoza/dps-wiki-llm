@@ -29,10 +29,18 @@ interface FileGroup {
         @if (groups().length === 0) {
           <p class="empty-msg">No se encontraron enlaces rotos.</p>
         } @else {
-          <p class="modal-desc">
-            Se encontraron <strong>{{ brokenLinks().length }}</strong> enlace(s) roto(s) en
-            <strong>{{ groups().length }}</strong> fichero(s). Selecciona los que deseas eliminar.
-          </p>
+          <div class="modal-desc-row">
+            <p class="modal-desc">
+              Se encontraron <strong>{{ brokenLinks().length }}</strong> enlace(s) roto(s) en
+              <strong>{{ groups().length }}</strong> fichero(s). Selecciona los que deseas eliminar.
+            </p>
+            <p-button
+              [label]="allSelected() ? 'Desmarcar todos' : 'Marcar todos'"
+              severity="secondary"
+              size="small"
+              (onClick)="toggleAll()"
+            />
+          </div>
           <div class="groups-list">
             @for (group of groups(); track group.sourceFile) {
               <div class="file-group">
@@ -81,9 +89,10 @@ interface FileGroup {
   `,
   styles: [`
     .modal-body { padding: 4px 0; }
-    .modal-desc { margin: 0 0 16px; font-size: 0.875rem; color: var(--app-text-muted); }
+    .modal-desc-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .modal-desc { margin: 0; font-size: 0.875rem; color: var(--app-text-muted); }
     .groups-list { display: flex; flex-direction: column; gap: 16px; max-height: 50vh; overflow-y: auto; }
-    .file-group { border: 1px solid var(--app-border); border-radius: 8px; overflow: hidden; }
+    .file-group { border: 1px solid var(--app-border); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
     .file-header { padding: 8px 14px; background: var(--app-surface-subtle); font-size: 0.8rem; font-family: monospace; color: var(--app-text-muted); border-bottom: 1px solid var(--app-border); }
     .items-list { padding: 8px 14px; display: flex; flex-direction: column; gap: 8px; }
     .link-item { display: flex; align-items: center; gap: 10px; }
@@ -109,6 +118,10 @@ export class BrokenLinksModalComponent {
     }
     return Array.from(map.entries()).map(([sourceFile, entries]) => ({ sourceFile, entries }));
   });
+
+  readonly allSelected = computed(() =>
+    this.selectedKeys().size === this.brokenLinks().length
+  );
 
   readonly deleteLabel = computed(() => {
     const n = this.selectedKeys().size;
@@ -138,6 +151,14 @@ export class BrokenLinksModalComponent {
       else next.add(key);
       return next;
     });
+  }
+
+  toggleAll(): void {
+    if (this.allSelected()) {
+      this.selectedKeys.set(new Set());
+    } else {
+      this.selectedKeys.set(new Set(this.brokenLinks().map(e => this.entryKey(e))));
+    }
   }
 
   onConfirm(): void {
