@@ -14,15 +14,18 @@ public class JobConsumers {
     private final IngestPipelineService ingestPipelineService;
     private final AnswerPipelineService answerPipelineService;
     private final JobRevertService jobRevertService;
+    private final EnrichPipelineService enrichPipelineService;
     private final JobRepository jobRepository;
 
     public JobConsumers(JobLifecycleService lifecycleService, IngestPipelineService ingestPipelineService,
                         AnswerPipelineService answerPipelineService,
-                        JobRevertService jobRevertService, JobRepository jobRepository) {
+                        JobRevertService jobRevertService, EnrichPipelineService enrichPipelineService,
+                        JobRepository jobRepository) {
         this.lifecycleService = lifecycleService;
         this.ingestPipelineService = ingestPipelineService;
         this.answerPipelineService = answerPipelineService;
         this.jobRevertService = jobRevertService;
+        this.enrichPipelineService = enrichPipelineService;
         this.jobRepository = jobRepository;
     }
 
@@ -39,6 +42,10 @@ public class JobConsumers {
             }
             if (message.jobType() == JobType.REVERT) {
                 jobRevertService.revert(jobRepository.findById(message.jobId()).orElseThrow());
+                return;
+            }
+            if (message.jobType() == JobType.ENRICH) {
+                enrichPipelineService.run(jobRepository.findById(message.jobId()).orElseThrow());
                 return;
             }
             lifecycleService.transition(message.jobId(), JobStatus.PROGRESS, "dispatch", "Write pipeline dispatch placeholder");

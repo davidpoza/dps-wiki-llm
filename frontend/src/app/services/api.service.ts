@@ -447,4 +447,10 @@ export class ApiService {
       return () => es.close();
     });
   }
+
+  enqueueEnrich(path: string): Observable<EnqueueResponse> {
+    return this.http.post<EnqueueResponse>(
+      `/api/jobs/enrich?path=${encodeURIComponent(path)}`, null
+    );
+  }
 }

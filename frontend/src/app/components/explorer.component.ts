@@ -49,11 +49,13 @@ import { NavComponent } from './nav.component';
 import { UnsavedChangesAware } from '../unsaved-changes.guard';
 import { FileVersion } from '../types';
 import { ProgressBarModule } from 'primeng/progressbar';
+import { Checkbox } from 'primeng/checkbox';
+import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-explorer',
   standalone: true,
-  imports: [TreeModule, ButtonModule, ContextMenuModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe, NgClass, TranslocoPipe, ProgressBarModule, NavComponent],
+  imports: [TreeModule, ButtonModule, ContextMenuModule, ToastModule, ConfirmDialogModule, ToolbarModule, DialogModule, InputTextModule, SlicePipe, NgClass, TranslocoPipe, ProgressBarModule, NavComponent, Checkbox, FormsModule],
   providers: [MessageService, ConfirmationService],
   template: `
     <p-toast />
@@ -160,6 +162,13 @@ import { ProgressBarModule } from 'primeng/progressbar';
                     [disabled]="!isDirty()"
                     (onClick)="save()"
                     [title]="'explorer.save' | transloco"
+                  />
+                  <p-button
+                    icon="pi pi-sparkles"
+                    size="small"
+                    severity="secondary"
+                    (onClick)="enrich()"
+                    [title]="'explorer.enrichButton' | transloco"
                   />
                   <p-button
                     icon="pi pi-sitemap"
@@ -406,7 +415,7 @@ import { ProgressBarModule } from 'primeng/progressbar';
       [(visible)]="showLinkDiscovery"
       [modal]="true"
       [draggable]="false"
-      [style]="{ width: '600px' }"
+      [style]="{ width: '600px', maxWidth: '95vw' }"
       (onHide)="onLinkDiscoveryHide()"
     >
       <div class="link-discovery-body">
@@ -429,9 +438,23 @@ import { ProgressBarModule } from 'primeng/progressbar';
           @if (linkDiscoveryResults().length === 0) {
             <p class="ld-empty">{{ 'explorer.linkDiscoveryNoResults' | transloco }}</p>
           } @else {
+            <div class="ld-selection-row">
+              <span class="ld-selection-count">{{ linkDiscoverySelected().size }} seleccionado(s)</span>
+              <p-button
+                [label]="linkDiscoveryAllSelected() ? 'Desmarcar todos' : 'Marcar todos'"
+                severity="secondary"
+                size="small"
+                (onClick)="toggleAllLinkDiscovery()"
+              />
+            </div>
             <div class="ld-results">
               @for (link of linkDiscoveryResults(); track link.path) {
-                <div class="ld-result-item" (click)="navigateToDiscoveredLink(link.path)">
+                <div class="ld-result-item">
+                  <p-checkbox
+                    [ngModel]="isLinkDiscoverySelected(link.path)"
+                    [binary]="true"
+                    (onChange)="toggleLinkDiscovery(link.path)"
+                  />
                   <div class="ld-result-info">
                     <span class="ld-result-title">{{ link.title || link.path }}</span>
                     <span class="ld-result-path">{{ link.path }}</span>
@@ -448,6 +471,13 @@ import { ProgressBarModule } from 'primeng/progressbar';
       </div>
       <ng-template pTemplate="footer">
         <p-button [label]="'explorer.linkDiscoveryClose' | transloco" severity="secondary" size="small" (onClick)="showLinkDiscovery.set(false)" />
+        <p-button
+          label="Añadir a Related"
+          severity="primary"
+          size="small"
+          [disabled]="linkDiscoverySelected().size === 0"
+          (onClick)="addSelectedLinksToRelated()"
+        />
       </ng-template>
     </p-dialog>
 
@@ -948,13 +978,15 @@ import { ProgressBarModule } from 'primeng/progressbar';
     .ld-warn { background: var(--app-primary-soft); color: var(--app-text); }
     .ld-empty { color: var(--app-text-muted); font-size: 0.875rem; padding: 8px 0; }
     .ld-results { display: flex; flex-direction: column; gap: 6px; max-height: 380px; overflow-y: auto; }
+    .ld-selection-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .ld-selection-count { font-size: 0.8rem; color: var(--app-text-muted); }
     .ld-result-item {
-      display: flex; align-items: center; justify-content: space-between;
+      display: flex; align-items: center; gap: 10px;
       padding: 10px 12px; border: 1px solid var(--app-border);
-      border-radius: 6px; cursor: pointer; transition: background 0.1s;
+      border-radius: 6px; cursor: default; transition: background 0.1s;
     }
     .ld-result-item:hover { background: var(--app-surface-subtle); }
-    .ld-result-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .ld-result-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
     .ld-result-title { font-size: 0.875rem; font-weight: 500; color: var(--app-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .ld-result-path { font-size: 0.75rem; color: var(--app-text-muted); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .ld-result-score { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; margin-left: 12px; }
@@ -1017,6 +1049,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly linkDiscoveryError = signal<string | null>(null);
   readonly linkDiscoveryNoKeywords = signal(false);
   readonly linkDiscoveryResults = signal<DiscoveredLink[]>([]);
+  readonly linkDiscoverySelected = signal<Set<string>>(new Set());
   readonly linkDiscoveryStep = signal<{ step: string; current: number; total: number } | null>(null);
   readonly linkDiscoveryPercent = computed(() => {
     const s = this.linkDiscoveryStep();
@@ -1027,6 +1060,10 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     if (step === 'loading') return this.t.translate('explorer.linkDiscoveryStepLoading');
     if (step === 'searching') return this.t.translate('explorer.linkDiscoveryStepSearching');
     return this.t.translate('explorer.linkDiscoveryStepDone');
+  });
+  readonly linkDiscoveryAllSelected = computed(() => {
+    const results = this.linkDiscoveryResults();
+    return results.length > 0 && this.linkDiscoverySelected().size === results.length;
   });
   private linkDiscoverySub: { unsubscribe(): void } | null = null;
   readonly versions = signal<FileVersion[]>([]);
@@ -1927,6 +1964,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     const fm = this.frontmatter();
     const hasKeywords = Array.isArray(fm['keywords']) && (fm['keywords'] as unknown[]).length > 0;
     this.linkDiscoveryResults.set([]);
+    this.linkDiscoverySelected.set(new Set());
     this.linkDiscoveryError.set(null);
     this.linkDiscoveryStep.set(null);
     this.linkDiscoveryNoKeywords.set(!hasKeywords);
@@ -1965,6 +2003,76 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     }
   }
 
+  isLinkDiscoverySelected(path: string): boolean {
+    return this.linkDiscoverySelected().has(path);
+  }
+
+  toggleLinkDiscovery(path: string): void {
+    this.linkDiscoverySelected.update(set => {
+      const next = new Set(set);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
+
+  toggleAllLinkDiscovery(): void {
+    if (this.linkDiscoveryAllSelected()) {
+      this.linkDiscoverySelected.set(new Set());
+    } else {
+      this.linkDiscoverySelected.set(new Set(this.linkDiscoveryResults().map(l => l.path)));
+    }
+  }
+
+  private slugFromPath(path: string): string {
+    const filename = path.split('/').pop() ?? path;
+    return filename.replace(/\.md$/i, '');
+  }
+
+  addSelectedLinksToRelated(): void {
+    const selected = this.linkDiscoverySelected();
+    if (selected.size === 0) return;
+
+    const slugsToAdd = Array.from(selected).map(p => this.slugFromPath(p));
+    let markdown = this.currentMarkdown;
+
+    const relatedMatch = markdown.match(/^## Related\s*\n([\s\S]*?)(?=^## |\s*$)/m);
+    const existingSlugs = new Set<string>();
+
+    if (relatedMatch) {
+      const block = relatedMatch[1];
+      const wikilinkRe = /\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
+      let m: RegExpExecArray | null;
+      while ((m = wikilinkRe.exec(block)) !== null) {
+        existingSlugs.add(m[1].trim());
+      }
+
+      const newLines = slugsToAdd
+        .filter(s => !existingSlugs.has(s))
+        .map(s => `- [[${s}]]`)
+        .join('\n');
+
+      if (newLines) {
+        const insertAt = relatedMatch.index! + relatedMatch[0].trimEnd().length;
+        markdown = markdown.slice(0, insertAt) + '\n' + newLines + markdown.slice(insertAt);
+      }
+    } else {
+      const newSection = '\n\n## Related\n' + slugsToAdd.map(s => `- [[${s}]]`).join('\n');
+      const sourcesIdx = markdown.search(/^## Sources\b/m);
+      if (sourcesIdx !== -1) {
+        markdown = markdown.slice(0, sourcesIdx).trimEnd() + newSection + '\n\n' + markdown.slice(sourcesIdx);
+      } else {
+        markdown = markdown.trimEnd() + newSection;
+      }
+    }
+
+    this.currentMarkdown = markdown;
+    this.editor?.action(replaceAll(markdown));
+    this.isDirty.set(true);
+    this.save();
+    this.showLinkDiscovery.set(false);
+  }
+
   generatePdf(): void {
     const path = this.selectedPath();
     if (!path) return;
@@ -1982,6 +2090,51 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         severity: 'error',
         summary: this.t.translate('common.error'),
         detail: this.t.translate('explorer.toastErrorPdf'),
+      }),
+    });
+  }
+
+  enrich(): void {
+    const path = this.selectedPath();
+    if (!path) return;
+    this.confirmationService.confirm({
+      header: this.t.translate('explorer.enrichConfirmHeader'),
+      message: this.t.translate('explorer.enrichConfirmMessage'),
+      icon: 'pi pi-sparkles',
+      accept: () => this.doEnqueue(path),
+    });
+  }
+
+  private doEnqueue(path: string): void {
+    const enqueue = () => {
+      this.api.enqueueEnrich(path).subscribe({
+        next: () => this.router.navigate(['/jobs']),
+        error: () => this.messageService.add({
+          severity: 'error',
+          summary: this.t.translate('common.error'),
+          detail: this.t.translate('explorer.toastErrorEnrich'),
+        }),
+      });
+    };
+    if (!this.isDirty()) {
+      enqueue();
+      return;
+    }
+    const fm = this.frontmatter();
+    const fullContent = Object.keys(fm).length > 0
+      ? this.stringifyWithFrontmatter(this.currentMarkdown, fm)
+      : this.currentMarkdown;
+    this.fileService.saveContent(path, fullContent).subscribe({
+      next: () => {
+        this.isDirty.set(false);
+        this.rawFileContent = fullContent;
+        this.cdr.markForCheck();
+        enqueue();
+      },
+      error: () => this.messageService.add({
+        severity: 'error',
+        summary: this.t.translate('common.error'),
+        detail: this.t.translate('explorer.toastErrorSave'),
       }),
     });
   }

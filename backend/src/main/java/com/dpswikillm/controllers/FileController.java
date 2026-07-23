@@ -34,7 +34,8 @@ public class FileController {
     private final SnapshotService snapshotService;
     private final ResourceSettingsService resourceSettingsService;
 
-    public FileController(FileService fileService, SnapshotService snapshotService, ResourceSettingsService resourceSettingsService) {
+    public FileController(FileService fileService, SnapshotService snapshotService,
+                          ResourceSettingsService resourceSettingsService) {
         this.fileService = fileService;
         this.snapshotService = snapshotService;
         this.resourceSettingsService = resourceSettingsService;

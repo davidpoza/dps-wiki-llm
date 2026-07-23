@@ -159,6 +159,12 @@ public class JobController {
         return queueService.enqueue(JobType.REVERT, JobMode.unattended, id.toString());
     }
 
+    @PostMapping("/jobs/enrich")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public EnqueueJobResponse enqueueEnrich(@RequestParam("path") String path) {
+        return queueService.enqueue(JobType.ENRICH, JobMode.unattended, path);
+    }
+
     @GetMapping("/jobs/{id}/review")
     public java.util.List<JobConnectionCandidate> reviewCandidates(@PathVariable UUID id) {
         return guidedReviewService.candidatesForJob(id);
