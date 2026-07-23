@@ -81,7 +81,8 @@
     "manualConnections": "Manual connections (file search)",
     "searchFiles": "Search files…",
     "submitReview": "Submit Review",
-    "loadCandidates": "Load Candidates"
+    "loadCandidates": "Load Candidates",
+    "deleteJob": "Delete"
   },
   "git": {
     "title": "Changes History",

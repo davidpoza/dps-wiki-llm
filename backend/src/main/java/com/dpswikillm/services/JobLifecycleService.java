@@ -86,8 +86,8 @@ public class JobLifecycleService {
     public void cancelJob(UUID jobId) {
         Job job = jobRepository.findById(jobId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (job.getStatus() != JobStatus.QUEUED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Job is not in QUEUED state");
+        if (job.getStatus() != JobStatus.QUEUED && job.getStatus() != JobStatus.AWAITING_REVIEW) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Job cannot be cancelled in its current state");
         }
         job.transitionTo(JobStatus.CANCELLED);
         Job saved = jobRepository.save(job);

@@ -81,7 +81,8 @@
     "manualConnections": "Conexiones manuales (búsqueda de fichero)",
     "searchFiles": "Buscar ficheros…",
     "submitReview": "Enviar revisión",
-    "loadCandidates": "Cargar candidatos"
+    "loadCandidates": "Cargar candidatos",
+    "deleteJob": "Eliminar"
   },
   "git": {
     "title": "Historial de cambios",

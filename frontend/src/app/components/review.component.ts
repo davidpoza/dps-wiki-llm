@@ -24,6 +24,9 @@ import { JobState } from '../types';
           <div class="review-header">
             <span class="job-label">{{ 'review.jobLabel' | transloco: { id: job.id } }}</span>
             <p-tag value="AWAITING_REVIEW" severity="warn" />
+            <button pButton type="button" [label]="'review.deleteJob' | transloco" icon="pi pi-trash"
+                    severity="danger" size="small" [disabled]="deleting().has(job.id)"
+                    (click)="deleteJob(job.id)" class="delete-btn"></button>
           </div>
 
           @if (loaded().get(job.id)) {
@@ -87,6 +90,7 @@ import { JobState } from '../types';
     }
     .review-header { display: flex; align-items: center; gap: 10px; }
     .job-label { font-family: monospace; font-size: 0.82rem; }
+    .delete-btn { margin-left: auto; }
     .candidates, .manual-picker { display: grid; gap: 8px; }
     .candidates-title, .picker-title { font-weight: 600; font-size: 0.85rem; }
     .candidate { display: flex; align-items: flex-start; gap: 8px; }
@@ -111,6 +115,7 @@ export class ReviewComponent {
   readonly fileResults = signal<Map<string, Array<{path: string}>>>(new Map());
   readonly loaded = signal<Map<string, boolean>>(new Map());
   readonly submitting = signal(false);
+  readonly deleting = signal<Set<string>>(new Set());
 
   readonly checkedMap: Record<string, boolean> = {};
   readonly manualChecked: Record<string, boolean> = {};
@@ -139,6 +144,14 @@ export class ReviewComponent {
       next: results => {
         this.fileResults.update(m => { const n = new Map(m); n.set(jobId, results); return n; });
       },
+    });
+  }
+
+  deleteJob(jobId: string): void {
+    this.deleting.update(s => new Set([...s, jobId]));
+    this.api.cancelJob(jobId).subscribe({
+      next: () => this.deleting.update(s => { const n = new Set(s); n.delete(jobId); return n; }),
+      error: () => this.deleting.update(s => { const n = new Set(s); n.delete(jobId); return n; }),
     });
   }
 
