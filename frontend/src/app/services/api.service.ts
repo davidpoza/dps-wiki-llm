@@ -116,6 +116,7 @@ export interface BrokenLinkEntry {
   sourceFile: string;
   link: string;
   displayAlias: string | null;
+  sourceSection: string;
 }
 
 export interface BrokenLinkScanProgress {
