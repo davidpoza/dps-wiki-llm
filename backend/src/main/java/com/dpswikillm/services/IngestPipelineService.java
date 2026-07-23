@@ -5,6 +5,8 @@ import com.dpswikillm.domain.GuardrailResult;
 import com.dpswikillm.domain.Job;
 import com.dpswikillm.domain.JobMode;
 import com.dpswikillm.domain.JobStatus;
+import com.dpswikillm.domain.MutationAction;
+import com.dpswikillm.domain.MutationActionType;
 import com.dpswikillm.domain.MutationPlan;
 import com.dpswikillm.domain.MutationResult;
 import com.dpswikillm.domain.NormalizedSourcePayload;
@@ -139,11 +141,39 @@ public class IngestPipelineService {
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "concept-resolution", "Resolving concept duplicates");
             ConceptResolutionResult conceptResult = conceptResolutionService.resolve(guarded.plan());
             lifecycleService.conceptProposals(job, conceptResult.proposals());
+
+            // Apply new concept pages (creates that weren't deduplicated to an existing concept)
+            List<MutationAction> newConceptActions = conceptResult.plan().pageActions() == null ? List.of()
+                    : conceptResult.plan().pageActions().stream()
+                            .filter(a -> a.action() == MutationActionType.create
+                                    && a.path() != null && a.path().startsWith("wiki/concepts/"))
+                            .toList();
+            List<String> createdConceptPaths = new ArrayList<>();
+            if (!newConceptActions.isEmpty()) {
+                for (var a : newConceptActions) snapshotService.captureFile(snapshot, a.path());
+                MutationResult conceptCreateResult = mutationApplier.apply(
+                        new MutationPlan("concept-creates-" + job.getId(), newConceptActions));
+                for (String p : conceptCreateResult.created()) {
+                    snapshotService.recordAfter(snapshot, p);
+                    lifecycleService.fileEvent(job, p, "create");
+                    createdConceptPaths.add(p);
+                }
+                for (String p : conceptCreateResult.updated()) {
+                    snapshotService.recordAfter(snapshot, p);
+                    lifecycleService.fileEvent(job, p, "update");
+                    createdConceptPaths.add(p);
+                }
+                if (!createdConceptPaths.isEmpty()) {
+                    snapshotService.recordAfter(snapshot, "state/runtime/idempotency-keys.json");
+                }
+            }
+
             var candidates = connectionDiscoveryService.discoverAndPersist(job, payload, sourceNotePath, conceptResult.plan());
 
             if (job.getMode() == JobMode.validated) {
                 snapshotService.recordAfter(snapshot, payload.rawPath());
                 List<String> baselinePaths = new ArrayList<>(List.of(sourceNotePath, "INDEX.md", "state/runtime/idempotency-keys.json", payload.rawPath()));
+                baselinePaths.addAll(createdConceptPaths);
                 job.setAffectedPaths(toJson(baselinePaths));
                 job.setSnapshotId(snapshot.getId());
                 jobRepository.save(job);
@@ -174,6 +204,7 @@ public class IngestPipelineService {
             snapshotService.recordAfter(snapshot, payload.rawPath());
 
             List<String> allPaths = new ArrayList<>(List.of(sourceNotePath, "INDEX.md"));
+            allPaths.addAll(createdConceptPaths);
             allPaths.addAll(connectionsResult.created());
             allPaths.addAll(connectionsResult.updated());
             allPaths.add("state/runtime/idempotency-keys.json");
