@@ -64,6 +64,7 @@ export interface JobSummary {
   error?: string;
   affectedPaths?: string[];
   conceptProposals?: ConceptProposal[];
+  fileEvents?: { path: string; action: string }[];
 }
 
 export interface ReindexProgress {

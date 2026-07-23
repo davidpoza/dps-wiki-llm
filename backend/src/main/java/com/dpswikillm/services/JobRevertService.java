@@ -5,6 +5,7 @@ import com.dpswikillm.domain.JobStatus;
 import com.dpswikillm.domain.JobType;
 import com.dpswikillm.domain.Operation;
 import com.dpswikillm.domain.Snapshot;
+import com.dpswikillm.domain.SnapshotFile;
 import com.dpswikillm.repositories.JobRepository;
 import com.dpswikillm.repositories.OperationRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -59,6 +60,7 @@ public class JobRevertService {
 
         UUID targetSnapshotId = target.getSnapshotId();
         List<String> snapshotPaths = snapshotService.getPathsForSnapshot(targetSnapshotId);
+        List<SnapshotFile> targetSnapshotFiles = snapshotService.getSnapshotFiles(targetSnapshotId);
 
         Snapshot revertSnapshot = snapshotService.beginSnapshot(
                 revertJob.getId().toString(), "job-revert", "Revert job " + target.getId());
@@ -74,6 +76,11 @@ public class JobRevertService {
             }
 
             snapshotService.hardReset(targetSnapshotId);
+
+            for (SnapshotFile sf : targetSnapshotFiles) {
+                String action = sf.getContentBefore() == null ? "delete" : "update";
+                lifecycleService.fileEvent(revertJob, sf.getPath(), action);
+            }
 
             for (String path : snapshotPaths) {
                 snapshotService.recordAfter(revertSnapshot, path);

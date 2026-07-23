@@ -29,12 +29,15 @@ export class JobsStore implements OnDestroy {
       const updated = new Map(map);
       for (const j of jobs) {
         if (!updated.has(j.id)) {
+          const files = (j.fileEvents && j.fileEvents.length > 0)
+            ? j.fileEvents
+            : (j.affectedPaths ?? []).map(path => ({ path, action: 'modified' }));
           updated.set(j.id, {
             id: j.id,
             type: j.type,
             status: j.status as JobStatus,
             phases: [],
-            files: (j.affectedPaths ?? []).map(path => ({ path, action: 'modified' as const })),
+            files,
             conceptProposals: j.conceptProposals ?? [],
             error: j.error,
             createdAt: j.createdAt,

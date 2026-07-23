@@ -7,6 +7,7 @@ import com.dpswikillm.domain.JobType;
 import com.dpswikillm.dto.ConceptProposal;
 import com.dpswikillm.dto.EnqueueJobRequest;
 import com.dpswikillm.dto.EnqueueJobResponse;
+import com.dpswikillm.dto.FileEventDto;
 import com.dpswikillm.dto.IngestTextRequest;
 import com.dpswikillm.dto.JobSummary;
 import com.dpswikillm.dto.ReviewRequest;
@@ -19,6 +20,7 @@ import com.dpswikillm.services.JobLifecycleService;
 import com.dpswikillm.services.JobQueueService;
 import com.dpswikillm.services.LinkDiscoveryService;
 import com.dpswikillm.services.RawIntakeService;
+import com.dpswikillm.services.SnapshotService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -49,13 +51,14 @@ public class JobController {
     private final GuidedReviewService guidedReviewService;
     private final FileLookupService fileLookupService;
     private final LinkDiscoveryService linkDiscoveryService;
+    private final SnapshotService snapshotService;
     private final ObjectMapper objectMapper;
 
     public JobController(JobEventService eventService, JobQueueService queueService,
                          JobLifecycleService lifecycleService, JobRepository jobRepository,
                          RawIntakeService rawIntakeService, GuidedReviewService guidedReviewService,
                          FileLookupService fileLookupService, LinkDiscoveryService linkDiscoveryService,
-                         ObjectMapper objectMapper) {
+                         SnapshotService snapshotService, ObjectMapper objectMapper) {
         this.eventService = eventService;
         this.queueService = queueService;
         this.lifecycleService = lifecycleService;
@@ -64,6 +67,7 @@ public class JobController {
         this.guidedReviewService = guidedReviewService;
         this.fileLookupService = fileLookupService;
         this.linkDiscoveryService = linkDiscoveryService;
+        this.snapshotService = snapshotService;
         this.objectMapper = objectMapper;
     }
 
@@ -76,7 +80,15 @@ public class JobController {
     public java.util.List<JobSummary> listJobs() {
         return jobRepository.findTop50ByOrderByCreatedAtDesc().stream()
                 .map(j -> new JobSummary(j.getId(), j.getType().name(), j.getStatus().name(),
-                        j.getCreatedAt(), j.getCompletedAt(), j.getError(), parseAffectedPaths(j), parseConceptProposals(j)))
+                        j.getCreatedAt(), j.getCompletedAt(), j.getError(), parseAffectedPaths(j),
+                        parseConceptProposals(j), buildFileEvents(j)))
+                .toList();
+    }
+
+    private List<FileEventDto> buildFileEvents(Job job) {
+        if (job.getSnapshotId() == null) return List.of();
+        return snapshotService.getSnapshotFiles(job.getSnapshotId()).stream()
+                .map(sf -> new FileEventDto(sf.getPath(), sf.getContentAfter() == null ? "delete" : "update"))
                 .toList();
     }
 

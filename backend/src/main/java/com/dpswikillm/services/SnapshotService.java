@@ -211,6 +211,10 @@ public class SnapshotService {
                 .toList();
     }
 
+    public List<SnapshotFile> getSnapshotFiles(UUID snapshotId) {
+        return snapshotFileRepository.findBySnapshotId(snapshotId);
+    }
+
     public Snapshot findById(UUID snapshotId) {
         return snapshotRepository.findById(snapshotId)
                 .orElseThrow(() -> new java.util.NoSuchElementException("Snapshot not found: " + snapshotId));

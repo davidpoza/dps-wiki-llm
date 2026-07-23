@@ -146,6 +146,7 @@ const PAGE_SIZE = 10;
     .action-update { background: var(--app-primary); }
     .action-read { background: #94a3b8; }
     .action-modified { background: #8b5cf6; }
+    .action-delete { background: #ef4444; }
     .path-btn { font-family: monospace; font-size: 0.8rem; background: none; border: none; padding: 0; color: var(--app-primary); cursor: pointer; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .path-btn:hover { text-decoration: underline; }
     .job-error { color: var(--app-error-text); font-size: 0.85rem; padding: 6px; background: var(--app-error-bg); border-radius: 4px; }
