@@ -25,9 +25,12 @@
   padding: 0;
   width: 100%;
   max-width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 .tab-content.full-bleed {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }

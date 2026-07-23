@@ -135,6 +135,12 @@ import { ChatMessage, ChatSession, ChatSessionDetail } from '../types';
     </div>
   `,
   styles: [`
+    :host {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
     .chat-layout {
       display: grid;
       grid-template-columns: 260px 1fr;
