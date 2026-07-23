@@ -1,5 +1,24 @@
 export type JobMode = 'unattended' | 'validated';
 
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  sessionId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+export interface ChatSessionDetail extends ChatSession {
+  messages: ChatMessage[];
+}
+
 export type ChangeSource = 'LOCAL_EDIT' | 'JOB' | 'WEBDAV_PULL';
 
 /** A single per-file change entry in the flat history stream. */

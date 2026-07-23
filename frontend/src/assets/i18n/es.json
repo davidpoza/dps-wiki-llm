@@ -33,8 +33,13 @@
   },
   "chat": {
     "placeholder": "Haz una pregunta sobre tu base de conocimiento…",
-    "ask": "Preguntar",
-    "evidence": "Evidencias:"
+    "ask": "Enviar",
+    "evidence": "Evidencias:",
+    "newConversation": "Nueva conversación",
+    "noSessions": "Sin conversaciones. Crea una nueva.",
+    "selectOrNew": "Selecciona una conversación o crea una nueva.",
+    "saveToVault": "Guardar en vault",
+    "exportError": "Error al guardar"
   },
   "ingest": {
     "mode": "Modo",

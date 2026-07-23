@@ -33,8 +33,13 @@
   },
   "chat": {
     "placeholder": "Ask a question about your knowledge base…",
-    "ask": "Ask",
-    "evidence": "Evidence:"
+    "ask": "Send",
+    "evidence": "Evidence:",
+    "newConversation": "New conversation",
+    "noSessions": "No conversations yet. Start a new one.",
+    "selectOrNew": "Select a conversation or start a new one.",
+    "saveToVault": "Save to vault",
+    "exportError": "Error saving"
   },
   "ingest": {
     "mode": "Mode",
