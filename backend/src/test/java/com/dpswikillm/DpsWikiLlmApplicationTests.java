@@ -1,5 +1,7 @@
 package com.dpswikillm;
 
+import com.dpswikillm.repositories.ChatMessageRepository;
+import com.dpswikillm.repositories.ChatSessionRepository;
 import com.dpswikillm.repositories.DocumentIndexRepository;
 import com.dpswikillm.repositories.AppSettingRepository;
 import com.dpswikillm.repositories.JobConnectionCandidateRepository;
@@ -55,6 +57,12 @@ class DpsWikiLlmApplicationTests {
 
     @MockBean
     VaultFileSyncRepository vaultFileSyncRepository;
+
+    @MockBean
+    ChatSessionRepository chatSessionRepository;
+
+    @MockBean
+    ChatMessageRepository chatMessageRepository;
 
     @MockBean
     RabbitTemplate rabbitTemplate;
