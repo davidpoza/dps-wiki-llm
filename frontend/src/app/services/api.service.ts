@@ -112,6 +112,35 @@ export interface ResourceSettings {
   resourceFolder: string;
 }
 
+export interface ConceptDedupGroup {
+  canonicalFilename: string;
+  files: string[];
+  confidence: number;
+}
+
+export interface ConceptDedupScanProgress {
+  type: 'progress';
+  step: string;
+  message: string;
+  current: number;
+  total: number;
+}
+
+export interface ConceptDedupScanWarning {
+  type: 'warning';
+  path: string;
+}
+
+export interface ConceptDedupScanResult {
+  type: 'completed';
+  groups: ConceptDedupGroup[];
+}
+
+export type ConceptDedupScanEvent =
+  | ConceptDedupScanProgress
+  | ConceptDedupScanWarning
+  | ConceptDedupScanResult;
+
 export interface BrokenLinkEntry {
   sourceFile: string;
   link: string;
@@ -439,5 +468,52 @@ export class ApiService {
 
   enqueueEnrich(path: string): Observable<EnqueueResponse> {
     return this.http.post<EnqueueResponse>(`/api/jobs/enrich?path=${encodeURIComponent(path)}`, null);
+  }
+
+  scanConceptDeduplications(): Observable<ConceptDedupScanEvent> {
+    return new Observable((observer: Observer<ConceptDedupScanEvent>) => {
+      const token = this.auth.token();
+      const url = token
+        ? `/api/concept-dedup/scan?token=${encodeURIComponent(token)}`
+        : '/api/concept-dedup/scan';
+      const es = new EventSource(url);
+      let completed = false;
+
+      es.addEventListener('progress', (e: MessageEvent) => {
+        const raw = JSON.parse(e.data) as { step: string; message: string; result: string };
+        const result = JSON.parse(raw.result) as { current: number; total: number };
+        if (raw.step === 'concept-dedup-warning') {
+          observer.next({ type: 'warning', path: raw.message });
+        } else {
+          observer.next({ type: 'progress', step: raw.step, message: raw.message, ...result });
+        }
+      });
+      es.addEventListener('completed', (e: MessageEvent) => {
+        completed = true;
+        const data = JSON.parse(e.data) as { groups: ConceptDedupGroup[] };
+        observer.next({ type: 'completed', groups: data.groups });
+        es.close();
+        observer.complete();
+      });
+      es.addEventListener('error', (e: MessageEvent) => {
+        completed = true;
+        const data = e.data ? (JSON.parse(e.data) as { message?: string }) : {};
+        es.close();
+        observer.error(new Error(data.message ?? 'Error desconocido'));
+      });
+      es.onerror = () => {
+        es.close();
+        if (!completed) observer.error(new Error('Error de conexión'));
+      };
+      return () => es.close();
+    });
+  }
+
+  enqueueMerge(groups: ConceptDedupGroup[]): Observable<EnqueueResponse> {
+    return this.http.post<EnqueueResponse>('/api/concept-dedup/merge', { groups });
+  }
+
+  getActiveJobs(): Observable<import('../services/api.service').JobSummary[]> {
+    return this.http.get<JobSummary[]>('/api/jobs');
   }
 }

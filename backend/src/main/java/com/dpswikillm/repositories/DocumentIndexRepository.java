@@ -27,4 +27,10 @@ public interface DocumentIndexRepository {
     List<SearchResult> semanticSearchByType(float[] queryVector, String docType, int limit);
 
     List<SearchResult> lexicalLookup(String query, int limit);
+
+    record SimilarPair(String path1, String path2, double similarity) {}
+
+    List<SimilarPair> findSimilarPairsByDocType(String model, String docType, double threshold);
+
+    List<DocumentRecord> findDocumentsByDocType(String docType);
 }

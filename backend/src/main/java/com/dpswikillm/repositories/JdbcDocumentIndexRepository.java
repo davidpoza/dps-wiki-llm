@@ -209,6 +209,55 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
                 limit);
     }
 
+    @Override
+    public List<SimilarPair> findSimilarPairsByDocType(
+            String model, String docType, double threshold) {
+        return jdbcTemplate.query(
+                """
+                SELECT d1.path AS path1, d2.path AS path2,
+                       1 - (e1.embedding <=> e2.embedding) AS similarity
+                FROM document_embeddings e1
+                JOIN documents d1 ON d1.id = e1.document_id
+                JOIN document_embeddings e2 ON e2.model = e1.model
+                JOIN documents d2 ON d2.id = e2.document_id
+                WHERE e1.model = ?
+                  AND d1.doc_type = ?
+                  AND d2.doc_type = ?
+                  AND d1.id < d2.id
+                  AND 1 - (e1.embedding <=> e2.embedding) >= ?
+                ORDER BY similarity DESC
+                """,
+                (rs, rowNum) ->
+                        new SimilarPair(
+                                rs.getString("path1"),
+                                rs.getString("path2"),
+                                rs.getDouble("similarity")),
+                model,
+                docType,
+                docType,
+                threshold);
+    }
+
+    @Override
+    public List<DocumentRecord> findDocumentsByDocType(String docType) {
+        return jdbcTemplate.query(
+                """
+                SELECT id, path, title, doc_type, updated_at, body
+                FROM documents
+                WHERE doc_type = ?
+                ORDER BY path
+                """,
+                (rs, rowNum) ->
+                        new DocumentRecord(
+                                rs.getObject("id", UUID.class),
+                                rs.getString("path"),
+                                rs.getString("title"),
+                                rs.getString("doc_type"),
+                                rs.getTimestamp("updated_at").toInstant(),
+                                rs.getString("body")),
+                docType);
+    }
+
     private String vectorLiteral(float[] vector) {
         StringBuilder out = new StringBuilder("[");
         for (int i = 0; i < vector.length; i += 1) {

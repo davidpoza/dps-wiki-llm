@@ -768,6 +768,16 @@ class IngestPipelineServicesTests {
         public List<SearchResult> lexicalLookup(String q, int limit) {
             return List.of();
         }
+
+        @Override
+        public List<SimilarPair> findSimilarPairsByDocType(String model, String docType, double threshold) {
+            return List.of();
+        }
+
+        @Override
+        public List<DocumentRecord> findDocumentsByDocType(String docType) {
+            return documents.stream().filter(d -> docType.equals(d.docType())).toList();
+        }
     }
 
     private record PipelineHarness(IngestPipelineService pipeline, JobLifecycleService lifecycle) {}

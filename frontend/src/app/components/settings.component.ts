@@ -2,11 +2,12 @@ import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } 
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { SelectButtonModule } from 'primeng/selectbutton';
-import { ApiService, BrokenLinkEntry, BrokenLinkScanEvent, Prompt } from '../services/api.service';
+import { ApiService, BrokenLinkEntry, BrokenLinkScanEvent, JobSummary, Prompt } from '../services/api.service';
 import { NavComponent } from './nav.component';
 import { ThemeService } from '../services/theme.service';
 import { APP_VERSION } from '../version';
 import { BrokenLinksModalComponent } from './broken-links-modal.component';
+import { ConceptDedupModalComponent } from './concept-dedup-modal.component';
 
 interface PromptState extends Prompt {
   saving: boolean;
@@ -17,7 +18,7 @@ interface PromptState extends Prompt {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [FormsModule, ButtonModule, SelectButtonModule, NavComponent, BrokenLinksModalComponent],
+  imports: [FormsModule, ButtonModule, SelectButtonModule, NavComponent, BrokenLinksModalComponent, ConceptDedupModalComponent],
   template: `
     <main class="app-shell">
       <app-nav />
@@ -203,6 +204,27 @@ interface PromptState extends Prompt {
             </div>
           }
         </section>
+
+        <section class="settings-section">
+          <h2>Mantenimiento</h2>
+          <p class="section-desc">
+            Busca conceptos duplicados en la wiki (por ejemplo, el mismo concepto en español e inglés) y fusiónalos
+            en un único fichero canónico (singular, kebab-case, inglés). Los cambios son reversibles desde el historial.
+          </p>
+          <div class="reindex-row">
+            <p-button
+              label="Buscar conceptos duplicados"
+              size="small"
+              [disabled]="dedupMergeRunning()"
+              [title]="dedupMergeRunning() ? 'Ya hay un job de fusión en curso' : ''"
+              (onClick)="showDedupModal.set(true)"
+            />
+          </div>
+        </section>
+
+        @if (showDedupModal()) {
+          <app-concept-dedup-modal (cancel)="showDedupModal.set(false)" />
+        }
 
         <section class="settings-section">
           <h2>Enlaces rotos</h2>
@@ -446,6 +468,9 @@ export class SettingsComponent implements OnInit {
   readonly resourceSaved = signal(false);
   readonly resourceError = signal<string | null>(null);
 
+  readonly showDedupModal = signal(false);
+  readonly dedupMergeRunning = signal(false);
+
   readonly brokenLinkScanning = signal(false);
   readonly blProcessed = signal(0);
   readonly blTotal = signal(0);
@@ -459,6 +484,16 @@ export class SettingsComponent implements OnInit {
     this.api.getActuatorInfo().subscribe({
       next: (info) => this.backendVersion.set(info.build?.version ?? 'N/D'),
       error: () => this.backendVersion.set('N/D'),
+    });
+
+    this.api.getActiveJobs().subscribe({
+      next: (jobs: JobSummary[]) => {
+        const mergeRunning = jobs.some(
+          (j) => j.type === 'MERGE' && (j.status === 'QUEUED' || j.status === 'STARTED'),
+        );
+        this.dedupMergeRunning.set(mergeRunning);
+      },
+      error: () => {},
     });
 
     this.api.getResourceSettings().subscribe({

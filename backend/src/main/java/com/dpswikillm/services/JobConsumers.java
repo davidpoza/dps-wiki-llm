@@ -15,6 +15,7 @@ public class JobConsumers {
     private final AnswerPipelineService answerPipelineService;
     private final JobRevertService jobRevertService;
     private final EnrichPipelineService enrichPipelineService;
+    private final ConceptMergeJobHandler conceptMergeJobHandler;
     private final JobRepository jobRepository;
 
     public JobConsumers(
@@ -23,12 +24,14 @@ public class JobConsumers {
             AnswerPipelineService answerPipelineService,
             JobRevertService jobRevertService,
             EnrichPipelineService enrichPipelineService,
+            ConceptMergeJobHandler conceptMergeJobHandler,
             JobRepository jobRepository) {
         this.lifecycleService = lifecycleService;
         this.ingestPipelineService = ingestPipelineService;
         this.answerPipelineService = answerPipelineService;
         this.jobRevertService = jobRevertService;
         this.enrichPipelineService = enrichPipelineService;
+        this.conceptMergeJobHandler = conceptMergeJobHandler;
         this.jobRepository = jobRepository;
     }
 
@@ -53,6 +56,11 @@ public class JobConsumers {
             }
             if (message.jobType() == JobType.ENRICH) {
                 enrichPipelineService.run(jobRepository.findById(message.jobId()).orElseThrow());
+                return;
+            }
+            if (message.jobType() == JobType.MERGE) {
+                conceptMergeJobHandler.run(
+                        jobRepository.findById(message.jobId()).orElseThrow());
                 return;
             }
             lifecycleService.transition(

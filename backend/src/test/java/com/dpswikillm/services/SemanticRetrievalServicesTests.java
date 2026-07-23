@@ -261,5 +261,15 @@ class SemanticRetrievalServicesTests {
             }
             return dot / (Math.sqrt(an) * Math.sqrt(bn));
         }
+
+        @Override
+        public List<SimilarPair> findSimilarPairsByDocType(String model, String docType, double threshold) {
+            return List.of();
+        }
+
+        @Override
+        public List<DocumentRecord> findDocumentsByDocType(String docType) {
+            return documents.stream().filter(d -> docType.equals(d.docType())).toList();
+        }
     }
 }

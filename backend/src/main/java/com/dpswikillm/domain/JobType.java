@@ -4,5 +4,6 @@ public enum JobType {
     INGEST,
     ANSWER,
     REVERT,
-    ENRICH
+    ENRICH,
+    MERGE
 }
