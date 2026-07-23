@@ -139,7 +139,7 @@ import { ChatMessage, ChatSession, ChatSessionDetail } from '../types';
       display: grid;
       grid-template-columns: 260px 1fr;
       grid-template-rows: 1fr;
-      height: calc(100vh - 57px);
+      height: 100%;
       overflow: hidden;
       position: relative;
     }

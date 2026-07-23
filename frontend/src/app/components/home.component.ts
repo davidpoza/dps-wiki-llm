@@ -18,8 +18,8 @@ type Tab = 'jobs' | 'ingest' | 'chat' | 'review' | 'git';
   template: `
     <main class="app-shell">
       <app-nav />
-      <section class="workspace">
-        <div class="tab-content">
+      <section class="workspace" [class.full-bleed]="activeTab() === 'chat'">
+        <div class="tab-content" [class.full-bleed]="activeTab() === 'chat'">
           @switch (activeTab()) {
             @case ('jobs') {
               <app-jobs-viewer />
