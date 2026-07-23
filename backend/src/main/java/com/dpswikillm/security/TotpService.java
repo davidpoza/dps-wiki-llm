@@ -16,8 +16,8 @@ import dev.samstevens.totp.util.Utils;
 import org.springframework.stereotype.Service;
 
 /**
- * RFC 6238 TOTP helper: generates secrets, otpauth provisioning URIs / QR images,
- * and verifies 6-digit codes with a ±1 time-step tolerance for clock drift.
+ * RFC 6238 TOTP helper: generates secrets, otpauth provisioning URIs / QR images, and verifies
+ * 6-digit codes with a ±1 time-step tolerance for clock drift.
  */
 @Service
 public class TotpService {
@@ -32,7 +32,8 @@ public class TotpService {
 
     public TotpService() {
         TimeProvider timeProvider = new SystemTimeProvider();
-        DefaultCodeVerifier verifier = new DefaultCodeVerifier(new DefaultCodeGenerator(), timeProvider);
+        DefaultCodeVerifier verifier =
+                new DefaultCodeVerifier(new DefaultCodeGenerator(), timeProvider);
         verifier.setAllowedTimePeriodDiscrepancy(1);
         this.codeVerifier = verifier;
     }

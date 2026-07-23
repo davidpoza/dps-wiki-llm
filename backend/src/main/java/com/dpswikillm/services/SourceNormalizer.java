@@ -45,8 +45,17 @@ public class SourceNormalizer {
         metadata.put("raw_size", content.length());
         frontmatter.forEach(metadata::putIfAbsent);
 
-        return new NormalizedSourcePayload(sourceId, kind, Instant.now(), normalized, title, content,
-                canonicalUrl, checksum, metadata, null);
+        return new NormalizedSourcePayload(
+                sourceId,
+                kind,
+                Instant.now(),
+                normalized,
+                title,
+                content,
+                canonicalUrl,
+                checksum,
+                metadata,
+                null);
     }
 
     private SourceKind inferKind(String path) {
@@ -84,9 +93,9 @@ public class SourceNormalizer {
     }
 
     /**
-     * Parse a leading YAML frontmatter block ({@code ---} … {@code ---}) into a
-     * flat key/value map. Only the simple {@code key: value} form is supported,
-     * with optional double-quoted values (as written by {@link RawIntakeService}).
+     * Parse a leading YAML frontmatter block ({@code ---} … {@code ---}) into a flat key/value map.
+     * Only the simple {@code key: value} form is supported, with optional double-quoted values (as
+     * written by {@link RawIntakeService}).
      */
     static Map<String, String> parseFrontmatter(String content) {
         Map<String, String> fields = new LinkedHashMap<>();

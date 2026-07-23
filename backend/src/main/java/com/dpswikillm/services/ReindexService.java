@@ -21,7 +21,10 @@ public class ReindexService {
     private final MarkdownService markdownService;
     private final DocumentIndexRepository repository;
 
-    public ReindexService(VaultPathResolver pathResolver, MarkdownService markdownService, DocumentIndexRepository repository) {
+    public ReindexService(
+            VaultPathResolver pathResolver,
+            MarkdownService markdownService,
+            DocumentIndexRepository repository) {
         this.pathResolver = pathResolver;
         this.markdownService = markdownService;
         this.repository = repository;
@@ -31,7 +34,8 @@ public class ReindexService {
         return reindexWiki(progress -> {});
     }
 
-    public List<DocumentRecord> reindexWiki(Consumer<ReindexProgress> onProgress) throws IOException {
+    public List<DocumentRecord> reindexWiki(Consumer<ReindexProgress> onProgress)
+            throws IOException {
         Path wikiRoot = pathResolver.resolve("wiki");
         if (!Files.exists(wikiRoot)) {
             repository.replaceDocuments(List.of());
@@ -40,10 +44,10 @@ public class ReindexService {
         }
         List<Path> filePaths;
         try (Stream<Path> paths = Files.walk(wikiRoot)) {
-            filePaths = paths
-                    .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".md"))
-                    .toList();
+            filePaths =
+                    paths.filter(Files::isRegularFile)
+                            .filter(path -> path.getFileName().toString().endsWith(".md"))
+                            .toList();
         }
         int total = filePaths.size();
         List<DocumentRecord> documents = new ArrayList<>(total);
@@ -57,20 +61,33 @@ public class ReindexService {
 
     private DocumentRecord readDocument(Path path) {
         try {
-            String relativePath = pathResolver.vaultRoot().relativize(path.toAbsolutePath().normalize()).toString().replace('\\', '/');
+            String relativePath =
+                    pathResolver
+                            .vaultRoot()
+                            .relativize(path.toAbsolutePath().normalize())
+                            .toString()
+                            .replace('\\', '/');
             if (!relativePath.startsWith("wiki/")) {
-                throw new IllegalArgumentException("Reindex only accepts wiki paths: " + relativePath);
+                throw new IllegalArgumentException(
+                        "Reindex only accepts wiki paths: " + relativePath);
             }
             String body = Files.readString(path, StandardCharsets.UTF_8);
             MarkdownDocument markdown = markdownService.parse(body);
             Object frontmatterType = markdown.frontmatter().get("type");
-            String docType = frontmatterType == null || frontmatterType.toString().isBlank()
-                    ? inferDocType(relativePath)
-                    : frontmatterType.toString();
-            String title = markdown.title().isBlank() ? titleFromPath(relativePath) : markdown.title();
+            String docType =
+                    frontmatterType == null || frontmatterType.toString().isBlank()
+                            ? inferDocType(relativePath)
+                            : frontmatterType.toString();
+            String title =
+                    markdown.title().isBlank() ? titleFromPath(relativePath) : markdown.title();
             Instant updated = Files.getLastModifiedTime(path).toInstant();
-            return new DocumentRecord(UUID.nameUUIDFromBytes(relativePath.getBytes(StandardCharsets.UTF_8)),
-                    relativePath, title, docType, updated, body);
+            return new DocumentRecord(
+                    UUID.nameUUIDFromBytes(relativePath.getBytes(StandardCharsets.UTF_8)),
+                    relativePath,
+                    title,
+                    docType,
+                    updated,
+                    body);
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to read markdown document: " + path, ex);
         }

@@ -10,5 +10,4 @@ public record TreeNodeDto(
         String data,
         String icon,
         boolean leaf,
-        List<TreeNodeDto> children
-) {}
+        List<TreeNodeDto> children) {}

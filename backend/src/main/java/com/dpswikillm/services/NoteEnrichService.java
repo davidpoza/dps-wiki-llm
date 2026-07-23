@@ -23,8 +23,11 @@ public class NoteEnrichService {
     private final PromptService promptService;
     private final RetryingLlmExecutor retrying;
 
-    public NoteEnrichService(LlmClient llmClient, JsonExtractionService jsonExtractionService,
-                             PromptService promptService, RetryingLlmExecutor retrying) {
+    public NoteEnrichService(
+            LlmClient llmClient,
+            JsonExtractionService jsonExtractionService,
+            PromptService promptService,
+            RetryingLlmExecutor retrying) {
         this.llmClient = llmClient;
         this.jsonExtractionService = jsonExtractionService;
         this.promptService = promptService;
@@ -32,18 +35,30 @@ public class NoteEnrichService {
     }
 
     public Result enrich(String content) {
-        JsonNode node = retrying.executeParsing(() -> {
-            log.debug("Sending note content to LLM for enrichment ({} chars)", content.length());
-            String response = llmClient.chatJson(List.of(
-                    new ChatMessage("system", promptService.getText("source-note-system")),
-                    new ChatMessage("user", "Source payload:\n" + content)));
-            log.debug("LLM enrich response ({} chars)", response.length());
-            return jsonExtractionService.extractObject(response,
-                    json -> nonEmpty(json, "summary") && nonEmptyArray(json, "keywords"));
-        });
-        return new Result(
-                node.get("summary").asText(),
-                normalizedKeywords(node.get("keywords")));
+        JsonNode node =
+                retrying.executeParsing(
+                        () -> {
+                            log.debug(
+                                    "Sending note content to LLM for enrichment ({} chars)",
+                                    content.length());
+                            String response =
+                                    llmClient.chatJson(
+                                            List.of(
+                                                    new ChatMessage(
+                                                            "system",
+                                                            promptService.getText(
+                                                                    "source-note-system")),
+                                                    new ChatMessage(
+                                                            "user",
+                                                            "Source payload:\n" + content)));
+                            log.debug("LLM enrich response ({} chars)", response.length());
+                            return jsonExtractionService.extractObject(
+                                    response,
+                                    json ->
+                                            nonEmpty(json, "summary")
+                                                    && nonEmptyArray(json, "keywords"));
+                        });
+        return new Result(node.get("summary").asText(), normalizedKeywords(node.get("keywords")));
     }
 
     private List<String> normalizedKeywords(JsonNode node) {
@@ -63,7 +78,8 @@ public class NoteEnrichService {
     }
 
     private String normalizeKeyword(String raw) {
-        return raw.trim().toLowerCase(Locale.ROOT)
+        return raw.trim()
+                .toLowerCase(Locale.ROOT)
                 .replaceAll("\\s+", "-")
                 .replaceAll("-{2,}", "-")
                 .replaceAll("^-+|-+$", "");

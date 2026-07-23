@@ -1,8 +1,8 @@
 package com.dpswikillm.domain;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.Map;
-import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record MutationAction(
         MutationActionType action,
@@ -10,5 +10,4 @@ public record MutationAction(
         String title,
         Map<String, Object> frontmatter,
         Map<String, List<String>> sections,
-        @JsonProperty("idempotency_key") String idempotencyKey
-) {}
+        @JsonProperty("idempotency_key") String idempotencyKey) {}

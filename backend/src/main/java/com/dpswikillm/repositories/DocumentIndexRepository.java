@@ -13,7 +13,12 @@ public interface DocumentIndexRepository {
 
     Map<UUID, String> findEmbeddingHashes(String model);
 
-    void upsertEmbedding(UUID documentId, String model, int dimension, float[] embedding, String normalizedTextHash);
+    void upsertEmbedding(
+            UUID documentId,
+            String model,
+            int dimension,
+            float[] embedding,
+            String normalizedTextHash);
 
     void pruneEmbeddingsNotIn(String model, List<UUID> documentIds);
 

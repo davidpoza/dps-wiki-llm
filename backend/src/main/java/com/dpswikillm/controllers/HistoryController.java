@@ -13,8 +13,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Per-file change history. Replaces the previous commit-grouped snapshot view:
- * history is now a flat, reverse-chronological stream of individual file changes.
+ * Per-file change history. Replaces the previous commit-grouped snapshot view: history is now a
+ * flat, reverse-chronological stream of individual file changes.
  */
 @RestController
 @RequestMapping("/history")

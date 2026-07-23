@@ -34,8 +34,10 @@ public class FileController {
     private final SnapshotService snapshotService;
     private final ResourceSettingsService resourceSettingsService;
 
-    public FileController(FileService fileService, SnapshotService snapshotService,
-                          ResourceSettingsService resourceSettingsService) {
+    public FileController(
+            FileService fileService,
+            SnapshotService snapshotService,
+            ResourceSettingsService resourceSettingsService) {
         this.fileService = fileService;
         this.snapshotService = snapshotService;
         this.resourceSettingsService = resourceSettingsService;
@@ -53,7 +55,8 @@ public class FileController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         } catch (UncheckedIOException e) {
-            if (e.getCause().getMessage() != null && e.getCause().getMessage().contains("No such file")) {
+            if (e.getCause().getMessage() != null
+                    && e.getCause().getMessage().contains("No such file")) {
                 return ResponseEntity.notFound().build();
             }
             return ResponseEntity.internalServerError().body(e.getCause().getMessage());
@@ -82,7 +85,8 @@ public class FileController {
     }
 
     @PutMapping(value = "/content", consumes = MediaType.TEXT_PLAIN_VALUE)
-    public ResponseEntity<?> saveContent(@RequestParam("path") String path, @RequestBody String content) {
+    public ResponseEntity<?> saveContent(
+            @RequestParam("path") String path, @RequestBody String content) {
         try {
             fileService.saveContent(path, content);
             return ResponseEntity.ok().build();
@@ -116,8 +120,7 @@ public class FileController {
 
     @PostMapping("/rename")
     public ResponseEntity<?> renameContent(
-            @RequestParam("path") String path,
-            @RequestParam("newName") String newName) {
+            @RequestParam("path") String path, @RequestParam("newName") String newName) {
         try {
             fileService.renameFile(path, newName);
             return ResponseEntity.ok().build();
@@ -151,8 +154,7 @@ public class FileController {
 
     @PostMapping("/move")
     public ResponseEntity<?> moveContent(
-            @RequestParam("path") String path,
-            @RequestParam("targetDir") String targetDir) {
+            @RequestParam("path") String path, @RequestParam("targetDir") String targetDir) {
         try {
             fileService.moveFile(path, targetDir);
             return ResponseEntity.ok().build();
@@ -181,8 +183,7 @@ public class FileController {
 
     @GetMapping(value = "/version", produces = MediaType.TEXT_PLAIN_VALUE)
     public ResponseEntity<String> getVersion(
-            @RequestParam("path") String path,
-            @RequestParam("versionId") UUID versionId) {
+            @RequestParam("path") String path, @RequestParam("versionId") UUID versionId) {
         try {
             return ResponseEntity.ok(snapshotService.getVersionContent(path, versionId));
         } catch (NoSuchElementException e) {
@@ -196,9 +197,7 @@ public class FileController {
     public ResponseEntity<byte[]> exportPdf(@RequestParam("path") String path) {
         try {
             byte[] pdf = fileService.exportPdf(path);
-            String filename = path.contains("/")
-                    ? path.substring(path.lastIndexOf('/') + 1)
-                    : path;
+            String filename = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
             if (filename.endsWith(".md")) filename = filename.substring(0, filename.length() - 3);
             HttpHeaders headers = new HttpHeaders();
             headers.setContentDisposition(

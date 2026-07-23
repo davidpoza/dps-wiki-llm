@@ -19,8 +19,7 @@ import org.mockito.Mockito;
 
 class ResourceSettingsServiceTests {
 
-    @TempDir
-    Path vault;
+    @TempDir Path vault;
 
     @Test
     void updateSettingsStoresNormalizedRelativeFolder() {
@@ -73,12 +72,25 @@ class ResourceSettingsServiceTests {
     }
 
     private ResourceSettingsService service(AppSettingRepository repository) {
-        VaultPathResolver resolver = new VaultPathResolver(new AppProperties(
-                vault.toString(),
-                List.of("http://localhost:4200"),
-                new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1), 8),
-                new AppProperties.Llm("http://localhost:11434/v1", "gpt-oss", "test"),
-                new AppProperties.Telegram("", ""), null, null, null, null));
+        VaultPathResolver resolver =
+                new VaultPathResolver(
+                        new AppProperties(
+                                vault.toString(),
+                                List.of("http://localhost:4200"),
+                                new AppProperties.Embeddings(
+                                        "http://embeddings:8080",
+                                        "multilingual-e5-small",
+                                        "",
+                                        384,
+                                        Duration.ofSeconds(1),
+                                        8),
+                                new AppProperties.Llm(
+                                        "http://localhost:11434/v1", "gpt-oss", "test"),
+                                new AppProperties.Telegram("", ""),
+                                null,
+                                null,
+                                null,
+                                null));
         return new ResourceSettingsService(repository, resolver);
     }
 }

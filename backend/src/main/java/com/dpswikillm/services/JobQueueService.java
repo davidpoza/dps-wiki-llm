@@ -21,7 +21,10 @@ public class JobQueueService {
     private final RabbitTemplate rabbitTemplate;
     private final JobEventService eventService;
 
-    public JobQueueService(JobRepository jobRepository, RabbitTemplate rabbitTemplate, JobEventService eventService) {
+    public JobQueueService(
+            JobRepository jobRepository,
+            RabbitTemplate rabbitTemplate,
+            JobEventService eventService) {
         this.jobRepository = jobRepository;
         this.rabbitTemplate = rabbitTemplate;
         this.eventService = eventService;
@@ -37,17 +40,28 @@ public class JobQueueService {
         job.setQueuePosition(position);
         job.transitionTo(JobStatus.QUEUED);
         Job saved = jobRepository.save(job);
-        String routingKey = type == JobType.ANSWER ? RabbitConfig.ANSWER_QUEUE : RabbitConfig.WRITE_QUEUE;
+        String routingKey =
+                type == JobType.ANSWER ? RabbitConfig.ANSWER_QUEUE : RabbitConfig.WRITE_QUEUE;
         JobMessage message = new JobMessage(saved.getId(), saved.getType());
-        JobEvent event = new JobEvent(JobStatus.QUEUED, saved.getId(), saved.getType(), position,
-                "queued", null, null, null, null);
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE, routingKey, message);
-                eventService.broadcast(event);
-            }
-        });
+        JobEvent event =
+                new JobEvent(
+                        JobStatus.QUEUED,
+                        saved.getId(),
+                        saved.getType(),
+                        position,
+                        "queued",
+                        null,
+                        null,
+                        null,
+                        null);
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE, routingKey, message);
+                        eventService.broadcast(event);
+                    }
+                });
         return new EnqueueJobResponse(saved.getId(), position);
     }
 }

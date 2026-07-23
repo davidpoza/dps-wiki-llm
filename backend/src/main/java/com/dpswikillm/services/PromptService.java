@@ -35,8 +35,11 @@ public class PromptService {
 
     @Transactional
     public LlmPromptDto updateText(String key, String newText) {
-        LlmPrompt prompt = repository.findByKey(key)
-                .orElseThrow(() -> new IllegalArgumentException("Unknown prompt key: " + key));
+        LlmPrompt prompt =
+                repository
+                        .findByKey(key)
+                        .orElseThrow(
+                                () -> new IllegalArgumentException("Unknown prompt key: " + key));
         prompt.setText(newText);
         LlmPrompt saved = repository.save(prompt);
         cache.put(key, newText);
@@ -48,7 +51,8 @@ public class PromptService {
     }
 
     public LlmPromptDto findByKey(String key) {
-        return repository.findByKey(key)
+        return repository
+                .findByKey(key)
                 .map(this::toDto)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown prompt key: " + key));
     }

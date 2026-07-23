@@ -10,9 +10,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "operations")
 public class Operation {
-    @Id
-    @GeneratedValue
-    private UUID id;
+    @Id @GeneratedValue private UUID id;
 
     private UUID jobId;
     private String type;

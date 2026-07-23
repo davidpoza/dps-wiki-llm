@@ -29,65 +29,111 @@ public class ConnectionDiscoveryService {
     private final JobConnectionCandidateRepository candidateRepository;
     private final JobLifecycleService lifecycleService;
 
-    public ConnectionDiscoveryService(SemanticSearchService semanticSearchService,
-                                      JobConnectionCandidateRepository candidateRepository,
-                                      JobLifecycleService lifecycleService) {
+    public ConnectionDiscoveryService(
+            SemanticSearchService semanticSearchService,
+            JobConnectionCandidateRepository candidateRepository,
+            JobLifecycleService lifecycleService) {
         this.semanticSearchService = semanticSearchService;
         this.candidateRepository = candidateRepository;
         this.lifecycleService = lifecycleService;
     }
 
-    public List<JobConnectionCandidate> discoverAndPersist(Job job, NormalizedSourcePayload payload,
-                                                           String sourceNotePath, MutationPlan llmPlan) {
+    public List<JobConnectionCandidate> discoverAndPersist(
+            Job job, NormalizedSourcePayload payload, String sourceNotePath, MutationPlan llmPlan) {
         Map<String, JobConnectionCandidate> candidates = new LinkedHashMap<>();
 
-        List<MutationAction> llmActions = llmPlan.pageActions() == null ? List.of()
-                : llmPlan.pageActions().stream()
-                        .filter(a -> a.action() == MutationActionType.update && a.path() != null)
-                        .toList();
+        List<MutationAction> llmActions =
+                llmPlan.pageActions() == null
+                        ? List.of()
+                        : llmPlan.pageActions().stream()
+                                .filter(
+                                        a ->
+                                                a.action() == MutationActionType.update
+                                                        && a.path() != null)
+                                .toList();
 
         String query = buildQuery(payload);
-        List<SearchResult> semanticResults = semanticSearchService.search(query, DEFAULT_NEIGHBOR_LIMIT).stream()
-                .filter(r -> r.score() >= DEFAULT_THRESHOLD && !r.path().equals(sourceNotePath))
-                .toList();
+        List<SearchResult> semanticResults =
+                semanticSearchService.search(query, DEFAULT_NEIGHBOR_LIMIT).stream()
+                        .filter(
+                                r ->
+                                        r.score() >= DEFAULT_THRESHOLD
+                                                && !r.path().equals(sourceNotePath))
+                        .toList();
         // Dedicated topic search so curated wiki/topics/ hubs surface on their own, without
         // competing against far more similar source notes in the general top-N.
-        List<SearchResult> topicResults = semanticSearchService.searchByType(query, TOPIC_DOC_TYPE, TOPIC_CONNECTION_LIMIT)
-                .stream()
-                .filter(r -> r.score() >= TOPIC_CONNECTION_THRESHOLD && !r.path().equals(sourceNotePath))
-                .toList();
+        List<SearchResult> topicResults =
+                semanticSearchService
+                        .searchByType(query, TOPIC_DOC_TYPE, TOPIC_CONNECTION_LIMIT)
+                        .stream()
+                        .filter(
+                                r ->
+                                        r.score() >= TOPIC_CONNECTION_THRESHOLD
+                                                && !r.path().equals(sourceNotePath))
+                        .toList();
 
         int total = llmActions.size() + semanticResults.size() + topicResults.size();
         int idx = 0;
 
         for (MutationAction action : llmActions) {
             idx++;
-            lifecycleService.progress(job, "connection-discovery-scan", action.path(),
+            lifecycleService.progress(
+                    job,
+                    "connection-discovery-scan",
+                    action.path(),
                     "{\"current\":" + idx + ",\"total\":" + total + "}");
-            candidates.putIfAbsent("llm:" + action.path(), candidate(job, action.path(), sourceNotePath,
-                    "Related", ConnectionCandidateSource.llm, 1.0));
+            candidates.putIfAbsent(
+                    "llm:" + action.path(),
+                    candidate(
+                            job,
+                            action.path(),
+                            sourceNotePath,
+                            "Related",
+                            ConnectionCandidateSource.llm,
+                            1.0));
         }
 
         for (SearchResult result : semanticResults) {
             idx++;
-            lifecycleService.progress(job, "connection-discovery-scan", result.path(),
+            lifecycleService.progress(
+                    job,
+                    "connection-discovery-scan",
+                    result.path(),
                     "{\"current\":" + idx + ",\"total\":" + total + "}");
-            candidates.putIfAbsent("semantic:" + result.path(), candidate(job, result.path(), sourceNotePath,
-                    "Related", ConnectionCandidateSource.semantic, result.score()));
+            candidates.putIfAbsent(
+                    "semantic:" + result.path(),
+                    candidate(
+                            job,
+                            result.path(),
+                            sourceNotePath,
+                            "Related",
+                            ConnectionCandidateSource.semantic,
+                            result.score()));
         }
 
-        Set<String> existingTargets = candidates.values().stream()
-                .map(JobConnectionCandidate::getTargetPath)
-                .collect(Collectors.toSet());
+        Set<String> existingTargets =
+                candidates.values().stream()
+                        .map(JobConnectionCandidate::getTargetPath)
+                        .collect(Collectors.toSet());
         for (SearchResult result : topicResults) {
             idx++;
-            lifecycleService.progress(job, "connection-discovery-scan", result.path(),
+            lifecycleService.progress(
+                    job,
+                    "connection-discovery-scan",
+                    result.path(),
                     "{\"current\":" + idx + ",\"total\":" + total + "}");
             if (existingTargets.contains(result.path())) {
                 continue;
             }
-            candidates.putIfAbsent("topic:" + result.path(), candidate(job, result.path(), sourceNotePath,
-                    "Related", ConnectionCandidateSource.topic, result.score()));
+            candidates.putIfAbsent(
+                    "topic:" + result.path(),
+                    candidate(
+                            job,
+                            result.path(),
+                            sourceNotePath,
+                            "Related",
+                            ConnectionCandidateSource.topic,
+                            result.score()));
         }
 
         return candidateRepository.saveAll(candidates.values());
@@ -101,8 +147,13 @@ public class ConnectionDiscoveryService {
         return payload.title();
     }
 
-    private JobConnectionCandidate candidate(Job job, String targetPath, String sourceNotePath, String section,
-                                             ConnectionCandidateSource source, double score) {
+    private JobConnectionCandidate candidate(
+            Job job,
+            String targetPath,
+            String sourceNotePath,
+            String section,
+            ConnectionCandidateSource source,
+            double score) {
         JobConnectionCandidate candidate = new JobConnectionCandidate();
         candidate.setJobId(job.getId());
         candidate.setTargetPath(targetPath);

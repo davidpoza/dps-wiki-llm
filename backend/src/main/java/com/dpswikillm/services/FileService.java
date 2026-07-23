@@ -5,46 +5,45 @@ import com.dpswikillm.dto.TreeNodeDto;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 @Service
 public class FileService {
 
     private static final Logger log = LoggerFactory.getLogger(FileService.class);
-    private static final Pattern OBSIDIAN_IMAGE_EMBED = Pattern.compile("!\\[\\[([^\\]\\n]+)\\]\\]");
-    private static final Pattern IMAGE_EXTENSION = Pattern.compile("(?i)\\.(png|jpe?g|gif|webp|svg)$");
+    private static final Pattern OBSIDIAN_IMAGE_EMBED =
+            Pattern.compile("!\\[\\[([^\\]\\n]+)\\]\\]");
+    private static final Pattern IMAGE_EXTENSION =
+            Pattern.compile("(?i)\\.(png|jpe?g|gif|webp|svg)$");
     private static final Pattern FRONTMATTER_BLOCK =
-            Pattern.compile("\\A---[ \\t]*\\r?\\n(.*?)\\r?\\n---[ \\t]*(?:\\r?\\n|\\z)", Pattern.DOTALL);
+            Pattern.compile(
+                    "\\A---[ \\t]*\\r?\\n(.*?)\\r?\\n---[ \\t]*(?:\\r?\\n|\\z)", Pattern.DOTALL);
     private static final Pattern FRONTMATTER_TITLE =
             Pattern.compile("^title:[ \\t]*(.*?)[ \\t]*\\r?$", Pattern.MULTILINE);
     private static final Pattern TOP_LEVEL_TITLE_LINE = Pattern.compile("title:[ \\t]*.*");
     private static final Pattern BODY_HEADING =
             Pattern.compile("^#{1,6}[ \\t]+(.+?)[ \\t]*$", Pattern.MULTILINE);
-    private static final Pattern H1_HEADING =
-            Pattern.compile("^#[ \\t]+.+", Pattern.MULTILINE);
+    private static final Pattern H1_HEADING = Pattern.compile("^#[ \\t]+.+", Pattern.MULTILINE);
 
     private final VaultPathResolver pathResolver;
     private final SnapshotService snapshotService;
     private final WebDavSyncService webDavSyncService;
     private final ResourceSettingsService resourceSettingsService;
 
-    public FileService(VaultPathResolver pathResolver,
-                       SnapshotService snapshotService,
-                       WebDavSyncService webDavSyncService,
-                       ResourceSettingsService resourceSettingsService) {
+    public FileService(
+            VaultPathResolver pathResolver,
+            SnapshotService snapshotService,
+            WebDavSyncService webDavSyncService,
+            ResourceSettingsService resourceSettingsService) {
         this.pathResolver = pathResolver;
         this.snapshotService = snapshotService;
         this.webDavSyncService = webDavSyncService;
@@ -65,16 +64,29 @@ public class FileService {
 
     private List<TreeNodeDto> buildChildren(Path dir, Path root) throws IOException {
         List<TreeNodeDto> nodes = new ArrayList<>();
-        try (var stream = Files.list(dir).sorted(Comparator.comparing(p -> p.getFileName().toString().toLowerCase()))) {
+        try (var stream =
+                Files.list(dir)
+                        .sorted(
+                                Comparator.comparing(
+                                        p -> p.getFileName().toString().toLowerCase()))) {
             for (Path entry : (Iterable<Path>) stream::iterator) {
                 String name = entry.getFileName().toString();
                 if (name.startsWith(".")) continue;
                 String relativePath = root.relativize(entry).toString().replace('\\', '/');
                 if (Files.isDirectory(entry)) {
                     List<TreeNodeDto> children = buildChildren(entry, root);
-                    nodes.add(new TreeNodeDto(relativePath, name, relativePath, "pi pi-folder", false, children));
+                    nodes.add(
+                            new TreeNodeDto(
+                                    relativePath,
+                                    name,
+                                    relativePath,
+                                    "pi pi-folder",
+                                    false,
+                                    children));
                 } else if (name.endsWith(".md")) {
-                    nodes.add(new TreeNodeDto(relativePath, name, relativePath, "pi pi-file", true, null));
+                    nodes.add(
+                            new TreeNodeDto(
+                                    relativePath, name, relativePath, "pi pi-file", true, null));
                 }
             }
         }
@@ -104,7 +116,8 @@ public class FileService {
 
     public void saveContent(String relativePath, String content) {
         Path resolved = resolveAndValidate(relativePath);
-        Snapshot snapshot = snapshotService.beginSnapshot(null, "manual-save", relativePath, "LOCAL_EDIT");
+        Snapshot snapshot =
+                snapshotService.beginSnapshot(null, "manual-save", relativePath, "LOCAL_EDIT");
         try {
             snapshotService.captureFile(snapshot, relativePath);
             Files.writeString(resolved, content, StandardCharsets.UTF_8);
@@ -187,7 +200,8 @@ public class FileService {
             throw new FileAlreadyExistsException(filename);
         }
         String oldRel = pathResolver.normalizeRelativePath(relativePath);
-        String newRelPath = pathResolver.vaultRoot().relativize(target).toString().replace('\\', '/');
+        String newRelPath =
+                pathResolver.vaultRoot().relativize(target).toString().replace('\\', '/');
         String content;
         try {
             Files.move(source, target);
@@ -236,21 +250,29 @@ public class FileService {
             renderedInput = Files.createTempFile("wiki-pdf-input-", ".md");
             stylesheet = Files.createTempFile("wiki-pdf-style-", ".css");
             output = Files.createTempFile("wiki-pdf-", ".pdf");
-            Files.writeString(renderedInput, renderPdfMarkdown(stripDuplicateFrontmatterTitle(markdown)), StandardCharsets.UTF_8);
+            Files.writeString(
+                    renderedInput,
+                    renderPdfMarkdown(stripDuplicateFrontmatterTitle(markdown)),
+                    StandardCharsets.UTF_8);
             Files.writeString(stylesheet, pdfStylesheet(), StandardCharsets.UTF_8);
-            ProcessBuilder pb = new ProcessBuilder(
-                    "pandoc", renderedInput.toString(),
-                    "--pdf-engine=weasyprint",
-                    "--standalone",
-                    "--highlight-style", "kate",
-                    "--css", stylesheet.toString(),
-                    "-o", output.toString()
-            );
+            ProcessBuilder pb =
+                    new ProcessBuilder(
+                            "pandoc",
+                            renderedInput.toString(),
+                            "--pdf-engine=weasyprint",
+                            "--standalone",
+                            "--highlight-style",
+                            "kate",
+                            "--css",
+                            stylesheet.toString(),
+                            "-o",
+                            output.toString());
             pb.environment().put("TMPDIR", "/tmp");
             pb.directory(new java.io.File("/tmp"));
             pb.redirectErrorStream(true);
             Process process = pb.start();
-            String stderr = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            String stderr =
+                    new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             int exit = process.waitFor();
             if (exit != 0) {
                 log.error("pandoc failed (exit {}): {}", exit, stderr);
@@ -264,13 +286,22 @@ public class FileService {
             throw new IllegalStateException("PDF export interrupted", e);
         } finally {
             if (renderedInput != null) {
-                try { Files.deleteIfExists(renderedInput); } catch (IOException ignored) {}
+                try {
+                    Files.deleteIfExists(renderedInput);
+                } catch (IOException ignored) {
+                }
             }
             if (stylesheet != null) {
-                try { Files.deleteIfExists(stylesheet); } catch (IOException ignored) {}
+                try {
+                    Files.deleteIfExists(stylesheet);
+                } catch (IOException ignored) {
+                }
             }
             if (output != null) {
-                try { Files.deleteIfExists(output); } catch (IOException ignored) {}
+                try {
+                    Files.deleteIfExists(output);
+                } catch (IOException ignored) {
+                }
             }
         }
     }
@@ -292,10 +323,16 @@ public class FileService {
                     matcher.appendReplacement(rendered, Matcher.quoteReplacement(matcher.group(0)));
                     continue;
                 }
-                String alt = target.contains("/")
-                        ? target.substring(target.lastIndexOf('/') + 1)
-                        : target;
-                String replacement = "![" + alt.replace("]", "\\]") + "](<" + imagePath.toUri() + ">){.obsidian-resource-image}";
+                String alt =
+                        target.contains("/")
+                                ? target.substring(target.lastIndexOf('/') + 1)
+                                : target;
+                String replacement =
+                        "!["
+                                + alt.replace("]", "\\]")
+                                + "](<"
+                                + imagePath.toUri()
+                                + ">){.obsidian-resource-image}";
                 matcher.appendReplacement(rendered, Matcher.quoteReplacement(replacement));
             } catch (IllegalArgumentException | UncheckedIOException ex) {
                 matcher.appendReplacement(rendered, Matcher.quoteReplacement(matcher.group(0)));
@@ -308,9 +345,9 @@ public class FileService {
     /**
      * Pandoc's {@code --standalone} mode renders the top-level frontmatter {@code title} as its own
      * title block. Intake notes also inject a {@code # {title}} heading into the body, so the title
-     * would appear twice in the exported PDF. When the body already contains the title as a heading,
-     * remove the frontmatter {@code title} line so pandoc emits it only once; otherwise leave the
-     * markdown untouched so a frontmatter-only title still renders.
+     * would appear twice in the exported PDF. When the body already contains the title as a
+     * heading, remove the frontmatter {@code title} line so pandoc emits it only once; otherwise
+     * leave the markdown untouched so a frontmatter-only title still renders.
      */
     String stripDuplicateFrontmatterTitle(String markdown) {
         if (markdown == null) {
@@ -365,11 +402,7 @@ public class FileService {
     }
 
     private String cleanObsidianTarget(String rawTarget) {
-        return rawTarget
-                .split("\\|", 2)[0]
-                .split("#", 2)[0]
-                .trim()
-                .replace('\\', '/');
+        return rawTarget.split("\\|", 2)[0].split("#", 2)[0].trim().replace('\\', '/');
     }
 
     private String pdfStylesheet() {
@@ -508,14 +541,20 @@ public class FileService {
     }
 
     public static final class NoSuchFileException extends RuntimeException {
-        public NoSuchFileException(String path) { super(path); }
+        public NoSuchFileException(String path) {
+            super(path);
+        }
     }
 
     public static final class FileAlreadyExistsException extends RuntimeException {
-        public FileAlreadyExistsException(String path) { super(path); }
+        public FileAlreadyExistsException(String path) {
+            super(path);
+        }
     }
 
     public static final class PdfExportException extends RuntimeException {
-        public PdfExportException(String msg) { super(msg); }
+        public PdfExportException(String msg) {
+            super(msg);
+        }
     }
 }

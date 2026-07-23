@@ -24,9 +24,12 @@ public class AnswerPipelineService {
     private final JobLifecycleService lifecycleService;
     private final PromptService promptService;
 
-    public AnswerPipelineService(SemanticSearchService semanticSearch, LlmClient llmClient,
-                                 VaultPathResolver pathResolver, JobLifecycleService lifecycleService,
-                                 PromptService promptService) {
+    public AnswerPipelineService(
+            SemanticSearchService semanticSearch,
+            LlmClient llmClient,
+            VaultPathResolver pathResolver,
+            JobLifecycleService lifecycleService,
+            PromptService promptService) {
         this.semanticSearch = semanticSearch;
         this.llmClient = llmClient;
         this.pathResolver = pathResolver;
@@ -38,23 +41,39 @@ public class AnswerPipelineService {
         String question = job.getPayloadRef();
         String artifactPath = null;
         try {
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "retrieval", "Running semantic retrieval");
+            lifecycleService.transition(
+                    job.getId(), JobStatus.PROGRESS, "retrieval", "Running semantic retrieval");
             List<SearchResult> hits = semanticSearch.search(question, TOP_K);
             List<String> evidencePaths = hits.stream().map(SearchResult::path).toList();
 
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "context-build", "Building context packet");
+            lifecycleService.transition(
+                    job.getId(), JobStatus.PROGRESS, "context-build", "Building context packet");
             String contextPacket = buildContext(hits);
 
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "synthesis", "Synthesizing answer with LLM");
-            String answer = llmClient.chat(List.of(
-                    new ChatMessage("system", promptService.getText("answer-system")),
-                    new ChatMessage("user", "Question: " + question + "\n\nContext:\n" + contextPacket)));
+            lifecycleService.transition(
+                    job.getId(), JobStatus.PROGRESS, "synthesis", "Synthesizing answer with LLM");
+            String answer =
+                    llmClient.chat(
+                            List.of(
+                                    new ChatMessage(
+                                            "system", promptService.getText("answer-system")),
+                                    new ChatMessage(
+                                            "user",
+                                            "Question: "
+                                                    + question
+                                                    + "\n\nContext:\n"
+                                                    + contextPacket)));
 
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "record", "Writing answer artifact");
+            lifecycleService.transition(
+                    job.getId(), JobStatus.PROGRESS, "record", "Writing answer artifact");
             artifactPath = writeArtifact(job, question, answer, evidencePaths);
 
-            AnswerRecord record = new AnswerRecord(question, answer, evidencePaths, artifactPath, true);
-            lifecycleService.transition(job.getId(), JobStatus.COMPLETED, "completed",
+            AnswerRecord record =
+                    new AnswerRecord(question, answer, evidencePaths, artifactPath, true);
+            lifecycleService.transition(
+                    job.getId(),
+                    JobStatus.COMPLETED,
+                    "completed",
                     "Answer written to " + artifactPath);
             return record;
         } catch (Exception ex) {
@@ -69,7 +88,8 @@ public class AnswerPipelineService {
         }
         try {
             Files.deleteIfExists(pathResolver.resolve(artifactPath));
-        } catch (IOException ignored) {}
+        } catch (IOException ignored) {
+        }
     }
 
     private String buildContext(List<SearchResult> hits) {
@@ -89,15 +109,25 @@ public class AnswerPipelineService {
         return sb.toString();
     }
 
-    private String writeArtifact(Job job, String question, String answer, List<String> evidence) throws IOException {
+    private String writeArtifact(Job job, String question, String answer, List<String> evidence)
+            throws IOException {
         String relPath = "outputs/answer-" + job.getId() + ".md";
         Path file = pathResolver.resolve(relPath);
         Files.createDirectories(file.getParent());
-        String evidenceSection = evidence.isEmpty()
-                ? "_No evidence documents retrieved._"
-                : evidence.stream().map(p -> "- [[" + p + "]]").collect(Collectors.joining("\n"));
-        String content = "# Answer\n\n**Question:** " + question + "\n\n## Response\n\n" + answer +
-                "\n\n## Evidence\n\n" + evidenceSection + "\n";
+        String evidenceSection =
+                evidence.isEmpty()
+                        ? "_No evidence documents retrieved._"
+                        : evidence.stream()
+                                .map(p -> "- [[" + p + "]]")
+                                .collect(Collectors.joining("\n"));
+        String content =
+                "# Answer\n\n**Question:** "
+                        + question
+                        + "\n\n## Response\n\n"
+                        + answer
+                        + "\n\n## Evidence\n\n"
+                        + evidenceSection
+                        + "\n";
         Files.writeString(file, content, StandardCharsets.UTF_8);
         return relPath;
     }

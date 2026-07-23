@@ -18,7 +18,9 @@ public class PipelineTx {
                 compensation.action().run();
             } catch (Exception ex) {
                 if (failure == null) {
-                    failure = new IllegalStateException("Rollback compensation failed: " + compensation.name(), ex);
+                    failure =
+                            new IllegalStateException(
+                                    "Rollback compensation failed: " + compensation.name(), ex);
                 } else {
                     failure.addSuppressed(ex);
                 }

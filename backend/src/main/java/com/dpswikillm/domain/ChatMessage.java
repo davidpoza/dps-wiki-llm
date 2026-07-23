@@ -14,11 +14,12 @@ import java.util.UUID;
 @Table(name = "chat_messages")
 public class ChatMessage {
 
-    public enum Role { user, assistant }
+    public enum Role {
+        user,
+        assistant
+    }
 
-    @Id
-    @GeneratedValue
-    private UUID id;
+    @Id @GeneratedValue private UUID id;
 
     @Column(name = "session_id", nullable = false)
     private UUID sessionId;
@@ -41,9 +42,23 @@ public class ChatMessage {
         this.content = content;
     }
 
-    public UUID getId() { return id; }
-    public UUID getSessionId() { return sessionId; }
-    public Role getRole() { return role; }
-    public String getContent() { return content; }
-    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public UUID getId() {
+        return id;
+    }
+
+    public UUID getSessionId() {
+        return sessionId;
+    }
+
+    public Role getRole() {
+        return role;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
+    }
 }

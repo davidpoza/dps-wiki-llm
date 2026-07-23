@@ -9,5 +9,4 @@ public record FileHistoryEntryDto(
         String source,
         int linesAdded,
         int linesDeleted,
-        String createdAt
-) {}
+        String createdAt) {}

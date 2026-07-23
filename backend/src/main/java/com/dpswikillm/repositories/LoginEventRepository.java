@@ -3,8 +3,8 @@ package com.dpswikillm.repositories;
 import com.dpswikillm.domain.LoginEvent;
 import com.dpswikillm.domain.User;
 import java.util.List;
-import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface LoginEventRepository extends JpaRepository<LoginEvent, UUID> {
 

@@ -27,7 +27,8 @@ public class RawIntakeService {
     }
 
     public String ingestFile(MultipartFile file) throws IOException {
-        String filename = file.getOriginalFilename() == null ? "upload" : file.getOriginalFilename();
+        String filename =
+                file.getOriginalFilename() == null ? "upload" : file.getOriginalFilename();
         if (filename.endsWith(".pdf")) {
             return ingestPdf(file, filename);
         }
@@ -40,11 +41,20 @@ public class RawIntakeService {
     private String ingestPdf(MultipartFile file, String filename) throws IOException {
         ExtractionResult result = extractorClient.extractFile(file);
         ExtractionMetadata meta = result.metadata();
-        String title = meta != null && meta.title() != null && !meta.title().isBlank()
-                ? meta.title() : filename.replaceFirst("\\.[^.]+$", "");
-        String content = renderFileFrontmatter(filename, meta) + "\n# " + title + "\n\n" + result.markdown().strip() + "\n";
+        String title =
+                meta != null && meta.title() != null && !meta.title().isBlank()
+                        ? meta.title()
+                        : filename.replaceFirst("\\.[^.]+$", "");
+        String content =
+                renderFileFrontmatter(filename, meta)
+                        + "\n# "
+                        + title
+                        + "\n\n"
+                        + result.markdown().strip()
+                        + "\n";
         String slug = TextUtil.slugify(title, "pdf-upload");
-        String rawPath = "raw/inbox/" + Instant.now().toString().replace(":", "-") + "-" + slug + ".md";
+        String rawPath =
+                "raw/inbox/" + Instant.now().toString().replace(":", "-") + "-" + slug + ".md";
         writeRaw(rawPath, content);
         return rawPath;
     }
@@ -53,14 +63,19 @@ public class RawIntakeService {
         if (file.getSize() > MAX_MARKDOWN_BYTES) {
             throw new IllegalArgumentException("Markdown upload exceeds size limit");
         }
-        MediaType mediaType = file.getContentType() == null ? null : MediaType.parseMediaType(file.getContentType());
-        if (mediaType != null && !MediaType.TEXT_PLAIN.includes(mediaType)
+        MediaType mediaType =
+                file.getContentType() == null
+                        ? null
+                        : MediaType.parseMediaType(file.getContentType());
+        if (mediaType != null
+                && !MediaType.TEXT_PLAIN.includes(mediaType)
                 && !mediaType.toString().equals("text/markdown")
                 && !mediaType.toString().equals("application/octet-stream")) {
             throw new IllegalArgumentException("Unsupported markdown content type: " + mediaType);
         }
         String slug = TextUtil.slugify(filename.replaceFirst("\\.[^.]+$", ""), "upload");
-        String rawPath = "raw/inbox/" + Instant.now().toString().replace(":", "-") + "-" + slug + ".md";
+        String rawPath =
+                "raw/inbox/" + Instant.now().toString().replace(":", "-") + "-" + slug + ".md";
         writeRaw(rawPath, new String(file.getBytes(), StandardCharsets.UTF_8));
         return rawPath;
     }
@@ -75,29 +90,39 @@ public class RawIntakeService {
         }
         String base = (title != null && !title.isBlank()) ? title : "clipboard";
         String slug = TextUtil.slugify(base, "clipboard");
-        String rawPath = "raw/inbox/" + Instant.now().toString().replace(":", "-") + "-" + slug + ".md";
+        String rawPath =
+                "raw/inbox/" + Instant.now().toString().replace(":", "-") + "-" + slug + ".md";
         writeRaw(rawPath, content);
         return rawPath;
     }
 
     /**
-     * Fetch a URL through the {@code web-extractor} microservice (real browser
-     * rendering) and persist the resulting structured markdown with YAML
-     * frontmatter under {@code raw/web/**}.
+     * Fetch a URL through the {@code web-extractor} microservice (real browser rendering) and
+     * persist the resulting structured markdown with YAML frontmatter under {@code raw/web/**}.
      */
     public String ingestUrl(String url) throws IOException {
         URI uri = URI.create(url);
-        if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
+        if (!"http".equalsIgnoreCase(uri.getScheme())
+                && !"https".equalsIgnoreCase(uri.getScheme())) {
             throw new IllegalArgumentException("Only http(s) URLs are supported");
         }
         ExtractionResult result = extractorClient.extract(url);
         ExtractionMetadata meta = result.metadata();
 
-        String title = meta != null && meta.title() != null && !meta.title().isBlank()
-                ? meta.title() : uri.getHost();
-        String content = renderFrontmatter(url, meta) + "\n# " + title + "\n\n" + result.markdown().strip() + "\n";
+        String title =
+                meta != null && meta.title() != null && !meta.title().isBlank()
+                        ? meta.title()
+                        : uri.getHost();
+        String content =
+                renderFrontmatter(url, meta)
+                        + "\n# "
+                        + title
+                        + "\n\n"
+                        + result.markdown().strip()
+                        + "\n";
         String slug = TextUtil.slugify(title, "web-source");
-        String rawPath = "raw/web/" + Instant.now().toString().replace(":", "-") + "-" + slug + ".md";
+        String rawPath =
+                "raw/web/" + Instant.now().toString().replace(":", "-") + "-" + slug + ".md";
         writeRaw(rawPath, content);
         return rawPath;
     }

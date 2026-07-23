@@ -12,23 +12,28 @@ final class TextUtil {
 
     static String sha256(String text) {
         try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(text.getBytes(StandardCharsets.UTF_8)));
+            return HexFormat.of()
+                    .formatHex(
+                            MessageDigest.getInstance("SHA-256")
+                                    .digest(text.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException(ex);
         }
     }
 
     static String slugify(String value, String fallback) {
-        String normalized = Normalizer.normalize(value == null ? "" : value, Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "")
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("^-+|-+$", "");
+        String normalized =
+                Normalizer.normalize(value == null ? "" : value, Normalizer.Form.NFD)
+                        .replaceAll("\\p{M}", "")
+                        .toLowerCase(Locale.ROOT)
+                        .replaceAll("[^a-z0-9]+", "-")
+                        .replaceAll("^-+|-+$", "");
         if (normalized.isBlank()) {
             return fallback;
         }
-        return normalized.length() > 80 ? normalized.substring(0, 80).replaceAll("-+$", "") : normalized;
+        return normalized.length() > 80
+                ? normalized.substring(0, 80).replaceAll("-+$", "")
+                : normalized;
     }
 
     static String firstHeadingOrFilename(String content, String fallback) {

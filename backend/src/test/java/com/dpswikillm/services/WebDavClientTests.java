@@ -11,12 +11,18 @@ import org.junit.jupiter.api.Test;
 class WebDavClientTests {
 
     private WebDavClient client(String url) {
-        AppProperties props = new AppProperties(
-                "/vault", List.of("http://localhost:4200"),
-                new AppProperties.Embeddings("http://embeddings:8080", "m", "", 384, Duration.ofSeconds(1), 8),
-                new AppProperties.Llm("http://llm", "m", ""),
-                new AppProperties.Telegram("", ""), null, null, null,
-                new AppProperties.WebDav(url, "user", "pass"));
+        AppProperties props =
+                new AppProperties(
+                        "/vault",
+                        List.of("http://localhost:4200"),
+                        new AppProperties.Embeddings(
+                                "http://embeddings:8080", "m", "", 384, Duration.ofSeconds(1), 8),
+                        new AppProperties.Llm("http://llm", "m", ""),
+                        new AppProperties.Telegram("", ""),
+                        null,
+                        null,
+                        null,
+                        new AppProperties.WebDav(url, "user", "pass"));
         return new WebDavClient(props);
     }
 
@@ -37,11 +43,13 @@ class WebDavClientTests {
         WebDavClient client = client("");
         assertThat(client.get("note.md")).isEmpty();
         assertThat(client.list()).isEmpty();
-        assertThatCode(() -> {
-            client.put("note.md", "hello");
-            client.delete("note.md");
-            client.move("a.md", "b.md");
-        }).doesNotThrowAnyException();
+        assertThatCode(
+                        () -> {
+                            client.put("note.md", "hello");
+                            client.delete("note.md");
+                            client.move("a.md", "b.md");
+                        })
+                .doesNotThrowAnyException();
     }
 
     @Test

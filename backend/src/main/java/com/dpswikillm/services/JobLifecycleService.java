@@ -23,7 +23,8 @@ public class JobLifecycleService {
     private final JobEventService eventService;
     private final ObjectMapper objectMapper;
 
-    public JobLifecycleService(JobRepository jobRepository, JobEventService eventService, ObjectMapper objectMapper) {
+    public JobLifecycleService(
+            JobRepository jobRepository, JobEventService eventService, ObjectMapper objectMapper) {
         this.jobRepository = jobRepository;
         this.eventService = eventService;
         this.objectMapper = objectMapper;
@@ -40,33 +41,75 @@ public class JobLifecycleService {
             job.setResult(message == null ? "{}" : "{\"message\":\"" + escapeJson(message) + "\"}");
         }
         Job saved = jobRepository.save(job);
-        eventService.broadcast(new JobEvent(status, saved.getId(), saved.getType(), saved.getQueuePosition(),
-                step, null, null, message, saved.getResult()));
+        eventService.broadcast(
+                new JobEvent(
+                        status,
+                        saved.getId(),
+                        saved.getType(),
+                        saved.getQueuePosition(),
+                        step,
+                        null,
+                        null,
+                        message,
+                        saved.getResult()));
         return saved;
     }
 
     public void fileEvent(Job job, String path, String action) {
-        eventService.broadcast(new JobEvent(JobStatus.PROGRESS, job.getId(), job.getType(), job.getQueuePosition(),
-                "file", path, action, null, null));
+        eventService.broadcast(
+                new JobEvent(
+                        JobStatus.PROGRESS,
+                        job.getId(),
+                        job.getType(),
+                        job.getQueuePosition(),
+                        "file",
+                        path,
+                        action,
+                        null,
+                        null));
     }
 
     public void progress(Job job, String step, String message, String result) {
-        eventService.broadcast(new JobEvent(JobStatus.PROGRESS, job.getId(), job.getType(), job.getQueuePosition(),
-                step, null, null, message, result));
+        eventService.broadcast(
+                new JobEvent(
+                        JobStatus.PROGRESS,
+                        job.getId(),
+                        job.getType(),
+                        job.getQueuePosition(),
+                        step,
+                        null,
+                        null,
+                        message,
+                        result));
     }
 
     public void awaitingReview(Job job, String message, String result) {
-        eventService.broadcast(new JobEvent(JobStatus.AWAITING_REVIEW, job.getId(), job.getType(), job.getQueuePosition(),
-                "awaiting-review", null, null, message, result));
+        eventService.broadcast(
+                new JobEvent(
+                        JobStatus.AWAITING_REVIEW,
+                        job.getId(),
+                        job.getType(),
+                        job.getQueuePosition(),
+                        "awaiting-review",
+                        null,
+                        null,
+                        message,
+                        result));
     }
 
     @Transactional
     public void conceptProposals(Job job, List<ConceptProposal> proposals) {
-        log.info("Job {}: {} concept proposal(s) to store and broadcast", job.getId(), proposals.size());
+        log.info(
+                "Job {}: {} concept proposal(s) to store and broadcast",
+                job.getId(),
+                proposals.size());
         try {
             job.setConceptProposals(objectMapper.writeValueAsString(proposals));
         } catch (JsonProcessingException e) {
-            log.warn("Failed to serialize concept proposals for job {}: {}", job.getId(), e.getMessage());
+            log.warn(
+                    "Failed to serialize concept proposals for job {}: {}",
+                    job.getId(),
+                    e.getMessage());
             job.setConceptProposals("[]");
         }
         jobRepository.save(job);
@@ -77,22 +120,43 @@ public class JobLifecycleService {
             } catch (JsonProcessingException e) {
                 result = "{}";
             }
-            eventService.broadcast(new JobEvent(JobStatus.PROGRESS, job.getId(), job.getType(), job.getQueuePosition(),
-                    "concept-proposal", null, null, proposal.proposedTitle(), result));
+            eventService.broadcast(
+                    new JobEvent(
+                            JobStatus.PROGRESS,
+                            job.getId(),
+                            job.getType(),
+                            job.getQueuePosition(),
+                            "concept-proposal",
+                            null,
+                            null,
+                            proposal.proposedTitle(),
+                            result));
         }
     }
 
     @Transactional
     public void cancelJob(UUID jobId) {
-        Job job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        Job job =
+                jobRepository
+                        .findById(jobId)
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (job.getStatus() != JobStatus.QUEUED && job.getStatus() != JobStatus.AWAITING_REVIEW) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Job cannot be cancelled in its current state");
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Job cannot be cancelled in its current state");
         }
         job.transitionTo(JobStatus.CANCELLED);
         Job saved = jobRepository.save(job);
-        eventService.broadcast(new JobEvent(JobStatus.CANCELLED, saved.getId(), saved.getType(),
-                saved.getQueuePosition(), "cancelled", null, null, null, null));
+        eventService.broadcast(
+                new JobEvent(
+                        JobStatus.CANCELLED,
+                        saved.getId(),
+                        saved.getType(),
+                        saved.getQueuePosition(),
+                        "cancelled",
+                        null,
+                        null,
+                        null,
+                        null));
     }
 
     private String escapeJson(String value) {

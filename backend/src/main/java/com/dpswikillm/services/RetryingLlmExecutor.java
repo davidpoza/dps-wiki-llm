@@ -29,10 +29,10 @@ public class RetryingLlmExecutor {
     }
 
     /**
-     * Retry a generate-and-parse operation when the model returns a malformed
-     * response ({@link LlmResponseFormatException}). Each attempt re-runs the
-     * whole supplier, producing a fresh generation. Transport-level retries are
-     * handled independently by the underlying {@link LlmClient}.
+     * Retry a generate-and-parse operation when the model returns a malformed response ({@link
+     * LlmResponseFormatException}). Each attempt re-runs the whole supplier, producing a fresh
+     * generation. Transport-level retries are handled independently by the underlying {@link
+     * LlmClient}.
      */
     public <T> T executeParsing(Supplier<T> operation) {
         LlmResponseFormatException last = null;

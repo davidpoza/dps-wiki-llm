@@ -17,7 +17,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,8 +28,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class SnapshotServiceTests {
-    @TempDir
-    Path vault;
+    @TempDir Path vault;
 
     private FakeSnapshotRepository snapshotRepo;
     private FakeSnapshotFileRepository snapshotFileRepo;
@@ -49,12 +47,18 @@ class SnapshotServiceTests {
     @Test
     void captureAndRevertRestoresOriginalContent() throws Exception {
         Files.createDirectories(vault.resolve("wiki/sources"));
-        Files.writeString(vault.resolve("wiki/sources/note.md"), "original content\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                vault.resolve("wiki/sources/note.md"),
+                "original content\n",
+                StandardCharsets.UTF_8);
 
         Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
         snapshotService.captureFile(snapshot, "wiki/sources/note.md");
 
-        Files.writeString(vault.resolve("wiki/sources/note.md"), "modified content\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                vault.resolve("wiki/sources/note.md"),
+                "modified content\n",
+                StandardCharsets.UTF_8);
         snapshotService.recordAfter(snapshot, "wiki/sources/note.md");
         snapshotService.finalizeSnapshot(snapshot, null);
 
@@ -69,8 +73,10 @@ class SnapshotServiceTests {
         Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
         snapshotService.captureFile(snapshot, "wiki/sources/new.md");
 
-        SnapshotFile sf = snapshotFileRepo.findBySnapshotIdAndPath(snapshot.getId(), "wiki/sources/new.md")
-                .orElseThrow();
+        SnapshotFile sf =
+                snapshotFileRepo
+                        .findBySnapshotIdAndPath(snapshot.getId(), "wiki/sources/new.md")
+                        .orElseThrow();
         assertThat(sf.getContentBefore()).isNull();
     }
 
@@ -79,7 +85,8 @@ class SnapshotServiceTests {
         Files.createDirectories(vault.resolve("wiki/sources"));
         Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
         snapshotService.captureFile(snapshot, "wiki/sources/new.md");
-        Files.writeString(vault.resolve("wiki/sources/new.md"), "new content\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                vault.resolve("wiki/sources/new.md"), "new content\n", StandardCharsets.UTF_8);
         snapshotService.recordAfter(snapshot, "wiki/sources/new.md");
         snapshotService.finalizeSnapshot(snapshot, null);
 
@@ -148,11 +155,15 @@ class SnapshotServiceTests {
     @Test
     void diffStatsDoNotCountTrailingNewlineAsChange() throws Exception {
         Files.createDirectories(vault.resolve("wiki/sources"));
-        Files.writeString(vault.resolve("wiki/sources/note.md"), "line one\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                vault.resolve("wiki/sources/note.md"), "line one\n", StandardCharsets.UTF_8);
 
         Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
         snapshotService.captureFile(snapshot, "wiki/sources/note.md");
-        Files.writeString(vault.resolve("wiki/sources/note.md"), "line one\nline two\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                vault.resolve("wiki/sources/note.md"),
+                "line one\nline two\n",
+                StandardCharsets.UTF_8);
         snapshotService.recordAfter(snapshot, "wiki/sources/note.md");
         snapshotService.finalizeSnapshot(snapshot, null);
 
@@ -166,20 +177,24 @@ class SnapshotServiceTests {
     @Test
     void captureFileAsNewStoresNullContentBeforeRegardlessOfDiskState() throws Exception {
         Files.createDirectories(vault.resolve("raw/inbox"));
-        Files.writeString(vault.resolve("raw/inbox/source.md"), "# Source\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                vault.resolve("raw/inbox/source.md"), "# Source\n", StandardCharsets.UTF_8);
 
         Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
         snapshotService.captureFileAsNew(snapshot, "raw/inbox/source.md");
 
-        SnapshotFile sf = snapshotFileRepo.findBySnapshotIdAndPath(snapshot.getId(), "raw/inbox/source.md")
-                .orElseThrow();
+        SnapshotFile sf =
+                snapshotFileRepo
+                        .findBySnapshotIdAndPath(snapshot.getId(), "raw/inbox/source.md")
+                        .orElseThrow();
         assertThat(sf.getContentBefore()).isNull();
     }
 
     @Test
     void captureFileAsNewAndHardResetDeletesFile() throws Exception {
         Files.createDirectories(vault.resolve("raw/inbox"));
-        Files.writeString(vault.resolve("raw/inbox/source.md"), "# Source\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                vault.resolve("raw/inbox/source.md"), "# Source\n", StandardCharsets.UTF_8);
 
         Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
         snapshotService.captureFileAsNew(snapshot, "raw/inbox/source.md");
@@ -194,7 +209,8 @@ class SnapshotServiceTests {
     @Test
     void captureFileIsIdempotent() throws Exception {
         Files.createDirectories(vault.resolve("wiki/sources"));
-        Files.writeString(vault.resolve("wiki/sources/note.md"), "content\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                vault.resolve("wiki/sources/note.md"), "content\n", StandardCharsets.UTF_8);
 
         Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
         snapshotService.captureFile(snapshot, "wiki/sources/note.md");
@@ -223,7 +239,8 @@ class SnapshotServiceTests {
         Snapshot pending = snapshotService.beginSnapshot("j1", "ingest", "pending");
         savedFile(pending, "wiki/pending.md", null, "pending body\n");
 
-        Snapshot complete = snapshotService.beginSnapshot(null, "manual-save", "note.md", "LOCAL_EDIT");
+        Snapshot complete =
+                snapshotService.beginSnapshot(null, "manual-save", "note.md", "LOCAL_EDIT");
         savedFile(complete, "wiki/note.md", null, "hello world");
         snapshotService.finalizeSnapshot(complete, null);
 
@@ -246,17 +263,20 @@ class SnapshotServiceTests {
 
     @Test
     void getVersionsReturnsNewestFirstAndContentIsRetrievable() {
-        Snapshot older = snapshotService.beginSnapshot(null, "manual-save", "note.md", "LOCAL_EDIT");
+        Snapshot older =
+                snapshotService.beginSnapshot(null, "manual-save", "note.md", "LOCAL_EDIT");
         SnapshotFile v1 = savedFile(older, "wiki/note.md", null, "v1\n");
         snapshotService.finalizeSnapshot(older, null);
 
-        Snapshot newer = snapshotService.beginSnapshot(null, "manual-save", "note.md", "LOCAL_EDIT");
+        Snapshot newer =
+                snapshotService.beginSnapshot(null, "manual-save", "note.md", "LOCAL_EDIT");
         SnapshotFile v2 = savedFile(newer, "wiki/note.md", "v1\n", "v2\n");
         // ensure a later timestamp than v1
         ReflectionTestUtils.setField(newer, "createdAt", older.getCreatedAt().plusSeconds(5));
         snapshotService.finalizeSnapshot(newer, null);
 
-        List<com.dpswikillm.dto.FileVersionDto> versions = snapshotService.getVersions("wiki/note.md");
+        List<com.dpswikillm.dto.FileVersionDto> versions =
+                snapshotService.getVersions("wiki/note.md");
 
         assertThat(versions).hasSize(2);
         assertThat(versions.getFirst().versionId()).isEqualTo(v2.getId());
@@ -266,7 +286,8 @@ class SnapshotServiceTests {
 
     @Test
     void getVersionContentThrowsForUnknownVersion() {
-        assertThatThrownBy(() -> snapshotService.getVersionContent("wiki/note.md", UUID.randomUUID()))
+        assertThatThrownBy(
+                        () -> snapshotService.getVersionContent("wiki/note.md", UUID.randomUUID()))
                 .isInstanceOf(java.util.NoSuchElementException.class);
     }
 
@@ -277,22 +298,45 @@ class SnapshotServiceTests {
         sf.setPath(path);
         sf.setContentBefore(before);
         sf.setContentAfter(after);
-        List<String> beforeLines = before != null ? java.util.Arrays.asList(before.replace("\r\n", "\n").replace("\r", "\n").split("\n", 0)) : List.of();
-        List<String> afterLines = after != null ? java.util.Arrays.asList(after.replace("\r\n", "\n").replace("\r", "\n").split("\n", 0)) : List.of();
+        List<String> beforeLines =
+                before != null
+                        ? java.util.Arrays.asList(
+                                before.replace("\r\n", "\n").replace("\r", "\n").split("\n", 0))
+                        : List.of();
+        List<String> afterLines =
+                after != null
+                        ? java.util.Arrays.asList(
+                                after.replace("\r\n", "\n").replace("\r", "\n").split("\n", 0))
+                        : List.of();
         var patch = com.github.difflib.DiffUtils.diff(beforeLines, afterLines);
         int added = 0, deleted = 0;
-        for (var delta : patch.getDeltas()) { added += delta.getTarget().size(); deleted += delta.getSource().size(); }
+        for (var delta : patch.getDeltas()) {
+            added += delta.getTarget().size();
+            deleted += delta.getSource().size();
+        }
         sf.setLinesAdded(added);
         sf.setLinesDeleted(deleted);
         return snapshotFileRepo.save(sf);
     }
 
     private VaultPathResolver resolver() {
-        AppProperties props = new AppProperties(
-                vault.toString(), List.of("http://localhost:4200"),
-                new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1), 8),
-                new AppProperties.Llm("http://localhost:11434/v1", "gpt-oss", "test"),
-                new AppProperties.Telegram("", ""), null, null, null, null);
+        AppProperties props =
+                new AppProperties(
+                        vault.toString(),
+                        List.of("http://localhost:4200"),
+                        new AppProperties.Embeddings(
+                                "http://embeddings:8080",
+                                "multilingual-e5-small",
+                                "",
+                                384,
+                                Duration.ofSeconds(1),
+                                8),
+                        new AppProperties.Llm("http://localhost:11434/v1", "gpt-oss", "test"),
+                        new AppProperties.Telegram("", ""),
+                        null,
+                        null,
+                        null,
+                        null);
         return new VaultPathResolver(props);
     }
 
@@ -303,19 +347,25 @@ class SnapshotServiceTests {
 
         @Override
         public <S extends Snapshot> S save(S entity) {
-            if (entity.getId() == null) ReflectionTestUtils.setField(entity, "id", UUID.randomUUID());
+            if (entity.getId() == null)
+                ReflectionTestUtils.setField(entity, "id", UUID.randomUUID());
             store.put(entity.getId(), entity);
             return entity;
         }
 
         @Override
-        public Optional<Snapshot> findById(UUID id) { return Optional.ofNullable(store.get(id)); }
+        public Optional<Snapshot> findById(UUID id) {
+            return Optional.ofNullable(store.get(id));
+        }
 
         @Override
-        public void deleteById(UUID id) { store.remove(id); }
+        public void deleteById(UUID id) {
+            store.remove(id);
+        }
 
         @Override
-        public List<Snapshot> findByStatusOrderByCreatedAtDesc(String status, org.springframework.data.domain.Pageable p) {
+        public List<Snapshot> findByStatusOrderByCreatedAtDesc(
+                String status, org.springframework.data.domain.Pageable p) {
             return store.values().stream()
                     .filter(s -> status.equals(s.getStatus()))
                     .sorted(java.util.Comparator.comparing(Snapshot::getCreatedAt).reversed())
@@ -324,33 +374,146 @@ class SnapshotServiceTests {
         }
 
         // --- unused JPA methods ---
-        @Override public boolean existsById(UUID id) { return store.containsKey(id); }
-        @Override public List<Snapshot> findAll() { return List.copyOf(store.values()); }
-        @Override public List<Snapshot> findAllById(Iterable<UUID> ids) { return List.of(); }
-        @Override public long count() { return store.size(); }
-        @Override public void delete(Snapshot entity) { store.remove(entity.getId()); }
-        @Override public void deleteAllById(Iterable<? extends UUID> ids) { ids.forEach(store::remove); }
-        @Override public void deleteAll(Iterable<? extends Snapshot> entities) {}
-        @Override public void deleteAll() { store.clear(); }
-        @Override public <S extends Snapshot> List<S> saveAll(Iterable<S> entities) { entities.forEach(this::save); return List.of(); }
-        @Override public void flush() {}
-        @Override public <S extends Snapshot> S saveAndFlush(S entity) { return save(entity); }
-        @Override public <S extends Snapshot> List<S> saveAllAndFlush(Iterable<S> entities) { return saveAll(entities); }
-        @Override public void deleteAllInBatch(Iterable<Snapshot> entities) {}
-        @Override public void deleteAllByIdInBatch(Iterable<UUID> ids) {}
-        @Override public void deleteAllInBatch() {}
-        @Override public Snapshot getOne(UUID id) { return store.get(id); }
-        @Override public Snapshot getById(UUID id) { return store.get(id); }
-        @Override public Snapshot getReferenceById(UUID id) { return store.get(id); }
-        @Override public <S extends Snapshot> Optional<S> findOne(org.springframework.data.domain.Example<S> example) { return Optional.empty(); }
-        @Override public <S extends Snapshot> List<S> findAll(org.springframework.data.domain.Example<S> example) { return List.of(); }
-        @Override public <S extends Snapshot> List<S> findAll(org.springframework.data.domain.Example<S> example, org.springframework.data.domain.Sort sort) { return List.of(); }
-        @Override public <S extends Snapshot> org.springframework.data.domain.Page<S> findAll(org.springframework.data.domain.Example<S> example, org.springframework.data.domain.Pageable pageable) { return org.springframework.data.domain.Page.empty(); }
-        @Override public <S extends Snapshot> long count(org.springframework.data.domain.Example<S> example) { return 0; }
-        @Override public <S extends Snapshot> boolean exists(org.springframework.data.domain.Example<S> example) { return false; }
-        @Override public <S extends Snapshot, R> R findBy(org.springframework.data.domain.Example<S> example, java.util.function.Function<org.springframework.data.repository.query.FluentQuery.FetchableFluentQuery<S>, R> queryFunction) { return null; }
-        @Override public List<Snapshot> findAll(org.springframework.data.domain.Sort sort) { return List.of(); }
-        @Override public org.springframework.data.domain.Page<Snapshot> findAll(org.springframework.data.domain.Pageable pageable) { return org.springframework.data.domain.Page.empty(); }
+        @Override
+        public boolean existsById(UUID id) {
+            return store.containsKey(id);
+        }
+
+        @Override
+        public List<Snapshot> findAll() {
+            return List.copyOf(store.values());
+        }
+
+        @Override
+        public List<Snapshot> findAllById(Iterable<UUID> ids) {
+            return List.of();
+        }
+
+        @Override
+        public long count() {
+            return store.size();
+        }
+
+        @Override
+        public void delete(Snapshot entity) {
+            store.remove(entity.getId());
+        }
+
+        @Override
+        public void deleteAllById(Iterable<? extends UUID> ids) {
+            ids.forEach(store::remove);
+        }
+
+        @Override
+        public void deleteAll(Iterable<? extends Snapshot> entities) {}
+
+        @Override
+        public void deleteAll() {
+            store.clear();
+        }
+
+        @Override
+        public <S extends Snapshot> List<S> saveAll(Iterable<S> entities) {
+            entities.forEach(this::save);
+            return List.of();
+        }
+
+        @Override
+        public void flush() {}
+
+        @Override
+        public <S extends Snapshot> S saveAndFlush(S entity) {
+            return save(entity);
+        }
+
+        @Override
+        public <S extends Snapshot> List<S> saveAllAndFlush(Iterable<S> entities) {
+            return saveAll(entities);
+        }
+
+        @Override
+        public void deleteAllInBatch(Iterable<Snapshot> entities) {}
+
+        @Override
+        public void deleteAllByIdInBatch(Iterable<UUID> ids) {}
+
+        @Override
+        public void deleteAllInBatch() {}
+
+        @Override
+        public Snapshot getOne(UUID id) {
+            return store.get(id);
+        }
+
+        @Override
+        public Snapshot getById(UUID id) {
+            return store.get(id);
+        }
+
+        @Override
+        public Snapshot getReferenceById(UUID id) {
+            return store.get(id);
+        }
+
+        @Override
+        public <S extends Snapshot> Optional<S> findOne(
+                org.springframework.data.domain.Example<S> example) {
+            return Optional.empty();
+        }
+
+        @Override
+        public <S extends Snapshot> List<S> findAll(
+                org.springframework.data.domain.Example<S> example) {
+            return List.of();
+        }
+
+        @Override
+        public <S extends Snapshot> List<S> findAll(
+                org.springframework.data.domain.Example<S> example,
+                org.springframework.data.domain.Sort sort) {
+            return List.of();
+        }
+
+        @Override
+        public <S extends Snapshot> org.springframework.data.domain.Page<S> findAll(
+                org.springframework.data.domain.Example<S> example,
+                org.springframework.data.domain.Pageable pageable) {
+            return org.springframework.data.domain.Page.empty();
+        }
+
+        @Override
+        public <S extends Snapshot> long count(org.springframework.data.domain.Example<S> example) {
+            return 0;
+        }
+
+        @Override
+        public <S extends Snapshot> boolean exists(
+                org.springframework.data.domain.Example<S> example) {
+            return false;
+        }
+
+        @Override
+        public <S extends Snapshot, R> R findBy(
+                org.springframework.data.domain.Example<S> example,
+                java.util.function.Function<
+                                org.springframework.data.repository.query.FluentQuery
+                                                .FetchableFluentQuery<
+                                        S>,
+                                R>
+                        queryFunction) {
+            return null;
+        }
+
+        @Override
+        public List<Snapshot> findAll(org.springframework.data.domain.Sort sort) {
+            return List.of();
+        }
+
+        @Override
+        public org.springframework.data.domain.Page<Snapshot> findAll(
+                org.springframework.data.domain.Pageable pageable) {
+            return org.springframework.data.domain.Page.empty();
+        }
     }
 
     static class FakeSnapshotFileRepository implements SnapshotFileRepository {
@@ -362,28 +525,47 @@ class SnapshotServiceTests {
         }
 
         @Override
-        public org.springframework.data.domain.Page<com.dpswikillm.dto.FileHistoryEntryDto> findHistoryPaged(
-                org.springframework.data.domain.Pageable pageable) {
-            List<com.dpswikillm.dto.FileHistoryEntryDto> all = store.values().stream()
-                    .filter(sf -> sf.getLinesAdded() == null || sf.getLinesAdded() > 0 || sf.getLinesDeleted() > 0)
-                    .filter(sf -> {
-                        if (snapshotRepo == null) return true;
-                        return snapshotRepo.findById(sf.getSnapshotId())
-                                .map(s -> "COMPLETE".equals(s.getStatus())).orElse(false);
-                    })
-                    .map(sf -> {
-                        com.dpswikillm.domain.Snapshot s = snapshotRepo == null ? null
-                                : snapshotRepo.findById(sf.getSnapshotId()).orElse(null);
-                        return new com.dpswikillm.dto.FileHistoryEntryDto(
-                                sf.getId(), sf.getPath(),
-                                s != null ? s.getSource() : "UNKNOWN",
-                                sf.getLinesAdded() != null ? sf.getLinesAdded() : 0,
-                                sf.getLinesDeleted() != null ? sf.getLinesDeleted() : 0,
-                                s != null ? s.getCreatedAt().toString() : "");
-                    })
-                    .sorted(java.util.Comparator.comparing(
-                            com.dpswikillm.dto.FileHistoryEntryDto::createdAt).reversed())
-                    .toList();
+        public org.springframework.data.domain.Page<com.dpswikillm.dto.FileHistoryEntryDto>
+                findHistoryPaged(org.springframework.data.domain.Pageable pageable) {
+            List<com.dpswikillm.dto.FileHistoryEntryDto> all =
+                    store.values().stream()
+                            .filter(
+                                    sf ->
+                                            sf.getLinesAdded() == null
+                                                    || sf.getLinesAdded() > 0
+                                                    || sf.getLinesDeleted() > 0)
+                            .filter(
+                                    sf -> {
+                                        if (snapshotRepo == null) return true;
+                                        return snapshotRepo
+                                                .findById(sf.getSnapshotId())
+                                                .map(s -> "COMPLETE".equals(s.getStatus()))
+                                                .orElse(false);
+                                    })
+                            .map(
+                                    sf -> {
+                                        com.dpswikillm.domain.Snapshot s =
+                                                snapshotRepo == null
+                                                        ? null
+                                                        : snapshotRepo
+                                                                .findById(sf.getSnapshotId())
+                                                                .orElse(null);
+                                        return new com.dpswikillm.dto.FileHistoryEntryDto(
+                                                sf.getId(),
+                                                sf.getPath(),
+                                                s != null ? s.getSource() : "UNKNOWN",
+                                                sf.getLinesAdded() != null ? sf.getLinesAdded() : 0,
+                                                sf.getLinesDeleted() != null
+                                                        ? sf.getLinesDeleted()
+                                                        : 0,
+                                                s != null ? s.getCreatedAt().toString() : "");
+                                    })
+                            .sorted(
+                                    java.util.Comparator.comparing(
+                                                    com.dpswikillm.dto.FileHistoryEntryDto
+                                                            ::createdAt)
+                                            .reversed())
+                            .toList();
             int from = (int) pageable.getOffset();
             int to = Math.min(from + pageable.getPageSize(), all.size());
             List<com.dpswikillm.dto.FileHistoryEntryDto> content =
@@ -393,14 +575,17 @@ class SnapshotServiceTests {
 
         @Override
         public <S extends SnapshotFile> S save(S entity) {
-            if (entity.getId() == null) ReflectionTestUtils.setField(entity, "id", UUID.randomUUID());
+            if (entity.getId() == null)
+                ReflectionTestUtils.setField(entity, "id", UUID.randomUUID());
             store.put(entity.getId(), entity);
             return entity;
         }
 
         @Override
         public List<SnapshotFile> findBySnapshotId(UUID snapshotId) {
-            return store.values().stream().filter(f -> snapshotId.equals(f.getSnapshotId())).toList();
+            return store.values().stream()
+                    .filter(f -> snapshotId.equals(f.getSnapshotId()))
+                    .toList();
         }
 
         @Override
@@ -420,34 +605,156 @@ class SnapshotServiceTests {
             store.values().removeIf(f -> snapshotId.equals(f.getSnapshotId()));
         }
 
-        @Override public Optional<SnapshotFile> findById(UUID id) { return Optional.ofNullable(store.get(id)); }
-        @Override public boolean existsById(UUID id) { return store.containsKey(id); }
-        @Override public List<SnapshotFile> findAll() { return List.copyOf(store.values()); }
-        @Override public List<SnapshotFile> findAllById(Iterable<UUID> ids) { return List.of(); }
-        @Override public long count() { return store.size(); }
-        @Override public void delete(SnapshotFile entity) { store.remove(entity.getId()); }
-        @Override public void deleteById(UUID id) { store.remove(id); }
-        @Override public void deleteAllById(Iterable<? extends UUID> ids) { ids.forEach(store::remove); }
-        @Override public void deleteAll(Iterable<? extends SnapshotFile> entities) {}
-        @Override public void deleteAll() { store.clear(); }
-        @Override public <S extends SnapshotFile> List<S> saveAll(Iterable<S> entities) { entities.forEach(this::save); return List.of(); }
-        @Override public void flush() {}
-        @Override public <S extends SnapshotFile> S saveAndFlush(S entity) { return save(entity); }
-        @Override public <S extends SnapshotFile> List<S> saveAllAndFlush(Iterable<S> entities) { return saveAll(entities); }
-        @Override public void deleteAllInBatch(Iterable<SnapshotFile> entities) {}
-        @Override public void deleteAllByIdInBatch(Iterable<UUID> ids) {}
-        @Override public void deleteAllInBatch() {}
-        @Override public SnapshotFile getOne(UUID id) { return store.get(id); }
-        @Override public SnapshotFile getById(UUID id) { return store.get(id); }
-        @Override public SnapshotFile getReferenceById(UUID id) { return store.get(id); }
-        @Override public <S extends SnapshotFile> Optional<S> findOne(org.springframework.data.domain.Example<S> example) { return Optional.empty(); }
-        @Override public <S extends SnapshotFile> List<S> findAll(org.springframework.data.domain.Example<S> example) { return List.of(); }
-        @Override public <S extends SnapshotFile> List<S> findAll(org.springframework.data.domain.Example<S> example, org.springframework.data.domain.Sort sort) { return List.of(); }
-        @Override public <S extends SnapshotFile> org.springframework.data.domain.Page<S> findAll(org.springframework.data.domain.Example<S> example, org.springframework.data.domain.Pageable pageable) { return org.springframework.data.domain.Page.empty(); }
-        @Override public <S extends SnapshotFile> long count(org.springframework.data.domain.Example<S> example) { return 0; }
-        @Override public <S extends SnapshotFile> boolean exists(org.springframework.data.domain.Example<S> example) { return false; }
-        @Override public <S extends SnapshotFile, R> R findBy(org.springframework.data.domain.Example<S> example, java.util.function.Function<org.springframework.data.repository.query.FluentQuery.FetchableFluentQuery<S>, R> queryFunction) { return null; }
-        @Override public List<SnapshotFile> findAll(org.springframework.data.domain.Sort sort) { return List.of(); }
-        @Override public org.springframework.data.domain.Page<SnapshotFile> findAll(org.springframework.data.domain.Pageable pageable) { return org.springframework.data.domain.Page.empty(); }
+        @Override
+        public Optional<SnapshotFile> findById(UUID id) {
+            return Optional.ofNullable(store.get(id));
+        }
+
+        @Override
+        public boolean existsById(UUID id) {
+            return store.containsKey(id);
+        }
+
+        @Override
+        public List<SnapshotFile> findAll() {
+            return List.copyOf(store.values());
+        }
+
+        @Override
+        public List<SnapshotFile> findAllById(Iterable<UUID> ids) {
+            return List.of();
+        }
+
+        @Override
+        public long count() {
+            return store.size();
+        }
+
+        @Override
+        public void delete(SnapshotFile entity) {
+            store.remove(entity.getId());
+        }
+
+        @Override
+        public void deleteById(UUID id) {
+            store.remove(id);
+        }
+
+        @Override
+        public void deleteAllById(Iterable<? extends UUID> ids) {
+            ids.forEach(store::remove);
+        }
+
+        @Override
+        public void deleteAll(Iterable<? extends SnapshotFile> entities) {}
+
+        @Override
+        public void deleteAll() {
+            store.clear();
+        }
+
+        @Override
+        public <S extends SnapshotFile> List<S> saveAll(Iterable<S> entities) {
+            entities.forEach(this::save);
+            return List.of();
+        }
+
+        @Override
+        public void flush() {}
+
+        @Override
+        public <S extends SnapshotFile> S saveAndFlush(S entity) {
+            return save(entity);
+        }
+
+        @Override
+        public <S extends SnapshotFile> List<S> saveAllAndFlush(Iterable<S> entities) {
+            return saveAll(entities);
+        }
+
+        @Override
+        public void deleteAllInBatch(Iterable<SnapshotFile> entities) {}
+
+        @Override
+        public void deleteAllByIdInBatch(Iterable<UUID> ids) {}
+
+        @Override
+        public void deleteAllInBatch() {}
+
+        @Override
+        public SnapshotFile getOne(UUID id) {
+            return store.get(id);
+        }
+
+        @Override
+        public SnapshotFile getById(UUID id) {
+            return store.get(id);
+        }
+
+        @Override
+        public SnapshotFile getReferenceById(UUID id) {
+            return store.get(id);
+        }
+
+        @Override
+        public <S extends SnapshotFile> Optional<S> findOne(
+                org.springframework.data.domain.Example<S> example) {
+            return Optional.empty();
+        }
+
+        @Override
+        public <S extends SnapshotFile> List<S> findAll(
+                org.springframework.data.domain.Example<S> example) {
+            return List.of();
+        }
+
+        @Override
+        public <S extends SnapshotFile> List<S> findAll(
+                org.springframework.data.domain.Example<S> example,
+                org.springframework.data.domain.Sort sort) {
+            return List.of();
+        }
+
+        @Override
+        public <S extends SnapshotFile> org.springframework.data.domain.Page<S> findAll(
+                org.springframework.data.domain.Example<S> example,
+                org.springframework.data.domain.Pageable pageable) {
+            return org.springframework.data.domain.Page.empty();
+        }
+
+        @Override
+        public <S extends SnapshotFile> long count(
+                org.springframework.data.domain.Example<S> example) {
+            return 0;
+        }
+
+        @Override
+        public <S extends SnapshotFile> boolean exists(
+                org.springframework.data.domain.Example<S> example) {
+            return false;
+        }
+
+        @Override
+        public <S extends SnapshotFile, R> R findBy(
+                org.springframework.data.domain.Example<S> example,
+                java.util.function.Function<
+                                org.springframework.data.repository.query.FluentQuery
+                                                .FetchableFluentQuery<
+                                        S>,
+                                R>
+                        queryFunction) {
+            return null;
+        }
+
+        @Override
+        public List<SnapshotFile> findAll(org.springframework.data.domain.Sort sort) {
+            return List.of();
+        }
+
+        @Override
+        public org.springframework.data.domain.Page<SnapshotFile> findAll(
+                org.springframework.data.domain.Pageable pageable) {
+            return org.springframework.data.domain.Page.empty();
+        }
     }
 }

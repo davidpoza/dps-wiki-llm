@@ -23,7 +23,10 @@ public class UserService implements UserDetailsService {
     private final PasswordEncoder passwordEncoder;
     private final AppProperties appProperties;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, AppProperties appProperties) {
+    public UserService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            AppProperties appProperties) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.appProperties = appProperties;
@@ -31,7 +34,8 @@ public class UserService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        return userRepository.findByUsername(username)
+        return userRepository
+                .findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
     }
 
@@ -53,7 +57,9 @@ public class UserService implements UserDetailsService {
         userRepository.save(user);
     }
 
-    /** Stores a pending TOTP secret without activating 2FA (activation requires code confirmation). */
+    /**
+     * Stores a pending TOTP secret without activating 2FA (activation requires code confirmation).
+     */
     @Transactional
     public void storeTwoFactorSecret(String username, String secret) {
         User user = requireUser(username);
@@ -78,7 +84,8 @@ public class UserService implements UserDetailsService {
     }
 
     private User requireUser(String username) {
-        return userRepository.findByUsername(username)
+        return userRepository
+                .findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
     }
 
@@ -88,7 +95,8 @@ public class UserService implements UserDetailsService {
         String adminUsername = appProperties.admin().username();
         String adminPassword = appProperties.admin().password();
         if (adminUsername == null || adminUsername.isBlank()) {
-            log.warn("ADMIN_USERNAME not set — skipping admin seeding. No admin account will exist.");
+            log.warn(
+                    "ADMIN_USERNAME not set — skipping admin seeding. No admin account will exist.");
             return;
         }
         if (adminPassword == null || adminPassword.isBlank()) {
@@ -96,7 +104,11 @@ public class UserService implements UserDetailsService {
             return;
         }
         if (!userRepository.existsByUsername(adminUsername)) {
-            createUser(adminUsername, adminUsername + "@local", adminPassword, List.of("ROLE_ADMIN", "ROLE_USER"));
+            createUser(
+                    adminUsername,
+                    adminUsername + "@local",
+                    adminPassword,
+                    List.of("ROLE_ADMIN", "ROLE_USER"));
             log.info("Admin user '{}' seeded.", adminUsername);
         }
     }

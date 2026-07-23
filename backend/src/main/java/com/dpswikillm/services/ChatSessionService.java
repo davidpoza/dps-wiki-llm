@@ -27,11 +27,12 @@ public class ChatSessionService {
     private final LlmClient llmClient;
     private final PromptService promptService;
 
-    public ChatSessionService(ChatSessionRepository sessionRepo,
-                              ChatMessageRepository messageRepo,
-                              SemanticSearchService semanticSearch,
-                              LlmClient llmClient,
-                              PromptService promptService) {
+    public ChatSessionService(
+            ChatSessionRepository sessionRepo,
+            ChatMessageRepository messageRepo,
+            SemanticSearchService semanticSearch,
+            LlmClient llmClient,
+            PromptService promptService) {
         this.sessionRepo = sessionRepo;
         this.messageRepo = messageRepo;
         this.semanticSearch = semanticSearch;
@@ -67,24 +68,28 @@ public class ChatSessionService {
 
     public List<ChatMessage> addMessage(UUID sessionId, UUID userId, String userContent) {
         if (userContent == null || userContent.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message content is required");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Message content is required");
         }
 
         ChatSession session = findOwnedSession(sessionId, userId);
 
-        ChatMessage userMsg = messageRepo.save(new ChatMessage(sessionId, ChatMessage.Role.user, userContent));
+        ChatMessage userMsg =
+                messageRepo.save(new ChatMessage(sessionId, ChatMessage.Role.user, userContent));
 
         List<ChatMessage> history = messageRepo.findBySessionIdOrderByCreatedAtAsc(sessionId);
 
         // Set title from first user message
         if (history.size() == 1 && session.getTitle().equals("Nueva conversación")) {
-            session.setTitle(userContent.length() <= 60 ? userContent : userContent.substring(0, 60));
+            session.setTitle(
+                    userContent.length() <= 60 ? userContent : userContent.substring(0, 60));
         }
         List<com.dpswikillm.dto.ChatMessage> prompt = buildPrompt(userContent, history);
 
         String answer = llmClient.chat(prompt);
 
-        ChatMessage assistantMsg = messageRepo.save(new ChatMessage(sessionId, ChatMessage.Role.assistant, answer));
+        ChatMessage assistantMsg =
+                messageRepo.save(new ChatMessage(sessionId, ChatMessage.Role.assistant, answer));
 
         session.touch();
         sessionRepo.save(session);
@@ -92,31 +97,35 @@ public class ChatSessionService {
         return List.of(userMsg, assistantMsg);
     }
 
-    private List<com.dpswikillm.dto.ChatMessage> buildPrompt(String question, List<ChatMessage> history) {
+    private List<com.dpswikillm.dto.ChatMessage> buildPrompt(
+            String question, List<ChatMessage> history) {
         List<SearchResult> hits = semanticSearch.search(question, TOP_K);
         String kbContext = buildKbContext(hits);
 
         List<com.dpswikillm.dto.ChatMessage> messages = new ArrayList<>();
-        messages.add(new com.dpswikillm.dto.ChatMessage("system", promptService.getText("answer-system")));
+        messages.add(
+                new com.dpswikillm.dto.ChatMessage(
+                        "system", promptService.getText("answer-system")));
 
         // Include windowed history (excluding the just-saved user message which is last in history)
-        List<ChatMessage> historyWithoutLast = history.size() > 1
-                ? history.subList(0, history.size() - 1)
-                : List.of();
+        List<ChatMessage> historyWithoutLast =
+                history.size() > 1 ? history.subList(0, history.size() - 1) : List.of();
         int usedChars = 0;
         List<com.dpswikillm.dto.ChatMessage> historyMessages = new ArrayList<>();
         for (int i = historyWithoutLast.size() - 1; i >= 0; i--) {
             ChatMessage m = historyWithoutLast.get(i);
             int len = m.getContent().length();
             if (usedChars + len > MAX_HISTORY_CHARS) break;
-            historyMessages.add(0, new com.dpswikillm.dto.ChatMessage(m.getRole().name(), m.getContent()));
+            historyMessages.add(
+                    0, new com.dpswikillm.dto.ChatMessage(m.getRole().name(), m.getContent()));
             usedChars += len;
         }
         messages.addAll(historyMessages);
 
-        String userPayload = kbContext.isBlank()
-                ? "Question: " + question
-                : "Question: " + question + "\n\nContext:\n" + kbContext;
+        String userPayload =
+                kbContext.isBlank()
+                        ? "Question: " + question
+                        : "Question: " + question + "\n\nContext:\n" + kbContext;
         messages.add(new com.dpswikillm.dto.ChatMessage("user", userPayload));
         return messages;
     }
@@ -137,8 +146,13 @@ public class ChatSessionService {
     }
 
     private ChatSession findOwnedSession(UUID sessionId, UUID userId) {
-        ChatSession session = sessionRepo.findById(sessionId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+        ChatSession session =
+                sessionRepo
+                        .findById(sessionId)
+                        .orElseThrow(
+                                () ->
+                                        new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND, "Session not found"));
         if (!session.getUserId().equals(userId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found");
         }

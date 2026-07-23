@@ -37,8 +37,8 @@ public class PromptController {
     }
 
     @PutMapping("/{key}")
-    public ResponseEntity<LlmPromptDto> updatePrompt(@PathVariable String key,
-                                                      @RequestBody LlmPromptUpdateRequest request) {
+    public ResponseEntity<LlmPromptDto> updatePrompt(
+            @PathVariable String key, @RequestBody LlmPromptUpdateRequest request) {
         try {
             return ResponseEntity.ok(promptService.updateText(key, request.text()));
         } catch (IllegalArgumentException ex) {

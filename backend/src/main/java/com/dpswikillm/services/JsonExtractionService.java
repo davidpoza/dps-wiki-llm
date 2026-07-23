@@ -26,7 +26,10 @@ public class JsonExtractionService {
                 throw new LlmResponseFormatException("Expected a JSON object");
             }
             if (validator != null && !validator.test(node)) {
-                log.warn("LLM response failed shape validation. Parsed keys: {}. Raw response: {}", node.fieldNames(), response);
+                log.warn(
+                        "LLM response failed shape validation. Parsed keys: {}. Raw response: {}",
+                        node.fieldNames(),
+                        response);
                 throw new LlmResponseFormatException("JSON object failed shape validation");
             }
             return node;

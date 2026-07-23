@@ -19,9 +19,12 @@ public class LlmMutationPlanService {
     private final PromptService promptService;
     private final RetryingLlmExecutor retrying;
 
-    public LlmMutationPlanService(LlmClient llmClient, JsonExtractionService jsonExtractionService,
-                                   ObjectMapper objectMapper, PromptService promptService,
-                                   RetryingLlmExecutor retrying) {
+    public LlmMutationPlanService(
+            LlmClient llmClient,
+            JsonExtractionService jsonExtractionService,
+            ObjectMapper objectMapper,
+            PromptService promptService,
+            RetryingLlmExecutor retrying) {
         this.llmClient = llmClient;
         this.jsonExtractionService = jsonExtractionService;
         this.objectMapper = objectMapper;
@@ -31,17 +34,33 @@ public class LlmMutationPlanService {
 
     public MutationPlan requestPlan(NormalizedSourcePayload payload, String sourceNotePath) {
         String systemPrompt = promptService.getText("mutation-plan-system");
-        String userMessage = "Raw path: " + payload.rawPath() + "\nSource note: " + sourceNotePath + "\nContent:\n" + payload.content();
+        String userMessage =
+                "Raw path: "
+                        + payload.rawPath()
+                        + "\nSource note: "
+                        + sourceNotePath
+                        + "\nContent:\n"
+                        + payload.content();
         log.info("Mutation plan system prompt:\n{}", systemPrompt);
-        log.info("Mutation plan user message (first 500 chars):\n{}", userMessage.length() > 500 ? userMessage.substring(0, 500) + "..." : userMessage);
-        JsonNode node = retrying.executeParsing(() -> {
-            String response = llmClient.chat(List.of(
-                    new ChatMessage("system", systemPrompt),
-                    new ChatMessage("user", userMessage)));
-            log.info("Mutation plan LLM raw response:\n{}", response);
-            return jsonExtractionService.extractObject(response,
-                    json -> json.hasNonNull("plan_id") && json.has("page_actions") && json.get("page_actions").isArray());
-        });
+        log.info(
+                "Mutation plan user message (first 500 chars):\n{}",
+                userMessage.length() > 500 ? userMessage.substring(0, 500) + "..." : userMessage);
+        JsonNode node =
+                retrying.executeParsing(
+                        () -> {
+                            String response =
+                                    llmClient.chat(
+                                            List.of(
+                                                    new ChatMessage("system", systemPrompt),
+                                                    new ChatMessage("user", userMessage)));
+                            log.info("Mutation plan LLM raw response:\n{}", response);
+                            return jsonExtractionService.extractObject(
+                                    response,
+                                    json ->
+                                            json.hasNonNull("plan_id")
+                                                    && json.has("page_actions")
+                                                    && json.get("page_actions").isArray());
+                        });
         return objectMapper.convertValue(node, MutationPlan.class);
     }
 

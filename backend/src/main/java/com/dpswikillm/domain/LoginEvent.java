@@ -39,8 +39,14 @@ public class LoginEvent {
 
     protected LoginEvent() {}
 
-    public LoginEvent(User user, String username, String ipAddress, String country, String city,
-                      boolean success, String failureReason) {
+    public LoginEvent(
+            User user,
+            String username,
+            String ipAddress,
+            String country,
+            String city,
+            boolean success,
+            String failureReason) {
         this.user = user;
         this.username = username;
         this.ipAddress = ipAddress;
@@ -50,13 +56,39 @@ public class LoginEvent {
         this.failureReason = failureReason;
     }
 
-    public UUID getId() { return id; }
-    public User getUser() { return user; }
-    public String getUsername() { return username; }
-    public OffsetDateTime getCreatedAt() { return createdAt; }
-    public String getIpAddress() { return ipAddress; }
-    public String getCountry() { return country; }
-    public String getCity() { return city; }
-    public boolean isSuccess() { return success; }
-    public String getFailureReason() { return failureReason; }
+    public UUID getId() {
+        return id;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public String getIpAddress() {
+        return ipAddress;
+    }
+
+    public String getCountry() {
+        return country;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public boolean isSuccess() {
+        return success;
+    }
+
+    public String getFailureReason() {
+        return failureReason;
+    }
 }

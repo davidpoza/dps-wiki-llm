@@ -19,7 +19,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -43,12 +42,13 @@ public class AuthController {
     private final TotpService totpService;
     private final LoginEventService loginEventService;
 
-    public AuthController(AuthenticationManager authenticationManager,
-                          JwtUtil jwtUtil,
-                          UserService userService,
-                          UserRepository userRepository,
-                          TotpService totpService,
-                          LoginEventService loginEventService) {
+    public AuthController(
+            AuthenticationManager authenticationManager,
+            JwtUtil jwtUtil,
+            UserService userService,
+            UserRepository userRepository,
+            TotpService totpService,
+            LoginEventService loginEventService) {
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
         this.userService = userService;
@@ -58,28 +58,32 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request,
-                                   HttpServletRequest httpRequest) {
+    public ResponseEntity<?> login(
+            @Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         try {
-            Authentication auth = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.username(), request.password()));
+            Authentication auth =
+                    authenticationManager.authenticate(
+                            new UsernamePasswordAuthenticationToken(
+                                    request.username(), request.password()));
             UserDetails userDetails = (UserDetails) auth.getPrincipal();
             if (userDetails instanceof User user && user.isTwoFactorEnabled()) {
                 String challengeToken = jwtUtil.generateChallengeToken(user.getUsername());
                 return ResponseEntity.ok(TwoFactorChallengeResponse.required(challengeToken));
             }
-            loginEventService.record((User) userDetails, request.username(), httpRequest, true, null);
+            loginEventService.record(
+                    (User) userDetails, request.username(), httpRequest, true, null);
             return ResponseEntity.ok(buildAuthResponse(userDetails));
         } catch (BadCredentialsException | DisabledException e) {
-            loginEventService.record(null, request.username(), httpRequest, false, "BAD_CREDENTIALS");
+            loginEventService.record(
+                    null, request.username(), httpRequest, false, "BAD_CREDENTIALS");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "Invalid credentials"));
         }
     }
 
     @PostMapping("/login/2fa")
-    public ResponseEntity<?> loginTwoFactor(@Valid @RequestBody TwoFactorLoginRequest request,
-                                             HttpServletRequest httpRequest) {
+    public ResponseEntity<?> loginTwoFactor(
+            @Valid @RequestBody TwoFactorLoginRequest request, HttpServletRequest httpRequest) {
         if (!jwtUtil.validateToken(request.challengeToken())
                 || !JwtUtil.SCOPE_2FA.equals(jwtUtil.extractScope(request.challengeToken()))) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -87,7 +91,8 @@ public class AuthController {
         }
         String username = jwtUtil.extractUsername(request.challengeToken());
         User user = userRepository.findByUsername(username).orElse(null);
-        if (user == null || !user.isTwoFactorEnabled()
+        if (user == null
+                || !user.isTwoFactorEnabled()
                 || !totpService.isValidCode(user.getTwoFactorSecret(), request.code())) {
             loginEventService.record(user, username, httpRequest, false, "INVALID_2FA_CODE");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -99,10 +104,10 @@ public class AuthController {
 
     private AuthResponse buildAuthResponse(UserDetails userDetails) {
         String token = jwtUtil.generateToken(userDetails);
-        List<String> roles = userDetails.getAuthorities().stream()
-                .map(a -> a.getAuthority())
-                .toList();
-        return new AuthResponse(token, jwtUtil.extractExpiration(token), userDetails.getUsername(), roles);
+        List<String> roles =
+                userDetails.getAuthorities().stream().map(a -> a.getAuthority()).toList();
+        return new AuthResponse(
+                token, jwtUtil.extractExpiration(token), userDetails.getUsername(), roles);
     }
 
     @GetMapping("/me")
@@ -110,13 +115,13 @@ public class AuthController {
         if (user == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        return ResponseEntity.ok(Map.of(
-                "id", user.getId(),
-                "username", user.getUsername(),
-                "email", user.getEmail(),
-                "roles", user.getRoleList(),
-                "twoFactorEnabled", user.isTwoFactorEnabled()
-        ));
+        return ResponseEntity.ok(
+                Map.of(
+                        "id", user.getId(),
+                        "username", user.getUsername(),
+                        "email", user.getEmail(),
+                        "roles", user.getRoleList(),
+                        "twoFactorEnabled", user.isTwoFactorEnabled()));
     }
 
     @GetMapping("/login-history")
@@ -128,8 +133,8 @@ public class AuthController {
     }
 
     @PostMapping("/password")
-    public ResponseEntity<?> changePassword(@AuthenticationPrincipal User user,
-                                            @Valid @RequestBody ChangePasswordRequest request) {
+    public ResponseEntity<?> changePassword(
+            @AuthenticationPrincipal User user, @Valid @RequestBody ChangePasswordRequest request) {
         if (user == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -148,19 +153,21 @@ public class AuthController {
         }
         String secret = totpService.generateSecret();
         userService.storeTwoFactorSecret(user.getUsername(), secret);
-        return ResponseEntity.ok(new TwoFactorSetupResponse(
-                secret,
-                totpService.otpauthUri(user.getUsername(), secret),
-                totpService.qrDataUri(user.getUsername(), secret)));
+        return ResponseEntity.ok(
+                new TwoFactorSetupResponse(
+                        secret,
+                        totpService.otpauthUri(user.getUsername(), secret),
+                        totpService.qrDataUri(user.getUsername(), secret)));
     }
 
     @PostMapping("/2fa/confirm")
-    public ResponseEntity<?> confirmTwoFactor(@AuthenticationPrincipal User user,
-                                              @Valid @RequestBody TwoFactorCodeRequest request) {
+    public ResponseEntity<?> confirmTwoFactor(
+            @AuthenticationPrincipal User user, @Valid @RequestBody TwoFactorCodeRequest request) {
         if (user == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        if (user.getTwoFactorSecret() == null || !totpService.isValidCode(user.getTwoFactorSecret(), request.code())) {
+        if (user.getTwoFactorSecret() == null
+                || !totpService.isValidCode(user.getTwoFactorSecret(), request.code())) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("error", "Invalid code"));
         }
@@ -169,8 +176,8 @@ public class AuthController {
     }
 
     @PostMapping("/2fa/disable")
-    public ResponseEntity<?> disableTwoFactor(@AuthenticationPrincipal User user,
-                                              @Valid @RequestBody TwoFactorCodeRequest request) {
+    public ResponseEntity<?> disableTwoFactor(
+            @AuthenticationPrincipal User user, @Valid @RequestBody TwoFactorCodeRequest request) {
         if (user == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -194,10 +201,13 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", "Email already exists"));
         }
-        List<String> roles = (request.roles() != null && !request.roles().isEmpty())
-                ? request.roles()
-                : List.of("ROLE_USER");
-        User created = userService.createUser(request.username(), request.email(), request.password(), roles);
+        List<String> roles =
+                (request.roles() != null && !request.roles().isEmpty())
+                        ? request.roles()
+                        : List.of("ROLE_USER");
+        User created =
+                userService.createUser(
+                        request.username(), request.email(), request.password(), roles);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(Map.of("id", created.getId(), "username", created.getUsername()));
     }

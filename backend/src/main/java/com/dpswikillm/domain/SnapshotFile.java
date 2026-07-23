@@ -10,9 +10,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "snapshot_files")
 public class SnapshotFile {
-    @Id
-    @GeneratedValue
-    private UUID id;
+    @Id @GeneratedValue private UUID id;
 
     private UUID snapshotId;
     private String path;
@@ -26,17 +24,55 @@ public class SnapshotFile {
     private Integer linesAdded;
     private Integer linesDeleted;
 
-    public UUID getId() { return id; }
-    public UUID getSnapshotId() { return snapshotId; }
-    public void setSnapshotId(UUID snapshotId) { this.snapshotId = snapshotId; }
-    public String getPath() { return path; }
-    public void setPath(String path) { this.path = path; }
-    public String getContentBefore() { return contentBefore; }
-    public void setContentBefore(String contentBefore) { this.contentBefore = contentBefore; }
-    public String getContentAfter() { return contentAfter; }
-    public void setContentAfter(String contentAfter) { this.contentAfter = contentAfter; }
-    public Integer getLinesAdded() { return linesAdded; }
-    public void setLinesAdded(Integer linesAdded) { this.linesAdded = linesAdded; }
-    public Integer getLinesDeleted() { return linesDeleted; }
-    public void setLinesDeleted(Integer linesDeleted) { this.linesDeleted = linesDeleted; }
+    public UUID getId() {
+        return id;
+    }
+
+    public UUID getSnapshotId() {
+        return snapshotId;
+    }
+
+    public void setSnapshotId(UUID snapshotId) {
+        this.snapshotId = snapshotId;
+    }
+
+    public String getPath() {
+        return path;
+    }
+
+    public void setPath(String path) {
+        this.path = path;
+    }
+
+    public String getContentBefore() {
+        return contentBefore;
+    }
+
+    public void setContentBefore(String contentBefore) {
+        this.contentBefore = contentBefore;
+    }
+
+    public String getContentAfter() {
+        return contentAfter;
+    }
+
+    public void setContentAfter(String contentAfter) {
+        this.contentAfter = contentAfter;
+    }
+
+    public Integer getLinesAdded() {
+        return linesAdded;
+    }
+
+    public void setLinesAdded(Integer linesAdded) {
+        this.linesAdded = linesAdded;
+    }
+
+    public Integer getLinesDeleted() {
+        return linesDeleted;
+    }
+
+    public void setLinesDeleted(Integer linesDeleted) {
+        this.linesDeleted = linesDeleted;
+    }
 }

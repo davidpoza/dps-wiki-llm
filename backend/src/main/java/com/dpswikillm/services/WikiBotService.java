@@ -16,7 +16,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.client.RestTemplate;
 import org.telegram.telegrambots.longpolling.util.LongPollingSingleThreadUpdateConsumer;
 import org.telegram.telegrambots.meta.api.objects.Update;
-import org.telegram.telegrambots.meta.api.objects.message.Message;
 
 public class WikiBotService implements LongPollingSingleThreadUpdateConsumer {
     private static final Logger log = LoggerFactory.getLogger(WikiBotService.class);
@@ -30,8 +29,12 @@ public class WikiBotService implements LongPollingSingleThreadUpdateConsumer {
 
     private final Map<UUID, Long> pendingJobs = new ConcurrentHashMap<>();
 
-    public WikiBotService(AppProperties props, JobQueueService queueService, JobEventService eventService,
-                          RawIntakeService rawIntakeService, RestTemplate restTemplate) {
+    public WikiBotService(
+            AppProperties props,
+            JobQueueService queueService,
+            JobEventService eventService,
+            RawIntakeService rawIntakeService,
+            RestTemplate restTemplate) {
         this.token = props.telegram().token();
         this.allowedChatId = props.telegram().allowedChatId();
         this.queueService = queueService;
@@ -56,7 +59,8 @@ public class WikiBotService implements LongPollingSingleThreadUpdateConsumer {
                 String url = text.substring("/ingest ".length()).trim();
                 handleIngest(chatId, url);
             } else {
-                String question = text.startsWith("/ask ") ? text.substring("/ask ".length()).trim() : text;
+                String question =
+                        text.startsWith("/ask ") ? text.substring("/ask ".length()).trim() : text;
                 handleAsk(chatId, question);
             }
         } catch (Exception ex) {
@@ -70,10 +74,16 @@ public class WikiBotService implements LongPollingSingleThreadUpdateConsumer {
             sendText(chatId, "Please provide a question after /ask.");
             return;
         }
-        EnqueueJobResponse response = queueService.enqueue(JobType.ANSWER, JobMode.unattended, question);
+        EnqueueJobResponse response =
+                queueService.enqueue(JobType.ANSWER, JobMode.unattended, question);
         pendingJobs.put(response.jobId(), chatId);
-        eventService.registerTerminalListener(response.jobId(), event -> onJobTerminal(event, chatId));
-        sendText(chatId, "Answer job enqueued (position " + response.queuePosition() + "). I'll reply when ready.");
+        eventService.registerTerminalListener(
+                response.jobId(), event -> onJobTerminal(event, chatId));
+        sendText(
+                chatId,
+                "Answer job enqueued (position "
+                        + response.queuePosition()
+                        + "). I'll reply when ready.");
     }
 
     private void handleIngest(long chatId, String url) throws IOException {
@@ -82,10 +92,16 @@ public class WikiBotService implements LongPollingSingleThreadUpdateConsumer {
             return;
         }
         String payloadRef = rawIntakeService.ingestUrl(url);
-        EnqueueJobResponse response = queueService.enqueue(JobType.INGEST, JobMode.unattended, payloadRef);
+        EnqueueJobResponse response =
+                queueService.enqueue(JobType.INGEST, JobMode.unattended, payloadRef);
         pendingJobs.put(response.jobId(), chatId);
-        eventService.registerTerminalListener(response.jobId(), event -> onJobTerminal(event, chatId));
-        sendText(chatId, "Ingest job enqueued (position " + response.queuePosition() + "). I'll reply when done.");
+        eventService.registerTerminalListener(
+                response.jobId(), event -> onJobTerminal(event, chatId));
+        sendText(
+                chatId,
+                "Ingest job enqueued (position "
+                        + response.queuePosition()
+                        + "). I'll reply when done.");
     }
 
     private void onJobTerminal(JobEvent event, long chatId) {
@@ -103,7 +119,8 @@ public class WikiBotService implements LongPollingSingleThreadUpdateConsumer {
     void sendText(long chatId, String text) {
         try {
             String url = "https://api.telegram.org/bot" + token + "/sendMessage";
-            restTemplate.postForEntity(url, Map.of("chat_id", String.valueOf(chatId), "text", text), Map.class);
+            restTemplate.postForEntity(
+                    url, Map.of("chat_id", String.valueOf(chatId), "text", text), Map.class);
         } catch (Exception ex) {
             log.error("Failed to send Telegram message to chat {}", chatId, ex);
         }

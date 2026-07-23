@@ -46,7 +46,9 @@ public class JobEventService {
     }
 
     private boolean isTerminal(JobStatus status) {
-        return status == JobStatus.COMPLETED || status == JobStatus.FAILED || status == JobStatus.REVERTED;
+        return status == JobStatus.COMPLETED
+                || status == JobStatus.FAILED
+                || status == JobStatus.REVERTED;
     }
 
     int subscriberCount() {

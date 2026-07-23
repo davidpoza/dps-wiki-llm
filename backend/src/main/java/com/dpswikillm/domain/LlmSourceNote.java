@@ -9,5 +9,4 @@ public record LlmSourceNote(
         List<String> openQuestions,
         String generatedBy,
         String model,
-        List<String> keywords
-) {}
+        List<String> keywords) {}

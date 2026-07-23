@@ -32,15 +32,28 @@ public class LlmPrompt {
         this.text = text;
     }
 
-    public String getKey() { return key; }
-    public String getName() { return name; }
-    public String getText() { return text; }
-    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public String getKey() {
+        return key;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getText() {
+        return text;
+    }
+
+    public OffsetDateTime getUpdatedAt() {
+        return updatedAt;
+    }
 
     public void setText(String text) {
         this.text = text;
     }
 
     @PreUpdate
-    void onUpdate() { this.updatedAt = OffsetDateTime.now(); }
+    void onUpdate() {
+        this.updatedAt = OffsetDateTime.now();
+    }
 }

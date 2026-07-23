@@ -19,14 +19,19 @@ public class TelegramBotConfig {
     private static final Logger log = LoggerFactory.getLogger(TelegramBotConfig.class);
 
     @Bean
-    public WikiBotService wikiBotService(AppProperties props, JobQueueService queueService,
-                                         JobEventService eventService, RawIntakeService rawIntakeService) {
+    public WikiBotService wikiBotService(
+            AppProperties props,
+            JobQueueService queueService,
+            JobEventService eventService,
+            RawIntakeService rawIntakeService) {
         log.info("Telegram bot enabled for chat {}", props.telegram().allowedChatId());
-        return new WikiBotService(props, queueService, eventService, rawIntakeService, new RestTemplate());
+        return new WikiBotService(
+                props, queueService, eventService, rawIntakeService, new RestTemplate());
     }
 
     @Bean
-    public SpringLongPollingBot springLongPollingBot(AppProperties props, WikiBotService wikiBotService) {
+    public SpringLongPollingBot springLongPollingBot(
+            AppProperties props, WikiBotService wikiBotService) {
         String token = props.telegram().token();
         return new SpringLongPollingBot() {
             @Override

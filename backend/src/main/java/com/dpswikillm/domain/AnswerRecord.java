@@ -7,5 +7,4 @@ public record AnswerRecord(
         String answer,
         List<String> evidencePaths,
         String artifactPath,
-        boolean shouldReviewForFeedback
-) {}
+        boolean shouldReviewForFeedback) {}

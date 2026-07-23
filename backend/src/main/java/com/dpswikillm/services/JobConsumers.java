@@ -1,8 +1,8 @@
 package com.dpswikillm.services;
 
 import com.dpswikillm.config.RabbitConfig;
-import com.dpswikillm.domain.JobType;
 import com.dpswikillm.domain.JobStatus;
+import com.dpswikillm.domain.JobType;
 import com.dpswikillm.dto.JobMessage;
 import com.dpswikillm.repositories.JobRepository;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -17,10 +17,13 @@ public class JobConsumers {
     private final EnrichPipelineService enrichPipelineService;
     private final JobRepository jobRepository;
 
-    public JobConsumers(JobLifecycleService lifecycleService, IngestPipelineService ingestPipelineService,
-                        AnswerPipelineService answerPipelineService,
-                        JobRevertService jobRevertService, EnrichPipelineService enrichPipelineService,
-                        JobRepository jobRepository) {
+    public JobConsumers(
+            JobLifecycleService lifecycleService,
+            IngestPipelineService ingestPipelineService,
+            AnswerPipelineService answerPipelineService,
+            JobRevertService jobRevertService,
+            EnrichPipelineService enrichPipelineService,
+            JobRepository jobRepository) {
         this.lifecycleService = lifecycleService;
         this.ingestPipelineService = ingestPipelineService;
         this.answerPipelineService = answerPipelineService;
@@ -31,10 +34,14 @@ public class JobConsumers {
 
     @RabbitListener(queues = RabbitConfig.WRITE_QUEUE)
     public void consumeWriteJob(JobMessage message) {
-        if (jobRepository.findById(message.jobId()).map(j -> j.getStatus() == JobStatus.CANCELLED).orElse(false)) {
+        if (jobRepository
+                .findById(message.jobId())
+                .map(j -> j.getStatus() == JobStatus.CANCELLED)
+                .orElse(false)) {
             return;
         }
-        lifecycleService.transition(message.jobId(), JobStatus.STARTED, "started", "Write job started");
+        lifecycleService.transition(
+                message.jobId(), JobStatus.STARTED, "started", "Write job started");
         try {
             if (message.jobType() == JobType.INGEST) {
                 ingestPipelineService.run(jobRepository.findById(message.jobId()).orElseThrow());
@@ -48,23 +55,34 @@ public class JobConsumers {
                 enrichPipelineService.run(jobRepository.findById(message.jobId()).orElseThrow());
                 return;
             }
-            lifecycleService.transition(message.jobId(), JobStatus.PROGRESS, "dispatch", "Write pipeline dispatch placeholder");
-            lifecycleService.transition(message.jobId(), JobStatus.COMPLETED, "completed", "Write job completed");
+            lifecycleService.transition(
+                    message.jobId(),
+                    JobStatus.PROGRESS,
+                    "dispatch",
+                    "Write pipeline dispatch placeholder");
+            lifecycleService.transition(
+                    message.jobId(), JobStatus.COMPLETED, "completed", "Write job completed");
         } catch (Exception ex) {
-            lifecycleService.transition(message.jobId(), JobStatus.FAILED, "failed", ex.getMessage());
+            lifecycleService.transition(
+                    message.jobId(), JobStatus.FAILED, "failed", ex.getMessage());
         }
     }
 
     @RabbitListener(queues = RabbitConfig.ANSWER_QUEUE)
     public void consumeAnswerJob(JobMessage message) {
-        if (jobRepository.findById(message.jobId()).map(j -> j.getStatus() == JobStatus.CANCELLED).orElse(false)) {
+        if (jobRepository
+                .findById(message.jobId())
+                .map(j -> j.getStatus() == JobStatus.CANCELLED)
+                .orElse(false)) {
             return;
         }
-        lifecycleService.transition(message.jobId(), JobStatus.STARTED, "started", "Answer job started");
+        lifecycleService.transition(
+                message.jobId(), JobStatus.STARTED, "started", "Answer job started");
         try {
             answerPipelineService.run(jobRepository.findById(message.jobId()).orElseThrow());
         } catch (Exception ex) {
-            lifecycleService.transition(message.jobId(), JobStatus.FAILED, "failed", ex.getMessage());
+            lifecycleService.transition(
+                    message.jobId(), JobStatus.FAILED, "failed", ex.getMessage());
         }
     }
 }

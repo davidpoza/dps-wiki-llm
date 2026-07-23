@@ -19,7 +19,9 @@ public interface SnapshotFileRepository extends JpaRepository<SnapshotFile, UUID
 
     void deleteBySnapshotId(UUID snapshotId);
 
-    @Query(value = """
+    @Query(
+            value =
+                    """
             SELECT new com.dpswikillm.dto.FileHistoryEntryDto(
                 sf.id, sf.path, s.source,
                 COALESCE(sf.linesAdded, 0), COALESCE(sf.linesDeleted, 0),
@@ -31,7 +33,8 @@ public interface SnapshotFileRepository extends JpaRepository<SnapshotFile, UUID
               AND (sf.linesAdded IS NULL OR sf.linesAdded > 0 OR sf.linesDeleted > 0)
             ORDER BY s.createdAt DESC
             """,
-            countQuery = """
+            countQuery =
+                    """
             SELECT COUNT(sf)
             FROM SnapshotFile sf, com.dpswikillm.domain.Snapshot s
             WHERE sf.snapshotId = s.id

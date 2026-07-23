@@ -22,24 +22,31 @@ public class ChatSessionVaultExportService {
     private final ChatMessageRepository messageRepo;
     private final VaultPathResolver pathResolver;
 
-    public ChatSessionVaultExportService(ChatSessionRepository sessionRepo,
-                                         ChatMessageRepository messageRepo,
-                                         VaultPathResolver pathResolver) {
+    public ChatSessionVaultExportService(
+            ChatSessionRepository sessionRepo,
+            ChatMessageRepository messageRepo,
+            VaultPathResolver pathResolver) {
         this.sessionRepo = sessionRepo;
         this.messageRepo = messageRepo;
         this.pathResolver = pathResolver;
     }
 
     public String exportToVault(UUID sessionId, UUID userId) throws IOException {
-        ChatSession session = sessionRepo.findById(sessionId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
+        ChatSession session =
+                sessionRepo
+                        .findById(sessionId)
+                        .orElseThrow(
+                                () ->
+                                        new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND, "Session not found"));
         if (!session.getUserId().equals(userId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found");
         }
 
         List<ChatMessage> messages = messageRepo.findBySessionIdOrderByCreatedAtAsc(sessionId);
         if (messages.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot export an empty session");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Cannot export an empty session");
         }
 
         String slug = slugify(session.getTitle());

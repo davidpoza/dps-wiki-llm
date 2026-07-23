@@ -14,8 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class FileServiceTests {
 
-    @TempDir
-    Path vault;
+    @TempDir Path vault;
 
     @Test
     void renderPdfMarkdownResolvesObsidianImageEmbeds() throws Exception {
@@ -24,13 +23,15 @@ class FileServiceTests {
         ResourceSettingsService resourceSettingsService = mock(ResourceSettingsService.class);
         when(resourceSettingsService.resolveResourcePath("Pasted image 20260618163907.png"))
                 .thenReturn("resources/Pasted image 20260618163907.png");
-        FileService service = new FileService(
-                resolver(),
-                mock(SnapshotService.class),
-                mock(WebDavSyncService.class),
-                resourceSettingsService);
+        FileService service =
+                new FileService(
+                        resolver(),
+                        mock(SnapshotService.class),
+                        mock(WebDavSyncService.class),
+                        resourceSettingsService);
 
-        String rendered = service.renderPdfMarkdown("before\n![[Pasted image 20260618163907.png]]\nafter");
+        String rendered =
+                service.renderPdfMarkdown("before\n![[Pasted image 20260618163907.png]]\nafter");
 
         assertThat(rendered).contains("![Pasted image 20260618163907.png](<file:");
         assertThat(rendered).contains(">){.obsidian-resource-image}");
@@ -39,7 +40,8 @@ class FileServiceTests {
 
     @Test
     void stripsFrontmatterTitleWhenBodyRepeatsItAsHeading() {
-        String markdown = """
+        String markdown =
+                """
                 ---
                 title: "Code Is Cheap Now"
                 source: upload
@@ -60,7 +62,8 @@ class FileServiceTests {
 
     @Test
     void keepsFrontmatterTitleWhenBodyHasNoMatchingHeading() {
-        String markdown = """
+        String markdown =
+                """
                 ---
                 title: "Only In Frontmatter"
                 source: upload
@@ -82,7 +85,8 @@ class FileServiceTests {
 
     @Test
     void leavesMarkdownUntouchedWhenFrontmatterHasNoTitle() {
-        String markdown = """
+        String markdown =
+                """
                 ---
                 source: upload
                 filename: note.md
@@ -97,7 +101,8 @@ class FileServiceTests {
 
     @Test
     void stripsFrontmatterTitleWhenBodyHasH1WithDifferentText() {
-        String markdown = """
+        String markdown =
+                """
                 ---
                 title: "My Note"
                 source: upload
@@ -116,7 +121,8 @@ class FileServiceTests {
 
     @Test
     void keepsFrontmatterTitleWhenBodyHasOnlyDeeperHeadings() {
-        String markdown = """
+        String markdown =
+                """
                 ---
                 title:   "Mi segundo cerebro: una wiki"
                 source: upload
@@ -142,11 +148,22 @@ class FileServiceTests {
     }
 
     private VaultPathResolver resolver() {
-        return new VaultPathResolver(new AppProperties(
-                vault.toString(),
-                List.of("http://localhost:4200"),
-                new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1), 8),
-                new AppProperties.Llm("http://localhost:11434/v1", "gpt-oss", "test"),
-                new AppProperties.Telegram("", ""), null, null, null, null));
+        return new VaultPathResolver(
+                new AppProperties(
+                        vault.toString(),
+                        List.of("http://localhost:4200"),
+                        new AppProperties.Embeddings(
+                                "http://embeddings:8080",
+                                "multilingual-e5-small",
+                                "",
+                                384,
+                                Duration.ofSeconds(1),
+                                8),
+                        new AppProperties.Llm("http://localhost:11434/v1", "gpt-oss", "test"),
+                        new AppProperties.Telegram("", ""),
+                        null,
+                        null,
+                        null,
+                        null));
     }
 }

@@ -24,13 +24,14 @@ public class EnrichPipelineService {
     private final JobRepository jobRepository;
     private final ObjectMapper objectMapper;
 
-    public EnrichPipelineService(NoteEnrichService noteEnrichService,
-                                 MarkdownService markdownService,
-                                 FileService fileService,
-                                 SnapshotService snapshotService,
-                                 JobLifecycleService lifecycleService,
-                                 JobRepository jobRepository,
-                                 ObjectMapper objectMapper) {
+    public EnrichPipelineService(
+            NoteEnrichService noteEnrichService,
+            MarkdownService markdownService,
+            FileService fileService,
+            SnapshotService snapshotService,
+            JobLifecycleService lifecycleService,
+            JobRepository jobRepository,
+            ObjectMapper objectMapper) {
         this.noteEnrichService = noteEnrichService;
         this.markdownService = markdownService;
         this.fileService = fileService;
@@ -44,19 +45,23 @@ public class EnrichPipelineService {
         String path = job.getPayloadRef();
         log.info("Job {}: enriching note at path '{}'", job.getId(), path);
 
-        Snapshot snapshot = snapshotService.beginSnapshot(job.getId().toString(), "enrich", "Enrich note: " + path);
+        Snapshot snapshot =
+                snapshotService.beginSnapshot(
+                        job.getId().toString(), "enrich", "Enrich note: " + path);
         PipelineTx tx = new PipelineTx();
         tx.onRollback("delete-snapshot", () -> snapshotService.deleteSnapshot(snapshot.getId()));
 
         try {
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "snapshot", "Capturing current state");
+            lifecycleService.transition(
+                    job.getId(), JobStatus.PROGRESS, "snapshot", "Capturing current state");
             snapshotService.captureFile(snapshot, path);
 
             lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "llm", "Calling LLM");
             String content = fileService.getContent(path);
             NoteEnrichService.Result result = noteEnrichService.enrich(content);
 
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "apply", "Applying enrichment");
+            lifecycleService.transition(
+                    job.getId(), JobStatus.PROGRESS, "apply", "Applying enrichment");
             String enriched = applyEnrichment(content, result, filename(path));
             fileService.saveContent(path, enriched);
 
@@ -67,7 +72,8 @@ public class EnrichPipelineService {
             jobRepository.save(job);
 
             lifecycleService.fileEvent(job, path, "update");
-            lifecycleService.transition(job.getId(), JobStatus.COMPLETED, "completed", "Note enriched");
+            lifecycleService.transition(
+                    job.getId(), JobStatus.COMPLETED, "completed", "Note enriched");
             tx.clear();
         } catch (Exception ex) {
             tx.rollback();
@@ -76,7 +82,8 @@ public class EnrichPipelineService {
         }
     }
 
-    private String applyEnrichment(String content, NoteEnrichService.Result result, String fallbackTitle) {
+    private String applyEnrichment(
+            String content, NoteEnrichService.Result result, String fallbackTitle) {
         MarkdownDocument doc = markdownService.parse(content);
 
         Map<String, List<String>> sectionUpdates = new LinkedHashMap<>();

@@ -28,13 +28,14 @@ public class JobRevertService {
     private final JobLifecycleService lifecycleService;
     private final ObjectMapper objectMapper;
 
-    public JobRevertService(JobRepository jobRepository,
-                            OperationRepository operationRepository,
-                            SnapshotService snapshotService,
-                            ReindexService reindexService,
-                            EmbeddingIndexService embeddingIndexService,
-                            JobLifecycleService lifecycleService,
-                            ObjectMapper objectMapper) {
+    public JobRevertService(
+            JobRepository jobRepository,
+            OperationRepository operationRepository,
+            SnapshotService snapshotService,
+            ReindexService reindexService,
+            EmbeddingIndexService embeddingIndexService,
+            JobLifecycleService lifecycleService,
+            ObjectMapper objectMapper) {
         this.jobRepository = jobRepository;
         this.operationRepository = operationRepository;
         this.snapshotService = snapshotService;
@@ -53,8 +54,11 @@ public class JobRevertService {
         List<String> affectedPaths = affectedPaths(target);
         List<Job> conflicts = conflictsFor(target, affectedPaths);
         if (!conflicts.isEmpty()) {
-            String message = "Revert conflict: later jobs touched " + String.join(", ", conflictPaths(conflicts, affectedPaths));
-            lifecycleService.transition(revertJob.getId(), JobStatus.FAILED, "revert-conflict", message);
+            String message =
+                    "Revert conflict: later jobs touched "
+                            + String.join(", ", conflictPaths(conflicts, affectedPaths));
+            lifecycleService.transition(
+                    revertJob.getId(), JobStatus.FAILED, "revert-conflict", message);
             return;
         }
 
@@ -62,13 +66,19 @@ public class JobRevertService {
         List<String> snapshotPaths = snapshotService.getPathsForSnapshot(targetSnapshotId);
         List<SnapshotFile> targetSnapshotFiles = snapshotService.getSnapshotFiles(targetSnapshotId);
 
-        Snapshot revertSnapshot = snapshotService.beginSnapshot(
-                revertJob.getId().toString(), "job-revert", "Revert job " + target.getId());
+        Snapshot revertSnapshot =
+                snapshotService.beginSnapshot(
+                        revertJob.getId().toString(), "job-revert", "Revert job " + target.getId());
         PipelineTx tx = new PipelineTx();
-        tx.onRollback("delete-revert-snapshot", () -> snapshotService.deleteSnapshot(revertSnapshot.getId()));
+        tx.onRollback(
+                "delete-revert-snapshot",
+                () -> snapshotService.deleteSnapshot(revertSnapshot.getId()));
 
         try {
-            lifecycleService.transition(revertJob.getId(), JobStatus.PROGRESS, "snapshot-revert",
+            lifecycleService.transition(
+                    revertJob.getId(),
+                    JobStatus.PROGRESS,
+                    "snapshot-revert",
                     "Preparing revert for job " + target.getId());
 
             for (String path : snapshotPaths) {
@@ -86,8 +96,8 @@ public class JobRevertService {
                 snapshotService.recordAfter(revertSnapshot, path);
             }
 
-            lifecycleService.transition(revertJob.getId(), JobStatus.PROGRESS, "reindex",
-                    "Reindexing after revert");
+            lifecycleService.transition(
+                    revertJob.getId(), JobStatus.PROGRESS, "reindex", "Reindexing after revert");
             reindexService.reindexWiki();
             embeddingIndexService.embedIncremental();
 
@@ -101,14 +111,18 @@ public class JobRevertService {
             jobRepository.save(target);
 
             recordOperation(revertJob, affectedPaths.size(), revertSnapshot.getId().toString());
-            lifecycleService.transition(target.getId(), JobStatus.REVERTED, "reverted",
+            lifecycleService.transition(
+                    target.getId(),
+                    JobStatus.REVERTED,
+                    "reverted",
                     "Job reverted by " + revertJob.getId());
-            lifecycleService.transition(revertJob.getId(), JobStatus.COMPLETED, "completed",
-                    "Revert completed");
+            lifecycleService.transition(
+                    revertJob.getId(), JobStatus.COMPLETED, "completed", "Revert completed");
             tx.clear();
         } catch (Exception ex) {
             tx.rollback();
-            lifecycleService.transition(revertJob.getId(), JobStatus.FAILED, "failed", ex.getMessage());
+            lifecycleService.transition(
+                    revertJob.getId(), JobStatus.FAILED, "failed", ex.getMessage());
             throw ex;
         }
     }
@@ -120,8 +134,10 @@ public class JobRevertService {
         if (target.getStatus() == JobStatus.REVERTED) {
             throw new IllegalArgumentException("Job is already reverted");
         }
-        if (target.getStatus() != JobStatus.COMPLETED && target.getStatus() != JobStatus.AWAITING_REVIEW) {
-            throw new IllegalArgumentException("Only completed state-mutating jobs can be reverted");
+        if (target.getStatus() != JobStatus.COMPLETED
+                && target.getStatus() != JobStatus.AWAITING_REVIEW) {
+            throw new IllegalArgumentException(
+                    "Only completed state-mutating jobs can be reverted");
         }
         if (target.getSnapshotId() == null) {
             throw new IllegalArgumentException("Target job has no snapshot");
@@ -136,7 +152,10 @@ public class JobRevertService {
         return jobRepository.findByCreatedAtAfterOrderByCreatedAtAsc(target.getCreatedAt()).stream()
                 .filter(job -> !job.getId().equals(target.getId()))
                 .filter(job -> job.getType() != JobType.ANSWER)
-                .filter(job -> job.getStatus() == JobStatus.COMPLETED || job.getStatus() == JobStatus.AWAITING_REVIEW)
+                .filter(
+                        job ->
+                                job.getStatus() == JobStatus.COMPLETED
+                                        || job.getStatus() == JobStatus.AWAITING_REVIEW)
                 .filter(job -> overlaps(targetPaths, affectedPaths(job)))
                 .toList();
     }
@@ -168,7 +187,8 @@ public class JobRevertService {
             return List.of();
         }
         try {
-            return objectMapper.readValue(job.getAffectedPaths(), new TypeReference<List<String>>() {});
+            return objectMapper.readValue(
+                    job.getAffectedPaths(), new TypeReference<List<String>>() {});
         } catch (Exception ex) {
             throw new IllegalArgumentException("Invalid affected paths for job " + job.getId(), ex);
         }

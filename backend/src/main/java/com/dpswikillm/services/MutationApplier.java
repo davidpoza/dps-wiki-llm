@@ -23,7 +23,10 @@ public class MutationApplier {
     private final MarkdownService markdownService;
     private final ObjectMapper objectMapper;
 
-    public MutationApplier(VaultPathResolver pathResolver, MarkdownService markdownService, ObjectMapper objectMapper) {
+    public MutationApplier(
+            VaultPathResolver pathResolver,
+            MarkdownService markdownService,
+            ObjectMapper objectMapper) {
         this.pathResolver = pathResolver;
         this.markdownService = markdownService;
         this.objectMapper = objectMapper;
@@ -42,21 +45,27 @@ public class MutationApplier {
         return result;
     }
 
-    private void applyAction(MutationPlan plan, MutationAction action, Map<String, LedgerRecord> ledger,
-                             MutationResult result) throws IOException {
+    private void applyAction(
+            MutationPlan plan,
+            MutationAction action,
+            Map<String, LedgerRecord> ledger,
+            MutationResult result)
+            throws IOException {
         if (action.action() == MutationActionType.noop) {
             result.skipped().add(action.path());
             return;
         }
         String relativePath = pathResolver.normalizeRelativePath(action.path());
-        if (action.action() == MutationActionType.create && relativePath.startsWith("wiki/topics/")) {
+        if (action.action() == MutationActionType.create
+                && relativePath.startsWith("wiki/topics/")) {
             throw new IllegalArgumentException("Refusing to auto-create topic: " + relativePath);
         }
 
         if (action.idempotencyKey() != null && ledger.containsKey(action.idempotencyKey())) {
             LedgerRecord record = ledger.get(action.idempotencyKey());
             if (!record.path().equals(relativePath)) {
-                throw new IllegalArgumentException("Idempotency key collision for " + action.idempotencyKey());
+                throw new IllegalArgumentException(
+                        "Idempotency key collision for " + action.idempotencyKey());
             }
             result.idempotentHits().add(action.idempotencyKey());
             return;
@@ -70,7 +79,9 @@ public class MutationApplier {
         Files.createDirectories(absolutePath.getParent());
 
         String existing = exists ? Files.readString(absolutePath, StandardCharsets.UTF_8) : "";
-        String rendered = markdownService.mergeAndRender(existing, action.title(), action.frontmatter(), action.sections());
+        String rendered =
+                markdownService.mergeAndRender(
+                        existing, action.title(), action.frontmatter(), action.sections());
         Files.writeString(absolutePath, rendered, StandardCharsets.UTF_8);
 
         if (exists) {
@@ -79,7 +90,9 @@ public class MutationApplier {
             result.created().add(relativePath);
         }
         if (action.idempotencyKey() != null && !action.idempotencyKey().isBlank()) {
-            ledger.put(action.idempotencyKey(), new LedgerRecord(relativePath, plan.planId(), Instant.now().toString()));
+            ledger.put(
+                    action.idempotencyKey(),
+                    new LedgerRecord(relativePath, plan.planId(), Instant.now().toString()));
         }
     }
 

@@ -37,10 +37,12 @@ class ConnectionDiscoveryServiceTests {
     void setUp() {
         semanticSearch = mock(SemanticSearchService.class);
         candidateRepository = mock(JobConnectionCandidateRepository.class);
-        when(candidateRepository.saveAll(any())).thenAnswer(invocation -> {
-            Collection<JobConnectionCandidate> saved = invocation.getArgument(0);
-            return new ArrayList<>(saved);
-        });
+        when(candidateRepository.saveAll(any()))
+                .thenAnswer(
+                        invocation -> {
+                            Collection<JobConnectionCandidate> saved = invocation.getArgument(0);
+                            return new ArrayList<>(saved);
+                        });
         JobLifecycleService lifecycle = mock(JobLifecycleService.class);
         service = new ConnectionDiscoveryService(semanticSearch, candidateRepository, lifecycle);
     }
@@ -49,38 +51,60 @@ class ConnectionDiscoveryServiceTests {
     void addsTopicCandidateWhenTopicAboveThreshold() {
         when(semanticSearch.search(anyString(), anyInt())).thenReturn(List.of());
         when(semanticSearch.searchByType(anyString(), eq("topic"), anyInt()))
-                .thenReturn(List.of(new SearchResult("wiki/topics/ai.md", "ai", "topic", 0.83, "body")));
+                .thenReturn(
+                        List.of(
+                                new SearchResult(
+                                        "wiki/topics/ai.md", "ai", "topic", 0.83, "body")));
 
-        List<JobConnectionCandidate> result = service.discoverAndPersist(job(), payload(), SOURCE_NOTE, emptyPlan());
+        List<JobConnectionCandidate> result =
+                service.discoverAndPersist(job(), payload(), SOURCE_NOTE, emptyPlan());
 
-        assertThat(result).anySatisfy(candidate -> {
-            assertThat(candidate.getTargetPath()).isEqualTo("wiki/topics/ai.md");
-            assertThat(candidate.getSource()).isEqualTo(ConnectionCandidateSource.topic);
-        });
+        assertThat(result)
+                .anySatisfy(
+                        candidate -> {
+                            assertThat(candidate.getTargetPath()).isEqualTo("wiki/topics/ai.md");
+                            assertThat(candidate.getSource())
+                                    .isEqualTo(ConnectionCandidateSource.topic);
+                        });
     }
 
     @Test
     void skipsTopicBelowThresholdAndEmptyIndex() {
         when(semanticSearch.search(anyString(), anyInt())).thenReturn(List.of());
         when(semanticSearch.searchByType(anyString(), eq("topic"), anyInt()))
-                .thenReturn(List.of(new SearchResult("wiki/topics/ai.md", "ai", "topic", 0.50, "body")));
-        assertThat(service.discoverAndPersist(job(), payload(), SOURCE_NOTE, emptyPlan())).isEmpty();
+                .thenReturn(
+                        List.of(
+                                new SearchResult(
+                                        "wiki/topics/ai.md", "ai", "topic", 0.50, "body")));
+        assertThat(service.discoverAndPersist(job(), payload(), SOURCE_NOTE, emptyPlan()))
+                .isEmpty();
 
         when(semanticSearch.searchByType(anyString(), eq("topic"), anyInt())).thenReturn(List.of());
-        assertThat(service.discoverAndPersist(job(), payload(), SOURCE_NOTE, emptyPlan())).isEmpty();
+        assertThat(service.discoverAndPersist(job(), payload(), SOURCE_NOTE, emptyPlan()))
+                .isEmpty();
     }
 
     @Test
     void doesNotDuplicateTopicAlreadyProposedBySemanticSearch() {
         when(semanticSearch.search(anyString(), anyInt()))
-                .thenReturn(List.of(new SearchResult("wiki/topics/ai.md", "ai", "topic", 0.90, "body")));
+                .thenReturn(
+                        List.of(
+                                new SearchResult(
+                                        "wiki/topics/ai.md", "ai", "topic", 0.90, "body")));
         when(semanticSearch.searchByType(anyString(), eq("topic"), anyInt()))
-                .thenReturn(List.of(new SearchResult("wiki/topics/ai.md", "ai", "topic", 0.83, "body")));
+                .thenReturn(
+                        List.of(
+                                new SearchResult(
+                                        "wiki/topics/ai.md", "ai", "topic", 0.83, "body")));
 
-        List<JobConnectionCandidate> result = service.discoverAndPersist(job(), payload(), SOURCE_NOTE, emptyPlan());
+        List<JobConnectionCandidate> result =
+                service.discoverAndPersist(job(), payload(), SOURCE_NOTE, emptyPlan());
 
-        assertThat(result).filteredOn(candidate -> candidate.getTargetPath().equals("wiki/topics/ai.md")).hasSize(1);
-        assertThat(result).noneMatch(candidate -> candidate.getSource() == ConnectionCandidateSource.topic);
+        assertThat(result)
+                .filteredOn(candidate -> candidate.getTargetPath().equals("wiki/topics/ai.md"))
+                .hasSize(1);
+        assertThat(result)
+                .noneMatch(candidate -> candidate.getSource() == ConnectionCandidateSource.topic);
     }
 
     private Job job() {
@@ -90,8 +114,17 @@ class ConnectionDiscoveryServiceTests {
     }
 
     private NormalizedSourcePayload payload() {
-        return new NormalizedSourcePayload("id", SourceKind.web, Instant.now(), "raw/inbox/input.md",
-                "transformers", "content", null, "checksum", Map.of(), null);
+        return new NormalizedSourcePayload(
+                "id",
+                SourceKind.web,
+                Instant.now(),
+                "raw/inbox/input.md",
+                "transformers",
+                "content",
+                null,
+                "checksum",
+                Map.of(),
+                null);
     }
 
     private MutationPlan emptyPlan() {

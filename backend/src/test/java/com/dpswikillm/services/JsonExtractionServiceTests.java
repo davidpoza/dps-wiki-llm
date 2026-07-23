@@ -11,14 +11,20 @@ class JsonExtractionServiceTests {
 
     @Test
     void extractsJsonObjectFromText() {
-        var node = service.extractObject("Here is the plan: {\"summary\":\"ok\"}", json -> json.hasNonNull("summary"));
+        var node =
+                service.extractObject(
+                        "Here is the plan: {\"summary\":\"ok\"}",
+                        json -> json.hasNonNull("summary"));
 
         assertThat(node.get("summary").asText()).isEqualTo("ok");
     }
 
     @Test
     void rejectsInvalidShape() {
-        assertThatThrownBy(() -> service.extractObject("{\"summary\":\"\"}", json -> json.hasNonNull("missing")))
+        assertThatThrownBy(
+                        () ->
+                                service.extractObject(
+                                        "{\"summary\":\"\"}", json -> json.hasNonNull("missing")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("shape validation");
     }

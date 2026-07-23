@@ -16,9 +16,22 @@ import org.springframework.stereotype.Service;
 public class MutationGuardrailService {
     private static final Logger log = LoggerFactory.getLogger(MutationGuardrailService.class);
 
-    private static final Set<String> AMBIGUOUS_PLURALS = Set.of(
-            "analyses", "theses", "bases", "crises", "axes", "indices", "matrices",
-            "vertices", "criteria", "phenomena", "data", "media", "alumni", "cacti");
+    private static final Set<String> AMBIGUOUS_PLURALS =
+            Set.of(
+                    "analyses",
+                    "theses",
+                    "bases",
+                    "crises",
+                    "axes",
+                    "indices",
+                    "matrices",
+                    "vertices",
+                    "criteria",
+                    "phenomena",
+                    "data",
+                    "media",
+                    "alumni",
+                    "cacti");
 
     private final VaultPathResolver pathResolver;
 
@@ -29,15 +42,22 @@ public class MutationGuardrailService {
     public GuardrailResult guardrail(MutationPlan plan, String rawPath, String sourceNotePath) {
         List<MutationAction> safe = new ArrayList<>();
         List<String> rejections = new ArrayList<>();
-        for (MutationAction action : plan.pageActions() == null ? List.<MutationAction>of() : plan.pageActions()) {
+        for (MutationAction action :
+                plan.pageActions() == null ? List.<MutationAction>of() : plan.pageActions()) {
             MutationAction normalized = normalizeConceptSlug(action);
             String rejection = rejectionReason(normalized, rawPath, sourceNotePath);
             if (rejection == null) {
                 safe.add(normalized);
             } else {
                 rejections.add(normalized.path() + ": " + rejection);
-                safe.add(new MutationAction(MutationActionType.noop, normalized.path(), normalized.title(),
-                        normalized.frontmatter(), normalized.sections(), normalized.idempotencyKey()));
+                safe.add(
+                        new MutationAction(
+                                MutationActionType.noop,
+                                normalized.path(),
+                                normalized.title(),
+                                normalized.frontmatter(),
+                                normalized.sections(),
+                                normalized.idempotencyKey()));
             }
         }
         return new GuardrailResult(new MutationPlan(plan.planId(), safe), rejections);
@@ -54,13 +74,20 @@ public class MutationGuardrailService {
         String filename = path.substring("wiki/concepts/".length(), path.length() - ".md".length());
         String singularized = singularizeSlug(filename);
         if (singularized == null) {
-            log.warn("Concept slug '{}' appears to be an irregular plural — cannot auto-singularize; action will be rejected", filename);
+            log.warn(
+                    "Concept slug '{}' appears to be an irregular plural — cannot auto-singularize; action will be rejected",
+                    filename);
             return action;
         }
         if (!singularized.equals(filename)) {
             log.info("Concept slug normalized from '{}' to '{}'", filename, singularized);
-            return new MutationAction(action.action(), "wiki/concepts/" + singularized + ".md",
-                    action.title(), action.frontmatter(), action.sections(), action.idempotencyKey());
+            return new MutationAction(
+                    action.action(),
+                    "wiki/concepts/" + singularized + ".md",
+                    action.title(),
+                    action.frontmatter(),
+                    action.sections(),
+                    action.idempotencyKey());
         }
         return action;
     }
@@ -103,11 +130,15 @@ public class MutationGuardrailService {
         // Reject if slug could not be singularized (ambiguous plural): the original path
         // still ends in an ambiguous plural word after normalizeConceptSlug returned it unchanged
         if (normalized.startsWith("wiki/concepts/") && normalized.endsWith(".md")) {
-            String filename = normalized.substring("wiki/concepts/".length(), normalized.length() - ".md".length());
+            String filename =
+                    normalized.substring(
+                            "wiki/concepts/".length(), normalized.length() - ".md".length());
             String[] parts = filename.split("-");
             String lastWord = parts[parts.length - 1];
             if (AMBIGUOUS_PLURALS.contains(lastWord)) {
-                return "concept slug '" + lastWord + "' is an ambiguous plural — use the singular form manually";
+                return "concept slug '"
+                        + lastWord
+                        + "' is an ambiguous plural — use the singular form manually";
             }
         }
         if (action.action() != MutationActionType.noop
@@ -136,6 +167,11 @@ public class MutationGuardrailService {
         if (sources == null) {
             return false;
         }
-        return sources.stream().anyMatch(item -> item.contains(sourceNotePath) || item.contains("[[Source:") || item.contains("[["));
+        return sources.stream()
+                .anyMatch(
+                        item ->
+                                item.contains(sourceNotePath)
+                                        || item.contains("[[Source:")
+                                        || item.contains("[["));
     }
 }

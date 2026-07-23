@@ -21,33 +21,48 @@ class SourceNoteLlmServiceTests {
         PromptService promptService = mock(PromptService.class);
         when(promptService.getText("source-note-system")).thenReturn("system prompt");
         return new SourceNoteLlmService(
-                llmClient, new JsonExtractionService(new ObjectMapper()), promptService, new RetryingLlmExecutor());
+                llmClient,
+                new JsonExtractionService(new ObjectMapper()),
+                promptService,
+                new RetryingLlmExecutor());
     }
 
     private NormalizedSourcePayload payload() {
         return new NormalizedSourcePayload(
-                "src-1", SourceKind.web, Instant.EPOCH, "raw/web/src-1.json",
-                "Title", "some source content", "https://example.com", "checksum", Map.of(), null);
+                "src-1",
+                SourceKind.web,
+                Instant.EPOCH,
+                "raw/web/src-1.json",
+                "Title",
+                "some source content",
+                "https://example.com",
+                "checksum",
+                Map.of(),
+                null);
     }
 
     @Test
     void normalizesKeywordsToLowercaseKebabCaseDedupedAndOrdered() {
         // Mixed case, spaces, a post-normalization duplicate, and a blank entry.
-        SourceNoteLlmService service = serviceReturning("""
+        SourceNoteLlmService service =
+                serviceReturning(
+                        """
                 {"summary": "resumen", "raw_context": "contexto", \
                 "extracted_claims": ["afirmacion"], "open_questions": ["pregunta"], \
                 "keywords": ["Machine Learning", "Bile Acid", "  ", "machine learning", "gut-health"]}""");
 
         LlmSourceNote note = service.clean(payload());
 
-        // Lowercase kebab-case; "machine learning" collapses onto "Machine Learning"; blank dropped; order preserved.
-        assertThat(note.keywords())
-                .containsExactly("machine-learning", "bile-acid", "gut-health");
+        // Lowercase kebab-case; "machine learning" collapses onto "Machine Learning"; blank
+        // dropped; order preserved.
+        assertThat(note.keywords()).containsExactly("machine-learning", "bile-acid", "gut-health");
     }
 
     @Test
     void keepsNoteBodyFieldsFromLlmResponse() {
-        SourceNoteLlmService service = serviceReturning("""
+        SourceNoteLlmService service =
+                serviceReturning(
+                        """
                 {"summary": "resumen en espanol", "raw_context": "contexto completo", \
                 "extracted_claims": ["afirmacion uno"], "open_questions": ["pregunta uno"], \
                 "keywords": ["one-keyword", "two-keyword", "three-keyword"]}""");

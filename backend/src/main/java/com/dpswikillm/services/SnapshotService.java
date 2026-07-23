@@ -31,24 +31,28 @@ public class SnapshotService {
     private final VaultPathResolver pathResolver;
     private final JobRepository jobRepository;
 
-    public SnapshotService(SnapshotRepository snapshotRepository,
-                           SnapshotFileRepository snapshotFileRepository,
-                           VaultPathResolver pathResolver,
-                           JobRepository jobRepository) {
+    public SnapshotService(
+            SnapshotRepository snapshotRepository,
+            SnapshotFileRepository snapshotFileRepository,
+            VaultPathResolver pathResolver,
+            JobRepository jobRepository) {
         this.snapshotRepository = snapshotRepository;
         this.snapshotFileRepository = snapshotFileRepository;
         this.pathResolver = pathResolver;
         this.jobRepository = jobRepository;
     }
 
-    /** Begins a snapshot with the default {@code JOB} source (used by the ingest/revert pipelines). */
+    /**
+     * Begins a snapshot with the default {@code JOB} source (used by the ingest/revert pipelines).
+     */
     @Transactional
     public Snapshot beginSnapshot(String jobId, String operationType, String message) {
         return beginSnapshot(jobId, operationType, message, "JOB");
     }
 
     @Transactional
-    public Snapshot beginSnapshot(String jobId, String operationType, String message, String source) {
+    public Snapshot beginSnapshot(
+            String jobId, String operationType, String message, String source) {
         Snapshot snapshot = new Snapshot();
         snapshot.setJobId(jobId);
         snapshot.setOperationType(operationType);
@@ -61,7 +65,9 @@ public class SnapshotService {
     @Transactional
     public void captureFileAsNew(Snapshot snapshot, String relPath) throws IOException {
         String normalized = pathResolver.normalizeRelativePath(relPath);
-        if (snapshotFileRepository.findBySnapshotIdAndPath(snapshot.getId(), normalized).isPresent()) {
+        if (snapshotFileRepository
+                .findBySnapshotIdAndPath(snapshot.getId(), normalized)
+                .isPresent()) {
             return;
         }
         SnapshotFile sf = new SnapshotFile();
@@ -74,11 +80,14 @@ public class SnapshotService {
     @Transactional
     public void captureFile(Snapshot snapshot, String relPath) throws IOException {
         String normalized = pathResolver.normalizeRelativePath(relPath);
-        if (snapshotFileRepository.findBySnapshotIdAndPath(snapshot.getId(), normalized).isPresent()) {
+        if (snapshotFileRepository
+                .findBySnapshotIdAndPath(snapshot.getId(), normalized)
+                .isPresent()) {
             return;
         }
         Path absolute = pathResolver.resolve(normalized);
-        String contentBefore = Files.exists(absolute) ? Files.readString(absolute, StandardCharsets.UTF_8) : null;
+        String contentBefore =
+                Files.exists(absolute) ? Files.readString(absolute, StandardCharsets.UTF_8) : null;
         SnapshotFile sf = new SnapshotFile();
         sf.setSnapshotId(snapshot.getId());
         sf.setPath(normalized);
@@ -90,14 +99,18 @@ public class SnapshotService {
     public void recordAfter(Snapshot snapshot, String relPath) throws IOException {
         String normalized = pathResolver.normalizeRelativePath(relPath);
         Path absolute = pathResolver.resolve(normalized);
-        String contentAfter = Files.exists(absolute) ? Files.readString(absolute, StandardCharsets.UTF_8) : null;
-        Optional<SnapshotFile> existing = snapshotFileRepository.findBySnapshotIdAndPath(snapshot.getId(), normalized);
-        SnapshotFile sf = existing.orElseGet(() -> {
-            SnapshotFile f = new SnapshotFile();
-            f.setSnapshotId(snapshot.getId());
-            f.setPath(normalized);
-            return f;
-        });
+        String contentAfter =
+                Files.exists(absolute) ? Files.readString(absolute, StandardCharsets.UTF_8) : null;
+        Optional<SnapshotFile> existing =
+                snapshotFileRepository.findBySnapshotIdAndPath(snapshot.getId(), normalized);
+        SnapshotFile sf =
+                existing.orElseGet(
+                        () -> {
+                            SnapshotFile f = new SnapshotFile();
+                            f.setSnapshotId(snapshot.getId());
+                            f.setPath(normalized);
+                            return f;
+                        });
         sf.setContentAfter(contentAfter);
         int[] stats = diffStats(sf.getContentBefore(), contentAfter);
         sf.setLinesAdded(stats[0]);
@@ -132,25 +145,38 @@ public class SnapshotService {
                 result.getSize());
     }
 
-    /** Unified diff for an individual per-file change entry (identified by its snapshot-file id). */
+    /**
+     * Unified diff for an individual per-file change entry (identified by its snapshot-file id).
+     */
     public String getDiffByChangeId(UUID changeId) {
-        SnapshotFile sf = snapshotFileRepository.findById(changeId)
-                .orElseThrow(() -> new java.util.NoSuchElementException("Change not found: " + changeId));
+        SnapshotFile sf =
+                snapshotFileRepository
+                        .findById(changeId)
+                        .orElseThrow(
+                                () ->
+                                        new java.util.NoSuchElementException(
+                                                "Change not found: " + changeId));
         return buildUnifiedDiff(sf.getContentBefore(), sf.getContentAfter(), sf.getPath());
     }
 
-    /** Prior versions of a single file (those where the file existed after the change), newest first. */
+    /**
+     * Prior versions of a single file (those where the file existed after the change), newest
+     * first.
+     */
     public List<FileVersionDto> getVersions(String path) {
         String normalized = pathResolver.normalizeRelativePath(path);
         return snapshotFileRepository.findByPath(normalized).stream()
                 .filter(sf -> sf.getContentAfter() != null)
-                .map(sf -> {
-                    Snapshot snapshot = snapshotRepository.findById(sf.getSnapshotId()).orElse(null);
-                    if (snapshot == null || !"COMPLETE".equals(snapshot.getStatus())) {
-                        return null;
-                    }
-                    return new VersionRow(sf.getId(), snapshot.getCreatedAt(), snapshot.getSource());
-                })
+                .map(
+                        sf -> {
+                            Snapshot snapshot =
+                                    snapshotRepository.findById(sf.getSnapshotId()).orElse(null);
+                            if (snapshot == null || !"COMPLETE".equals(snapshot.getStatus())) {
+                                return null;
+                            }
+                            return new VersionRow(
+                                    sf.getId(), snapshot.getCreatedAt(), snapshot.getSource());
+                        })
                 .filter(java.util.Objects::nonNull)
                 .sorted(Comparator.comparing(VersionRow::createdAt).reversed())
                 .map(v -> new FileVersionDto(v.versionId(), v.createdAt().toString(), v.source()))
@@ -160,9 +186,14 @@ public class SnapshotService {
     /** Content of a specific prior version of a file. */
     public String getVersionContent(String path, UUID versionId) {
         String normalized = pathResolver.normalizeRelativePath(path);
-        SnapshotFile sf = snapshotFileRepository.findById(versionId)
-                .filter(f -> normalized.equals(f.getPath()) && f.getContentAfter() != null)
-                .orElseThrow(() -> new java.util.NoSuchElementException("Version not found: " + versionId));
+        SnapshotFile sf =
+                snapshotFileRepository
+                        .findById(versionId)
+                        .filter(f -> normalized.equals(f.getPath()) && f.getContentAfter() != null)
+                        .orElseThrow(
+                                () ->
+                                        new java.util.NoSuchElementException(
+                                                "Version not found: " + versionId));
         return sf.getContentAfter();
     }
 
@@ -170,8 +201,13 @@ public class SnapshotService {
 
     @Transactional
     public void hardReset(UUID snapshotId) throws IOException {
-        Snapshot snapshot = snapshotRepository.findById(snapshotId)
-                .orElseThrow(() -> new java.util.NoSuchElementException("Snapshot not found: " + snapshotId));
+        Snapshot snapshot =
+                snapshotRepository
+                        .findById(snapshotId)
+                        .orElseThrow(
+                                () ->
+                                        new java.util.NoSuchElementException(
+                                                "Snapshot not found: " + snapshotId));
         List<SnapshotFile> files = snapshotFileRepository.findBySnapshotId(snapshotId);
         for (SnapshotFile sf : files) {
             Path absolute = pathResolver.resolve(sf.getPath());
@@ -216,16 +252,21 @@ public class SnapshotService {
     }
 
     public Snapshot findById(UUID snapshotId) {
-        return snapshotRepository.findById(snapshotId)
-                .orElseThrow(() -> new java.util.NoSuchElementException("Snapshot not found: " + snapshotId));
+        return snapshotRepository
+                .findById(snapshotId)
+                .orElseThrow(
+                        () ->
+                                new java.util.NoSuchElementException(
+                                        "Snapshot not found: " + snapshotId));
     }
 
     private String buildUnifiedDiff(String before, String after, String path) {
         List<String> beforeLines = splitLines(before);
         List<String> afterLines = splitLines(after);
         Patch<String> patch = DiffUtils.diff(beforeLines, afterLines);
-        List<String> diff = UnifiedDiffUtils.generateUnifiedDiff(
-                "a/" + path, "b/" + path, beforeLines, patch, 3);
+        List<String> diff =
+                UnifiedDiffUtils.generateUnifiedDiff(
+                        "a/" + path, "b/" + path, beforeLines, patch, 3);
         return String.join("\n", diff);
     }
 
@@ -247,6 +288,6 @@ public class SnapshotService {
             added += delta.getTarget().size();
             deleted += delta.getSource().size();
         }
-        return new int[]{added, deleted};
+        return new int[] {added, deleted};
     }
 }

@@ -14,8 +14,7 @@ public record AppProperties(
         Jwt jwt,
         Admin admin,
         Extractor extractor,
-        WebDav webdav
-) {
+        WebDav webdav) {
     public AppProperties {
         if (vaultPath == null) {
             vaultPath = "/vault";
@@ -24,7 +23,14 @@ public record AppProperties(
             corsAllowedOrigins = List.of("http://localhost:4200", "http://localhost:8080");
         }
         if (embeddings == null) {
-            embeddings = new Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(3), 8);
+            embeddings =
+                    new Embeddings(
+                            "http://embeddings:8080",
+                            "multilingual-e5-small",
+                            "",
+                            384,
+                            Duration.ofSeconds(3),
+                            8);
         }
         if (llm == null) {
             llm = new Llm("http://localhost:11434/v1", "gpt-oss", "");
@@ -46,8 +52,13 @@ public record AppProperties(
         }
     }
 
-    public record Embeddings(String baseUrl, String model, String apiKey, int dimension, Duration healthTimeout,
-                             int maxBatchSize) {
+    public record Embeddings(
+            String baseUrl,
+            String model,
+            String apiKey,
+            int dimension,
+            Duration healthTimeout,
+            int maxBatchSize) {
         public Embeddings {
             // The embedding backend (e.g. TEI + ONNX) caps how many inputs it can
             // process per request; sending more fails every call. Default to a

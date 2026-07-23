@@ -15,7 +15,10 @@ public record ChatSessionDetailDto(
 
     public static ChatSessionDetailDto from(ChatSession s, List<ChatMessage> messages) {
         return new ChatSessionDetailDto(
-                s.getId(), s.getTitle(), s.getCreatedAt(), s.getUpdatedAt(),
+                s.getId(),
+                s.getTitle(),
+                s.getCreatedAt(),
+                s.getUpdatedAt(),
                 messages.stream().map(ChatMessageDto::from).toList());
     }
 }

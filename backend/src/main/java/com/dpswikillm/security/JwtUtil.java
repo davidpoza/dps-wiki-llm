@@ -18,8 +18,10 @@ public class JwtUtil {
 
     /** Scope claim for normal API access tokens. */
     public static final String SCOPE_ACCESS = "access";
+
     /** Scope claim for short-lived tokens that only authorize the 2FA verification step. */
     public static final String SCOPE_2FA = "2fa";
+
     private static final long CHALLENGE_EXPIRATION_MS = 5 * 60 * 1000L;
 
     private final SecretKey signingKey;
@@ -32,11 +34,13 @@ public class JwtUtil {
         if (secret == null || secret.isBlank()) {
             // Generate a random key when no secret is configured (dev/test)
             this.signingKey = Jwts.SIG.HS256.key().build();
-            log.warn("JWT_SECRET not configured — using a random ephemeral key. Tokens will not survive restarts.");
+            log.warn(
+                    "JWT_SECRET not configured — using a random ephemeral key. Tokens will not survive restarts.");
         } else {
             byte[] keyBytes = Base64.getDecoder().decode(secret);
             if (keyBytes.length < 32) {
-                throw new IllegalStateException("JWT_SECRET must be at least 32 bytes (256 bits) when base64-decoded.");
+                throw new IllegalStateException(
+                        "JWT_SECRET must be at least 32 bytes (256 bits) when base64-decoded.");
             }
             this.signingKey = Keys.hmacShaKeyFor(keyBytes);
         }
@@ -46,10 +50,11 @@ public class JwtUtil {
     public String generateToken(UserDetails userDetails) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + expirationMs);
-        String roles = userDetails.getAuthorities().stream()
-                .map(a -> a.getAuthority())
-                .reduce((a, b) -> a + "," + b)
-                .orElse("");
+        String roles =
+                userDetails.getAuthorities().stream()
+                        .map(a -> a.getAuthority())
+                        .reduce((a, b) -> a + "," + b)
+                        .orElse("");
         return Jwts.builder()
                 .subject(userDetails.getUsername())
                 .claim("roles", roles)
@@ -61,9 +66,9 @@ public class JwtUtil {
     }
 
     /**
-     * Short-lived token issued after a valid password when 2FA is enabled. It only
-     * authorizes the {@code /auth/login/2fa} verification step and is rejected by
-     * {@link JwtAuthFilter} for API access (scope != access).
+     * Short-lived token issued after a valid password when 2FA is enabled. It only authorizes the
+     * {@code /auth/login/2fa} verification step and is rejected by {@link JwtAuthFilter} for API
+     * access (scope != access).
      */
     public String generateChallengeToken(String username) {
         Date now = new Date();
@@ -101,9 +106,6 @@ public class JwtUtil {
     }
 
     private Jws<Claims> parseClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(signingKey)
-                .build()
-                .parseSignedClaims(token);
+        return Jwts.parser().verifyWith(signingKey).build().parseSignedClaims(token);
     }
 }

@@ -20,14 +20,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class SemanticRetrievalServicesTests {
-    @TempDir
-    Path vault;
+    @TempDir Path vault;
 
     @Test
     void reindexWalksWikiOnly() throws Exception {
         Files.createDirectories(vault.resolve("wiki/concepts"));
         Files.createDirectories(vault.resolve("raw/inbox"));
-        Files.writeString(vault.resolve("wiki/concepts/demo.md"), """
+        Files.writeString(
+                vault.resolve("wiki/concepts/demo.md"),
+                """
                 ---
                 type: concept
                 ---
@@ -40,9 +41,12 @@ class SemanticRetrievalServicesTests {
         Files.writeString(vault.resolve("raw/inbox/source.md"), "# Raw\n");
         FakeRepository repository = new FakeRepository();
 
-        List<DocumentRecord> documents = new ReindexService(resolver(), new MarkdownService(), repository).reindexWiki();
+        List<DocumentRecord> documents =
+                new ReindexService(resolver(), new MarkdownService(), repository).reindexWiki();
 
-        assertThat(documents).extracting(DocumentRecord::path).containsExactly("wiki/concepts/demo.md");
+        assertThat(documents)
+                .extracting(DocumentRecord::path)
+                .containsExactly("wiki/concepts/demo.md");
         assertThat(repository.documents).hasSize(1);
     }
 
@@ -52,7 +56,9 @@ class SemanticRetrievalServicesTests {
         DocumentRecord doc = doc("wiki/concepts/a.md", "A", "alpha");
         repository.documents = new ArrayList<>(List.of(doc));
         StubEmbeddingClient embeddings = new StubEmbeddingClient();
-        EmbeddingIndexService service = new EmbeddingIndexService(repository, embeddings, properties(), new MarkdownService());
+        EmbeddingIndexService service =
+                new EmbeddingIndexService(
+                        repository, embeddings, properties(), new MarkdownService());
 
         assertThat(service.embedIncremental().embeddedDocuments()).isEqualTo(1);
         assertThat(service.embedIncremental().embeddedDocuments()).isZero();
@@ -65,15 +71,20 @@ class SemanticRetrievalServicesTests {
     @Test
     void semanticSearchReturnsNearestAndEmptyIndexReturnsEmpty() {
         FakeRepository repository = new FakeRepository();
-        repository.documents = new ArrayList<>(List.of(
-                doc("wiki/concepts/a.md", "A", "alpha"),
-                doc("wiki/concepts/b.md", "B", "beta")));
+        repository.documents =
+                new ArrayList<>(
+                        List.of(
+                                doc("wiki/concepts/a.md", "A", "alpha"),
+                                doc("wiki/concepts/b.md", "B", "beta")));
         repository.vectors.put(repository.documents.get(0).id(), new float[] {1, 0});
         repository.vectors.put(repository.documents.get(1).id(), new float[] {0, 1});
 
-        SemanticSearchService service = new SemanticSearchService(new StubEmbeddingClient(), repository);
+        SemanticSearchService service =
+                new SemanticSearchService(new StubEmbeddingClient(), repository);
 
-        assertThat(service.search("alpha", 2)).extracting(SearchResult::path).containsExactly("wiki/concepts/a.md", "wiki/concepts/b.md");
+        assertThat(service.search("alpha", 2))
+                .extracting(SearchResult::path)
+                .containsExactly("wiki/concepts/a.md", "wiki/concepts/b.md");
         repository.vectors.clear();
         assertThat(service.search("alpha", 2)).isEmpty();
     }
@@ -81,9 +92,14 @@ class SemanticRetrievalServicesTests {
     @Test
     void lexicalLookupMatchesTitlePathOrBody() {
         FakeRepository repository = new FakeRepository();
-        repository.documents = new ArrayList<>(List.of(
-                doc("wiki/concepts/vector-search.md", "Vector Search", "semantic matching"),
-                doc("wiki/entities/other.md", "Other", "unrelated")));
+        repository.documents =
+                new ArrayList<>(
+                        List.of(
+                                doc(
+                                        "wiki/concepts/vector-search.md",
+                                        "Vector Search",
+                                        "semantic matching"),
+                                doc("wiki/entities/other.md", "Other", "unrelated")));
 
         assertThat(new FileLookupService(repository).lookup("semantic", 10))
                 .extracting(SearchResult::path)
@@ -91,7 +107,13 @@ class SemanticRetrievalServicesTests {
     }
 
     private DocumentRecord doc(String path, String title, String body) {
-        return new DocumentRecord(UUID.nameUUIDFromBytes(path.getBytes()), path, title, "concept", Instant.now(), body);
+        return new DocumentRecord(
+                UUID.nameUUIDFromBytes(path.getBytes()),
+                path,
+                title,
+                "concept",
+                Instant.now(),
+                body);
     }
 
     private VaultPathResolver resolver() {
@@ -102,9 +124,19 @@ class SemanticRetrievalServicesTests {
         return new AppProperties(
                 vault.toString(),
                 List.of("http://localhost:4200"),
-                new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1), 8),
+                new AppProperties.Embeddings(
+                        "http://embeddings:8080",
+                        "multilingual-e5-small",
+                        "",
+                        384,
+                        Duration.ofSeconds(1),
+                        8),
                 new AppProperties.Llm("http://localhost:11434/v1", "gpt-oss", "test"),
-                new AppProperties.Telegram("", ""), null, null, null, null);
+                new AppProperties.Telegram("", ""),
+                null,
+                null,
+                null,
+                null);
     }
 
     private static class StubEmbeddingClient implements EmbeddingClient {
@@ -113,7 +145,9 @@ class SemanticRetrievalServicesTests {
         @Override
         public List<float[]> embedPassages(List<String> texts) {
             passageCalls += 1;
-            return texts.stream().map(text -> text.contains("alpha") ? new float[] {1, 0} : new float[] {0, 1}).toList();
+            return texts.stream()
+                    .map(text -> text.contains("alpha") ? new float[] {1, 0} : new float[] {0, 1})
+                    .toList();
         }
 
         @Override
@@ -143,7 +177,12 @@ class SemanticRetrievalServicesTests {
         }
 
         @Override
-        public void upsertEmbedding(UUID documentId, String model, int dimension, float[] embedding, String normalizedTextHash) {
+        public void upsertEmbedding(
+                UUID documentId,
+                String model,
+                int dimension,
+                float[] embedding,
+                String normalizedTextHash) {
             embeddingHashes.put(documentId, normalizedTextHash);
             vectors.put(documentId, embedding);
         }
@@ -158,18 +197,33 @@ class SemanticRetrievalServicesTests {
         public List<SearchResult> semanticSearch(float[] queryVector, int limit) {
             return documents.stream()
                     .filter(doc -> vectors.containsKey(doc.id()))
-                    .map(doc -> new SearchResult(doc.path(), doc.title(), doc.docType(), cosine(queryVector, vectors.get(doc.id())), doc.body()))
+                    .map(
+                            doc ->
+                                    new SearchResult(
+                                            doc.path(),
+                                            doc.title(),
+                                            doc.docType(),
+                                            cosine(queryVector, vectors.get(doc.id())),
+                                            doc.body()))
                     .sorted(Comparator.comparingDouble(SearchResult::score).reversed())
                     .limit(limit)
                     .toList();
         }
 
         @Override
-        public List<SearchResult> semanticSearchByType(float[] queryVector, String docType, int limit) {
+        public List<SearchResult> semanticSearchByType(
+                float[] queryVector, String docType, int limit) {
             return documents.stream()
                     .filter(doc -> vectors.containsKey(doc.id()))
                     .filter(doc -> docType.equals(doc.docType()))
-                    .map(doc -> new SearchResult(doc.path(), doc.title(), doc.docType(), cosine(queryVector, vectors.get(doc.id())), doc.body()))
+                    .map(
+                            doc ->
+                                    new SearchResult(
+                                            doc.path(),
+                                            doc.title(),
+                                            doc.docType(),
+                                            cosine(queryVector, vectors.get(doc.id())),
+                                            doc.body()))
                     .sorted(Comparator.comparingDouble(SearchResult::score).reversed())
                     .limit(limit)
                     .toList();
@@ -179,8 +233,19 @@ class SemanticRetrievalServicesTests {
         public List<SearchResult> lexicalLookup(String query, int limit) {
             String lower = query.toLowerCase();
             return documents.stream()
-                    .filter(doc -> (doc.title() + " " + doc.path() + " " + doc.body()).toLowerCase().contains(lower))
-                    .map(doc -> new SearchResult(doc.path(), doc.title(), doc.docType(), 1.0, doc.body()))
+                    .filter(
+                            doc ->
+                                    (doc.title() + " " + doc.path() + " " + doc.body())
+                                            .toLowerCase()
+                                            .contains(lower))
+                    .map(
+                            doc ->
+                                    new SearchResult(
+                                            doc.path(),
+                                            doc.title(),
+                                            doc.docType(),
+                                            1.0,
+                                            doc.body()))
                     .limit(limit)
                     .toList();
         }

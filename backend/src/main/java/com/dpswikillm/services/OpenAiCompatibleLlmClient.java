@@ -23,15 +23,14 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     private final RestClient restClient;
     private final RetryingLlmExecutor retrying;
 
-    public OpenAiCompatibleLlmClient(AppProperties properties, RestClient.Builder builder, RetryingLlmExecutor retrying) {
+    public OpenAiCompatibleLlmClient(
+            AppProperties properties, RestClient.Builder builder, RetryingLlmExecutor retrying) {
         this.properties = properties;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout((int) CONNECT_TIMEOUT.toMillis());
         factory.setReadTimeout((int) READ_TIMEOUT.toMillis());
-        this.restClient = builder
-                .baseUrl(properties.llm().baseUrl())
-                .requestFactory(factory)
-                .build();
+        this.restClient =
+                builder.baseUrl(properties.llm().baseUrl()).requestFactory(factory).build();
         this.retrying = retrying;
     }
 
@@ -54,12 +53,14 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             if (jsonMode) {
                 requestBody.put("response_format", Map.of("type", "json_object"));
             }
-            Map<String, Object> response = restClient.post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + properties.llm().apiKey())
-                    .body(requestBody)
-                    .retrieve()
-                    .body(Map.class);
+            Map<String, Object> response =
+                    restClient
+                            .post()
+                            .uri("/chat/completions")
+                            .header("Authorization", "Bearer " + properties.llm().apiKey())
+                            .body(requestBody)
+                            .retrieve()
+                            .body(Map.class);
 
             List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
             Map<String, Object> message = (Map<String, Object>) choices.getFirst().get("message");
@@ -74,6 +75,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     private LlmClientException classify(RestClientResponseException ex) {
         HttpStatusCode status = ex.getStatusCode();
         boolean retryable = status.value() == 429 || status.is5xxServerError();
-        return new LlmClientException("Chat completion failed with HTTP " + status.value(), ex, retryable);
+        return new LlmClientException(
+                "Chat completion failed with HTTP " + status.value(), ex, retryable);
     }
 }

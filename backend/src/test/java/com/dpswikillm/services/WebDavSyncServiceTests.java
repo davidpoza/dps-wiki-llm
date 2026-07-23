@@ -31,8 +31,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class WebDavSyncServiceTests {
 
-    @TempDir
-    Path vault;
+    @TempDir Path vault;
 
     private FakeWebDavClient webdav;
     private Map<String, VaultFileSync> baselineStore;
@@ -50,27 +49,40 @@ class WebDavSyncServiceTests {
         var fakeSnapshotRepo = new SnapshotServiceTests.FakeSnapshotRepository();
         var fakeSnapshotFileRepo = new SnapshotServiceTests.FakeSnapshotFileRepository();
         fakeSnapshotFileRepo.setSnapshotRepo(fakeSnapshotRepo);
-        snapshotService = new SnapshotService(fakeSnapshotRepo, fakeSnapshotFileRepo, resolver, jobRepo);
+        snapshotService =
+                new SnapshotService(fakeSnapshotRepo, fakeSnapshotFileRepo, resolver, jobRepo);
         webdav = new FakeWebDavClient(props(vault.toString(), "https://dav.example.com/vault"));
 
         baselineStore = new HashMap<>();
         baselineRepo = mock(VaultFileSyncRepository.class);
-        when(baselineRepo.findById(anyString())).thenAnswer(i -> Optional.ofNullable(baselineStore.get(i.getArgument(0))));
-        when(baselineRepo.save(any())).thenAnswer(i -> {
-            VaultFileSync row = i.getArgument(0);
-            baselineStore.put(row.getPath(), row);
-            return row;
-        });
+        when(baselineRepo.findById(anyString()))
+                .thenAnswer(i -> Optional.ofNullable(baselineStore.get(i.getArgument(0))));
+        when(baselineRepo.save(any()))
+                .thenAnswer(
+                        i -> {
+                            VaultFileSync row = i.getArgument(0);
+                            baselineStore.put(row.getPath(), row);
+                            return row;
+                        });
         when(baselineRepo.findAll()).thenAnswer(i -> new ArrayList<>(baselineStore.values()));
-        when(baselineRepo.findByConflictTrue()).thenAnswer(i ->
-                baselineStore.values().stream().filter(VaultFileSync::isConflict).toList());
-        doAnswer(i -> {
-            baselineStore.remove(i.getArgument(0));
-            return null;
-        }).when(baselineRepo).deleteById(anyString());
+        when(baselineRepo.findByConflictTrue())
+                .thenAnswer(
+                        i ->
+                                baselineStore.values().stream()
+                                        .filter(VaultFileSync::isConflict)
+                                        .toList());
+        doAnswer(
+                        i -> {
+                            baselineStore.remove(i.getArgument(0));
+                            return null;
+                        })
+                .when(baselineRepo)
+                .deleteById(anyString());
 
         service = new WebDavSyncService(webdav, baselineRepo, snapshotService, resolver);
-        fileService = new FileService(resolver, snapshotService, service, mock(ResourceSettingsService.class));
+        fileService =
+                new FileService(
+                        resolver, snapshotService, service, mock(ResourceSettingsService.class));
     }
 
     // ---------------- Section 5: push on save/delete/rename ----------------
@@ -154,7 +166,8 @@ class WebDavSyncServiceTests {
         assertThat(result.pulled()).containsExactly("a.md");
         assertThat(result.conflicts()).isEmpty();
         assertThat(readLocal("a.md")).isEqualTo("v2");
-        assertThat(baselineStore.get("a.md").getSyncedHash()).isEqualTo(WebDavSyncService.sha256("v2"));
+        assertThat(baselineStore.get("a.md").getSyncedHash())
+                .isEqualTo(WebDavSyncService.sha256("v2"));
         assertThat(snapshotService.getFileHistory(0, 50).content())
                 .anyMatch(e -> e.path().equals("a.md") && e.source().equals("WEBDAV_PULL"));
     }
@@ -209,7 +222,8 @@ class WebDavSyncServiceTests {
         service.sync();
 
         assertThat(webdav.remote).containsEntry("a.md", "v1");
-        assertThat(baselineStore.get("a.md").getSyncedHash()).isEqualTo(WebDavSyncService.sha256("v1"));
+        assertThat(baselineStore.get("a.md").getSyncedHash())
+                .isEqualTo(WebDavSyncService.sha256("v1"));
     }
 
     @Test
@@ -264,7 +278,8 @@ class WebDavSyncServiceTests {
 
     @Test
     void resolveUnknownConflictThrows() {
-        assertThatThrownBy(() -> service.resolveConflict("missing.md", WebDavSyncService.KEEP_LOCAL))
+        assertThatThrownBy(
+                        () -> service.resolveConflict("missing.md", WebDavSyncService.KEEP_LOCAL))
                 .isInstanceOf(java.util.NoSuchElementException.class);
     }
 
@@ -291,10 +306,15 @@ class WebDavSyncServiceTests {
 
     private static AppProperties props(String vaultPath, String webdavUrl) {
         return new AppProperties(
-                vaultPath, List.of("http://localhost:4200"),
-                new AppProperties.Embeddings("http://embeddings:8080", "m", "", 384, Duration.ofSeconds(1), 8),
+                vaultPath,
+                List.of("http://localhost:4200"),
+                new AppProperties.Embeddings(
+                        "http://embeddings:8080", "m", "", 384, Duration.ofSeconds(1), 8),
                 new AppProperties.Llm("http://llm", "m", ""),
-                new AppProperties.Telegram("", ""), null, null, null,
+                new AppProperties.Telegram("", ""),
+                null,
+                null,
+                null,
                 new AppProperties.WebDav(webdavUrl, "user", "pass"));
     }
 
@@ -349,7 +369,12 @@ class WebDavSyncServiceTests {
                 return List.of();
             }
             return remote.entrySet().stream()
-                    .map(e -> new RemoteEntry(e.getKey(), WebDavSyncService.sha256(e.getValue()), null))
+                    .map(
+                            e ->
+                                    new RemoteEntry(
+                                            e.getKey(),
+                                            WebDavSyncService.sha256(e.getValue()),
+                                            null))
                     .toList();
         }
     }

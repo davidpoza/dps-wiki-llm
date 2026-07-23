@@ -9,9 +9,12 @@ import org.springframework.context.annotation.Configuration;
 public class OpenApiConfig {
     @Bean
     OpenAPI openAPI() {
-        return new OpenAPI().info(new Info()
-                .title("DPS Wiki LLM API")
-                .version("0.1.0")
-                .description("Knowledge pipeline API for ingest, answer, review, and job progress."));
+        return new OpenAPI()
+                .info(
+                        new Info()
+                                .title("DPS Wiki LLM API")
+                                .version("0.1.0")
+                                .description(
+                                        "Knowledge pipeline API for ingest, answer, review, and job progress."));
     }
 }

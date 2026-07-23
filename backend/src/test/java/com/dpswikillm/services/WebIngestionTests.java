@@ -18,12 +18,20 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class WebIngestionTests {
-    @TempDir
-    Path vault;
+    @TempDir Path vault;
 
     private VaultPathResolver resolver() {
-        return new VaultPathResolver(new AppProperties(vault.toString(), List.of("http://localhost:4200"),
-                null, null, null, null, null, null, null));
+        return new VaultPathResolver(
+                new AppProperties(
+                        vault.toString(),
+                        List.of("http://localhost:4200"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null));
     }
 
     private ExtractionResult sampleResult() {
@@ -87,9 +95,11 @@ class WebIngestionTests {
     void normalizerFallsBackToLegacySourceUrlLine() throws Exception {
         Files.createDirectories(vault.resolve("raw/web"));
         Path legacy = vault.resolve("raw/web/legacy.md");
-        Files.writeString(legacy, "# Legacy Title\n\nSource URL: https://old.example.com/page\n\nBody text.");
+        Files.writeString(
+                legacy, "# Legacy Title\n\nSource URL: https://old.example.com/page\n\nBody text.");
 
-        NormalizedSourcePayload payload = new SourceNormalizer(resolver()).normalize("raw/web/legacy.md");
+        NormalizedSourcePayload payload =
+                new SourceNormalizer(resolver()).normalize("raw/web/legacy.md");
 
         assertThat(payload.title()).isEqualTo("Legacy Title");
         assertThat(payload.canonicalUrl()).isEqualTo("https://old.example.com/page");

@@ -20,10 +20,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -37,10 +37,12 @@ public class SettingsController {
     private final HealthCheckService healthCheckService;
     private final BrokenLinkScanService brokenLinkScanService;
 
-    public SettingsController(ReindexService reindexService, ResourceSettingsService resourceSettingsService,
-                             KeywordGenerationService keywordGenerationService,
-                             HealthCheckService healthCheckService,
-                             BrokenLinkScanService brokenLinkScanService) {
+    public SettingsController(
+            ReindexService reindexService,
+            ResourceSettingsService resourceSettingsService,
+            KeywordGenerationService keywordGenerationService,
+            HealthCheckService healthCheckService,
+            BrokenLinkScanService brokenLinkScanService) {
         this.reindexService = reindexService;
         this.resourceSettingsService = resourceSettingsService;
         this.keywordGenerationService = keywordGenerationService;
@@ -54,9 +56,11 @@ public class SettingsController {
     }
 
     @PutMapping("/resources")
-    public ResponseEntity<ResourceSettingsDto> updateResourceSettings(@RequestBody ResourceSettingsDto request) {
+    public ResponseEntity<ResourceSettingsDto> updateResourceSettings(
+            @RequestBody ResourceSettingsDto request) {
         try {
-            return ResponseEntity.ok(resourceSettingsService.updateSettings(request.resourceFolder()));
+            return ResponseEntity.ok(
+                    resourceSettingsService.updateSettings(request.resourceFolder()));
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().build();
         }
@@ -65,28 +69,38 @@ public class SettingsController {
     @GetMapping(value = "/reindex", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter reindex() {
         SseEmitter emitter = new SseEmitter(0L);
-        AtomicReference<ReindexProgress> lastProgress = new AtomicReference<>(new ReindexProgress(0, 0));
-        CompletableFuture.runAsync(() -> {
-            try {
-                reindexService.reindexWiki(progress -> {
-                    lastProgress.set(progress);
+        AtomicReference<ReindexProgress> lastProgress =
+                new AtomicReference<>(new ReindexProgress(0, 0));
+        CompletableFuture.runAsync(
+                () -> {
                     try {
-                        emitter.send(SseEmitter.event().name("progress").data(progress));
-                    } catch (IOException | IllegalStateException ex) {
-                        throw new IllegalStateException("SSE send failed", ex);
+                        reindexService.reindexWiki(
+                                progress -> {
+                                    lastProgress.set(progress);
+                                    try {
+                                        emitter.send(
+                                                SseEmitter.event().name("progress").data(progress));
+                                    } catch (IOException | IllegalStateException ex) {
+                                        throw new IllegalStateException("SSE send failed", ex);
+                                    }
+                                });
+                        ReindexProgress final_ = lastProgress.get();
+                        emitter.send(
+                                SseEmitter.event()
+                                        .name("done")
+                                        .data(new ReindexProgress(final_.total(), final_.total())));
+                        emitter.complete();
+                    } catch (Exception ex) {
+                        try {
+                            emitter.send(
+                                    SseEmitter.event()
+                                            .name("error")
+                                            .data(new ErrorMessage(ex.getMessage())));
+                        } catch (IOException | IllegalStateException ignored) {
+                        }
+                        emitter.complete();
                     }
                 });
-                ReindexProgress final_ = lastProgress.get();
-                emitter.send(SseEmitter.event().name("done").data(new ReindexProgress(final_.total(), final_.total())));
-                emitter.complete();
-            } catch (Exception ex) {
-                try {
-                    emitter.send(SseEmitter.event().name("error").data(new ErrorMessage(ex.getMessage())));
-                } catch (IOException | IllegalStateException ignored) {
-                }
-                emitter.complete();
-            }
-        });
         return emitter;
     }
 
@@ -95,87 +109,114 @@ public class SettingsController {
         SseEmitter emitter = new SseEmitter(0L);
         AtomicReference<KeywordGenerationProgress> lastProgress =
                 new AtomicReference<>(new KeywordGenerationProgress(0, 0, 0, 0));
-        CompletableFuture.runAsync(() -> {
-            try {
-                keywordGenerationService.generateKeywords(progress -> {
-                    lastProgress.set(progress);
+        CompletableFuture.runAsync(
+                () -> {
                     try {
-                        emitter.send(SseEmitter.event().name("progress").data(progress));
-                    } catch (IOException | IllegalStateException ex) {
-                        throw new IllegalStateException("SSE send failed", ex);
+                        keywordGenerationService.generateKeywords(
+                                progress -> {
+                                    lastProgress.set(progress);
+                                    try {
+                                        emitter.send(
+                                                SseEmitter.event().name("progress").data(progress));
+                                    } catch (IOException | IllegalStateException ex) {
+                                        throw new IllegalStateException("SSE send failed", ex);
+                                    }
+                                });
+                        emitter.send(SseEmitter.event().name("done").data(lastProgress.get()));
+                        emitter.complete();
+                    } catch (Exception ex) {
+                        try {
+                            emitter.send(
+                                    SseEmitter.event()
+                                            .name("error")
+                                            .data(new ErrorMessage(ex.getMessage())));
+                        } catch (IOException | IllegalStateException ignored) {
+                        }
+                        emitter.complete();
                     }
                 });
-                emitter.send(SseEmitter.event().name("done").data(lastProgress.get()));
-                emitter.complete();
-            } catch (Exception ex) {
-                try {
-                    emitter.send(SseEmitter.event().name("error").data(new ErrorMessage(ex.getMessage())));
-                } catch (IOException | IllegalStateException ignored) {
-                }
-                emitter.complete();
-            }
-        });
         return emitter;
     }
 
     @GetMapping(value = "/health-check", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter healthCheck() {
         SseEmitter emitter = new SseEmitter(0L);
-        CompletableFuture.runAsync(() -> {
-            try {
-                HealthCheckProgress result = healthCheckService.run(progress -> {
+        CompletableFuture.runAsync(
+                () -> {
                     try {
-                        emitter.send(SseEmitter.event().name("progress").data(progress));
-                    } catch (IOException | IllegalStateException ex) {
-                        throw new IllegalStateException("SSE send failed", ex);
+                        HealthCheckProgress result =
+                                healthCheckService.run(
+                                        progress -> {
+                                            try {
+                                                emitter.send(
+                                                        SseEmitter.event()
+                                                                .name("progress")
+                                                                .data(progress));
+                                            } catch (IOException | IllegalStateException ex) {
+                                                throw new IllegalStateException(
+                                                        "SSE send failed", ex);
+                                            }
+                                        });
+                        emitter.send(SseEmitter.event().name("done").data(result));
+                        emitter.complete();
+                    } catch (Exception ex) {
+                        try {
+                            emitter.send(
+                                    SseEmitter.event()
+                                            .name("error")
+                                            .data(new ErrorMessage(ex.getMessage())));
+                        } catch (IOException | IllegalStateException ignored) {
+                        }
+                        emitter.complete();
                     }
                 });
-                emitter.send(SseEmitter.event().name("done").data(result));
-                emitter.complete();
-            } catch (Exception ex) {
-                try {
-                    emitter.send(SseEmitter.event().name("error").data(new ErrorMessage(ex.getMessage())));
-                } catch (IOException | IllegalStateException ignored) {
-                }
-                emitter.complete();
-            }
-        });
         return emitter;
     }
 
     @GetMapping(value = "/broken-links/scan", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter scanBrokenLinks() {
         SseEmitter emitter = new SseEmitter(0L);
-        CompletableFuture.runAsync(() -> {
-            try {
-                AtomicReference<BrokenLinkScanProgress> lastProgress =
-                        new AtomicReference<>(new BrokenLinkScanProgress(0, 0, ""));
-                BrokenLinkScanResult result = brokenLinkScanService.scan(progress -> {
-                    lastProgress.set(progress);
+        CompletableFuture.runAsync(
+                () -> {
                     try {
-                        emitter.send(SseEmitter.event().name("progress").data(progress));
-                    } catch (IOException | IllegalStateException ex) {
-                        throw new IllegalStateException("SSE send failed", ex);
+                        AtomicReference<BrokenLinkScanProgress> lastProgress =
+                                new AtomicReference<>(new BrokenLinkScanProgress(0, 0, ""));
+                        BrokenLinkScanResult result =
+                                brokenLinkScanService.scan(
+                                        progress -> {
+                                            lastProgress.set(progress);
+                                            try {
+                                                emitter.send(
+                                                        SseEmitter.event()
+                                                                .name("progress")
+                                                                .data(progress));
+                                            } catch (IOException | IllegalStateException ex) {
+                                                throw new IllegalStateException(
+                                                        "SSE send failed", ex);
+                                            }
+                                        });
+                        emitter.send(SseEmitter.event().name("result").data(result));
+                        emitter.send(SseEmitter.event().name("done").data("{}"));
+                        emitter.complete();
+                    } catch (Exception ex) {
+                        try {
+                            emitter.send(
+                                    SseEmitter.event()
+                                            .name("error")
+                                            .data(new ErrorMessage(ex.getMessage())));
+                        } catch (IOException | IllegalStateException ignored) {
+                        }
+                        emitter.complete();
                     }
                 });
-                emitter.send(SseEmitter.event().name("result").data(result));
-                emitter.send(SseEmitter.event().name("done").data("{}"));
-                emitter.complete();
-            } catch (Exception ex) {
-                try {
-                    emitter.send(SseEmitter.event().name("error").data(new ErrorMessage(ex.getMessage())));
-                } catch (IOException | IllegalStateException ignored) {
-                }
-                emitter.complete();
-            }
-        });
         return emitter;
     }
 
     @DeleteMapping("/broken-links")
     public BrokenLinkDeleteResult deleteBrokenLinks(@RequestBody BrokenLinkDeleteRequest request) {
-        int deleted = brokenLinkScanService.deleteLinks(
-                request.entries() != null ? request.entries() : List.of());
+        int deleted =
+                brokenLinkScanService.deleteLinks(
+                        request.entries() != null ? request.entries() : List.of());
         return new BrokenLinkDeleteResult(deleted);
     }
 

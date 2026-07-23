@@ -10,5 +10,4 @@ public record LoginEventDto(
         String country,
         String city,
         boolean success,
-        String failureReason
-) {}
+        String failureReason) {}

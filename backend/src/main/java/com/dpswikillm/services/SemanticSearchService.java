@@ -10,7 +10,8 @@ public class SemanticSearchService {
     private final EmbeddingClient embeddingClient;
     private final DocumentIndexRepository repository;
 
-    public SemanticSearchService(EmbeddingClient embeddingClient, DocumentIndexRepository repository) {
+    public SemanticSearchService(
+            EmbeddingClient embeddingClient, DocumentIndexRepository repository) {
         this.embeddingClient = embeddingClient;
         this.repository = repository;
     }
@@ -26,6 +27,7 @@ public class SemanticSearchService {
         if (query == null || query.isBlank()) {
             return List.of();
         }
-        return repository.semanticSearchByType(embeddingClient.embedQuery(query), docType, Math.max(1, limit));
+        return repository.semanticSearchByType(
+                embeddingClient.embedQuery(query), docType, Math.max(1, limit));
     }
 }

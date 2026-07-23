@@ -33,29 +33,44 @@ public class WebDavController {
     @GetMapping(value = "/sync", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter sync() {
         SseEmitter emitter = new SseEmitter(0L);
-        CompletableFuture.runAsync(() -> {
-            try {
-                var result = webDavSyncService.sync(progress -> {
+        CompletableFuture.runAsync(
+                () -> {
                     try {
-                        emitter.send(SseEmitter.event().name("progress").data(progress));
-                    } catch (IOException | IllegalStateException ex) {
-                        throw new IllegalStateException("SSE send failed", ex);
+                        var result =
+                                webDavSyncService.sync(
+                                        progress -> {
+                                            try {
+                                                emitter.send(
+                                                        SseEmitter.event()
+                                                                .name("progress")
+                                                                .data(progress));
+                                            } catch (IOException | IllegalStateException ex) {
+                                                throw new IllegalStateException(
+                                                        "SSE send failed", ex);
+                                            }
+                                        });
+                        emitter.send(SseEmitter.event().name("done").data(result));
+                        emitter.complete();
+                    } catch (WebDavNotConfiguredException e) {
+                        try {
+                            emitter.send(
+                                    SseEmitter.event()
+                                            .name("error")
+                                            .data(Map.of("code", "not_configured")));
+                        } catch (IOException | IllegalStateException ignored) {
+                        }
+                        emitter.complete();
+                    } catch (Exception ex) {
+                        try {
+                            emitter.send(
+                                    SseEmitter.event()
+                                            .name("error")
+                                            .data(Map.of("message", ex.getMessage())));
+                        } catch (IOException | IllegalStateException ignored) {
+                        }
+                        emitter.complete();
                     }
                 });
-                emitter.send(SseEmitter.event().name("done").data(result));
-                emitter.complete();
-            } catch (WebDavNotConfiguredException e) {
-                try {
-                    emitter.send(SseEmitter.event().name("error").data(Map.of("code", "not_configured")));
-                } catch (IOException | IllegalStateException ignored) {}
-                emitter.complete();
-            } catch (Exception ex) {
-                try {
-                    emitter.send(SseEmitter.event().name("error").data(Map.of("message", ex.getMessage())));
-                } catch (IOException | IllegalStateException ignored) {}
-                emitter.complete();
-            }
-        });
         return emitter;
     }
 
@@ -74,7 +89,8 @@ public class WebDavController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
         } catch (WebDavReplicationException e) {
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("error", "not_replicated"));
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("error", "not_replicated"));
         }
     }
 }

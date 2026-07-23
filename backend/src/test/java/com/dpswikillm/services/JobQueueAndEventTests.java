@@ -28,7 +28,8 @@ class JobQueueAndEventTests {
 
         assertThat(config.writeQueue().isDurable()).isTrue();
         assertThat(config.answerQueue().isDurable()).isTrue();
-        assertThat(config.writeQueue().getArguments()).containsEntry("x-dead-letter-exchange", RabbitConfig.DLX);
+        assertThat(config.writeQueue().getArguments())
+                .containsEntry("x-dead-letter-exchange", RabbitConfig.DLX);
     }
 
     @Test

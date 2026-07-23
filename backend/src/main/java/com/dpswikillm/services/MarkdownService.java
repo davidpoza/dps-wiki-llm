@@ -11,8 +11,15 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class MarkdownService {
-    private static final List<String> DEFAULT_SECTION_ORDER = List.of(
-            "Summary", "Facts", "Interpretation", "Relationships", "Related", "Sources", "Open Questions");
+    private static final List<String> DEFAULT_SECTION_ORDER =
+            List.of(
+                    "Summary",
+                    "Facts",
+                    "Interpretation",
+                    "Relationships",
+                    "Related",
+                    "Sources",
+                    "Open Questions");
 
     public MarkdownDocument parse(String markdown) {
         String body = markdown == null ? "" : markdown.replace("\r\n", "\n");
@@ -55,8 +62,11 @@ public class MarkdownService {
         return new MarkdownDocument(frontmatter, title, sections);
     }
 
-    public String mergeAndRender(String existingMarkdown, String fallbackTitle, Map<String, Object> frontmatterUpdates,
-                                 Map<String, List<String>> sectionUpdates) {
+    public String mergeAndRender(
+            String existingMarkdown,
+            String fallbackTitle,
+            Map<String, Object> frontmatterUpdates,
+            Map<String, List<String>> sectionUpdates) {
         MarkdownDocument existing = parse(existingMarkdown);
         Map<String, Object> frontmatter = new LinkedHashMap<>(existing.frontmatter());
         if (frontmatterUpdates != null) {
@@ -78,10 +88,10 @@ public class MarkdownService {
     }
 
     /**
-     * Inserts a YAML list ({@code key:} followed by {@code   - "value"} lines) into the
-     * document's leading frontmatter block, immediately before the closing {@code ---}
-     * delimiter. The document body is preserved byte-for-byte; only the new key lines are
-     * added. When the document has no frontmatter block, a minimal one is created.
+     * Inserts a YAML list ({@code key:} followed by {@code - "value"} lines) into the document's
+     * leading frontmatter block, immediately before the closing {@code ---} delimiter. The document
+     * body is preserved byte-for-byte; only the new key lines are added. When the document has no
+     * frontmatter block, a minimal one is created.
      */
     public String injectFrontmatterList(String markdown, String key, List<String> values) {
         String content = markdown == null ? "" : markdown;
@@ -93,21 +103,24 @@ public class MarkdownService {
             int end = content.indexOf("\n---\n", 4);
             if (end >= 0) {
                 String before = content.substring(0, end); // "---\n<frontmatter>"
-                String after = content.substring(end);      // "\n---\n<body>"
+                String after = content.substring(end); // "\n---\n<body>"
                 return before + "\n" + insertion.stripTrailing() + after;
             }
         }
         return "---\n" + insertion + "---\n\n" + content;
     }
 
-    private String render(Map<String, Object> frontmatter, String title, Map<String, String> sections) {
+    private String render(
+            Map<String, Object> frontmatter, String title, Map<String, String> sections) {
         StringBuilder out = new StringBuilder();
         if (!frontmatter.isEmpty()) {
             out.append("---\n");
             frontmatter.forEach((key, value) -> appendFrontmatter(out, key, value));
             out.append("---\n\n");
         }
-        out.append("# ").append(title == null || title.isBlank() ? "Untitled" : title.trim()).append("\n\n");
+        out.append("# ")
+                .append(title == null || title.isBlank() ? "Untitled" : title.trim())
+                .append("\n\n");
 
         List<String> rendered = new ArrayList<>();
         for (String section : DEFAULT_SECTION_ORDER) {
@@ -128,7 +141,10 @@ public class MarkdownService {
     private String mergeSection(String existingContent, List<String> additions) {
         List<String> existingLines = splitNonBlank(existingContent);
         List<String> merged = new ArrayList<>(existingLines);
-        List<String> seen = existingLines.stream().map(this::dedupeKey).collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+        List<String> seen =
+                existingLines.stream()
+                        .map(this::dedupeKey)
+                        .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
         for (String addition : additions == null ? List.<String>of() : additions) {
             String normalized = normalizeAddition(addition);
             if (normalized.isBlank()) {
@@ -162,7 +178,10 @@ public class MarkdownService {
     }
 
     private String dedupeKey(String value) {
-        return value.replaceFirst("^-\\s*", "").replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
+        return value.replaceFirst("^-\\s*", "")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .toLowerCase(Locale.ROOT);
     }
 
     private Map<String, Object> parseFrontmatter(String raw) {
@@ -212,9 +231,7 @@ public class MarkdownService {
 
     private static String unquoteYamlScalar(String raw) {
         if (raw.startsWith("\"") && raw.endsWith("\"") && raw.length() >= 2) {
-            return raw.substring(1, raw.length() - 1)
-                    .replace("\\\"", "\"")
-                    .replace("\\\\", "\\");
+            return raw.substring(1, raw.length() - 1).replace("\\\"", "\"").replace("\\\\", "\\");
         }
         return raw;
     }

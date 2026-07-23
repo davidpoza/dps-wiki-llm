@@ -24,7 +24,8 @@ public class SourceNotePlanner {
         frontmatter.put("source_ref", payload.rawPath());
         frontmatter.put("source_id", payload.sourceId());
         frontmatter.put("captured_at", payload.capturedAt().toString());
-        frontmatter.put("updated", payload.capturedAt().atZone(ZoneOffset.UTC).toLocalDate().toString());
+        frontmatter.put(
+                "updated", payload.capturedAt().atZone(ZoneOffset.UTC).toLocalDate().toString());
         frontmatter.put("checksum", payload.checksum());
         if (payload.canonicalUrl() != null) {
             frontmatter.put("canonical_url", payload.canonicalUrl());
@@ -46,7 +47,14 @@ public class SourceNotePlanner {
 
         return new MutationPlan(
                 "ingest-" + payload.sourceId().replace(":", "-"),
-                List.of(new MutationAction(MutationActionType.create, path, payload.title(), frontmatter, sections, payload.sourceId())));
+                List.of(
+                        new MutationAction(
+                                MutationActionType.create,
+                                path,
+                                payload.title(),
+                                frontmatter,
+                                sections,
+                                payload.sourceId())));
     }
 
     public String sourceNotePath(NormalizedSourcePayload payload) {

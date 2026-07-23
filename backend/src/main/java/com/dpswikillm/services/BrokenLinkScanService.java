@@ -26,8 +26,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class BrokenLinkScanService {
     private static final Logger log = LoggerFactory.getLogger(BrokenLinkScanService.class);
-    private static final List<String> TARGET_FOLDERS = List.of("wiki/concepts", "wiki/sources", "wiki/topics");
-    private static final Pattern WIKI_LINK = Pattern.compile("\\[\\[([^\\]|]+)(?:\\|([^\\]]+))?\\]\\]");
+    private static final List<String> TARGET_FOLDERS =
+            List.of("wiki/concepts", "wiki/sources", "wiki/topics");
+    private static final Pattern WIKI_LINK =
+            Pattern.compile("\\[\\[([^\\]|]+)(?:\\|([^\\]]+))?\\]\\]");
 
     private final VaultPathResolver pathResolver;
     private final MarkdownService markdownService;
@@ -37,7 +39,8 @@ public class BrokenLinkScanService {
         this.markdownService = markdownService;
     }
 
-    public BrokenLinkScanResult scan(Consumer<BrokenLinkScanProgress> onProgress) throws IOException {
+    public BrokenLinkScanResult scan(Consumer<BrokenLinkScanProgress> onProgress)
+            throws IOException {
         Set<String> validSlugs = buildSlugIndex();
         List<Path> files = collectFiles();
         int total = files.size();
@@ -45,13 +48,15 @@ public class BrokenLinkScanService {
 
         for (int i = 0; i < files.size(); i++) {
             Path path = files.get(i);
-            String relPath = pathResolver.vaultRoot().relativize(path).toString().replace('\\', '/');
+            String relPath =
+                    pathResolver.vaultRoot().relativize(path).toString().replace('\\', '/');
             try {
                 String content = Files.readString(path, StandardCharsets.UTF_8);
                 MarkdownDocument doc = markdownService.parse(content);
                 for (Map.Entry<String, String> section : doc.sections().entrySet()) {
                     if (section.getValue() != null && !section.getValue().isBlank()) {
-                        extractBrokenLinks(relPath, section.getValue(), section.getKey(), validSlugs, broken);
+                        extractBrokenLinks(
+                                relPath, section.getValue(), section.getKey(), validSlugs, broken);
                     }
                 }
             } catch (IOException ex) {
@@ -140,7 +145,15 @@ public class BrokenLinkScanService {
         if (doc.title() != null && !doc.title().isBlank()) {
             sb.append("# ").append(doc.title()).append("\n\n");
         }
-        List<String> sectionOrder = List.of("Summary", "Facts", "Interpretation", "Relationships", "Related", "Sources", "Open Questions");
+        List<String> sectionOrder =
+                List.of(
+                        "Summary",
+                        "Facts",
+                        "Interpretation",
+                        "Relationships",
+                        "Related",
+                        "Sources",
+                        "Open Questions");
         List<String> rendered = new ArrayList<>();
         for (String sec : sectionOrder) {
             if (updatedSections.containsKey(sec)) {
@@ -181,8 +194,12 @@ public class BrokenLinkScanService {
         return body.isBlank() ? "## " + title : "## " + title + "\n" + body;
     }
 
-    private void extractBrokenLinks(String sourceFile, String sectionContent, String sourceSection,
-                                    Set<String> validSlugs, List<BrokenLinkEntry> broken) {
+    private void extractBrokenLinks(
+            String sourceFile,
+            String sectionContent,
+            String sourceSection,
+            Set<String> validSlugs,
+            List<BrokenLinkEntry> broken) {
         for (String line : sectionContent.split("\n")) {
             Matcher m = WIKI_LINK.matcher(line);
             while (m.find()) {
@@ -198,9 +215,10 @@ public class BrokenLinkScanService {
     private boolean isValidSlug(String slug, Set<String> validSlugs) {
         String normalizedSlug = slug.toLowerCase(Locale.ROOT);
         // Match by basename or by relative path (without extension)
-        String baseName = normalizedSlug.contains("/")
-                ? normalizedSlug.substring(normalizedSlug.lastIndexOf('/') + 1)
-                : normalizedSlug;
+        String baseName =
+                normalizedSlug.contains("/")
+                        ? normalizedSlug.substring(normalizedSlug.lastIndexOf('/') + 1)
+                        : normalizedSlug;
         return validSlugs.contains(normalizedSlug) || validSlugs.contains(baseName);
     }
 
@@ -221,16 +239,22 @@ public class BrokenLinkScanService {
         try (Stream<Path> paths = Files.walk(vaultRoot)) {
             paths.filter(Files::isRegularFile)
                     .filter(p -> p.getFileName().toString().endsWith(".md"))
-                    .forEach(p -> {
-                        String rel = vaultRoot.relativize(p).toString().replace('\\', '/');
-                        // strip .md
-                        String withoutExt = rel.endsWith(".md") ? rel.substring(0, rel.length() - 3) : rel;
-                        String baseName = withoutExt.contains("/")
-                                ? withoutExt.substring(withoutExt.lastIndexOf('/') + 1)
-                                : withoutExt;
-                        slugs.add(withoutExt.toLowerCase(Locale.ROOT));
-                        slugs.add(baseName.toLowerCase(Locale.ROOT));
-                    });
+                    .forEach(
+                            p -> {
+                                String rel = vaultRoot.relativize(p).toString().replace('\\', '/');
+                                // strip .md
+                                String withoutExt =
+                                        rel.endsWith(".md")
+                                                ? rel.substring(0, rel.length() - 3)
+                                                : rel;
+                                String baseName =
+                                        withoutExt.contains("/")
+                                                ? withoutExt.substring(
+                                                        withoutExt.lastIndexOf('/') + 1)
+                                                : withoutExt;
+                                slugs.add(withoutExt.toLowerCase(Locale.ROOT));
+                                slugs.add(baseName.toLowerCase(Locale.ROOT));
+                            });
         }
         return slugs;
     }

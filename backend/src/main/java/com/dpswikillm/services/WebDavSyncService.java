@@ -32,11 +32,11 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 /**
- * Owns WebDAV replication: the synchronous per-file push on save (Section 5) and the
- * manual pull + reconcile with conflict handling triggered by the Sync button (Section 6).
+ * Owns WebDAV replication: the synchronous per-file push on save (Section 5) and the manual pull +
+ * reconcile with conflict handling triggered by the Sync button (Section 6).
  *
- * <p>Conflict detection compares three things per file — the local content hash, the
- * remote content hash, and the last-synced baseline hash ({@link VaultFileSync#getSyncedHash()}).
+ * <p>Conflict detection compares three things per file — the local content hash, the remote content
+ * hash, and the last-synced baseline hash ({@link VaultFileSync#getSyncedHash()}).
  */
 @Service
 public class WebDavSyncService {
@@ -51,10 +51,11 @@ public class WebDavSyncService {
     private final SnapshotService snapshotService;
     private final VaultPathResolver pathResolver;
 
-    public WebDavSyncService(WebDavClient webDavClient,
-                             VaultFileSyncRepository baselineRepository,
-                             SnapshotService snapshotService,
-                             VaultPathResolver pathResolver) {
+    public WebDavSyncService(
+            WebDavClient webDavClient,
+            VaultFileSyncRepository baselineRepository,
+            SnapshotService snapshotService,
+            VaultPathResolver pathResolver) {
         this.webDavClient = webDavClient;
         this.baselineRepository = baselineRepository;
         this.snapshotService = snapshotService;
@@ -83,12 +84,15 @@ public class WebDavSyncService {
         try {
             webDavClient.list().forEach(e -> remoteEtags.put(e.path(), e.versionKey()));
         } catch (IOException e) {
-            log.warn("WebDAV baseline init: could not fetch remote ETags ({}), proceeding without", e.getMessage());
+            log.warn(
+                    "WebDAV baseline init: could not fetch remote ETags ({}), proceeding without",
+                    e.getMessage());
         }
 
         // Load existing baselines in one query
-        Map<String, VaultFileSync> existing = baselineRepository.findAll().stream()
-                .collect(Collectors.toMap(VaultFileSync::getPath, b -> b));
+        Map<String, VaultFileSync> existing =
+                baselineRepository.findAll().stream()
+                        .collect(Collectors.toMap(VaultFileSync::getPath, b -> b));
 
         int initialized = 0, backfilled = 0, processed = 0;
         for (String path : localPaths) {
@@ -106,15 +110,20 @@ public class WebDavSyncService {
             }
             log.info("WebDAV baseline init: {}/{} — {}", processed, total, path);
         }
-        log.info("WebDAV baseline init: done — {} new, {} etag-backfilled, {} already up-to-date",
-                initialized, backfilled, total - initialized - backfilled);
+        log.info(
+                "WebDAV baseline init: done — {} new, {} etag-backfilled, {} already up-to-date",
+                initialized,
+                backfilled,
+                total - initialized - backfilled);
     }
 
     // ---------------------------------------------------------------------
     // Section 5 — synchronous per-file push on save / delete / move
     // ---------------------------------------------------------------------
 
-    /** Pushes a single saved file to WebDAV and updates its baseline. No-op when WebDAV is disabled. */
+    /**
+     * Pushes a single saved file to WebDAV and updates its baseline. No-op when WebDAV is disabled.
+     */
     public void pushSaved(String relPath, String content) {
         if (!webDavClient.isEnabled()) {
             return;
@@ -126,11 +135,13 @@ public class WebDavSyncService {
             String etag = null;
             try {
                 etag = webDavClient.getEtag(normalized);
-            } catch (IOException ignored) {}
+            } catch (IOException ignored) {
+            }
             upsertBaseline(normalized, sha256(content), etag, true, false, null);
         } catch (IOException e) {
             markNotReplicated(normalized);
-            throw new WebDavReplicationException("Failed to replicate " + normalized + " to WebDAV", e);
+            throw new WebDavReplicationException(
+                    "Failed to replicate " + normalized + " to WebDAV", e);
         }
     }
 
@@ -144,7 +155,8 @@ public class WebDavSyncService {
             webDavClient.delete(normalized);
             baselineRepository.deleteById(normalized);
         } catch (IOException e) {
-            throw new WebDavReplicationException("Failed to replicate delete of " + normalized + " to WebDAV", e);
+            throw new WebDavReplicationException(
+                    "Failed to replicate delete of " + normalized + " to WebDAV", e);
         }
     }
 
@@ -162,7 +174,8 @@ public class WebDavSyncService {
             baselineRepository.deleteById(from);
             upsertBaseline(to, sha256(content), null, true, false, null);
         } catch (IOException e) {
-            throw new WebDavReplicationException("Failed to replicate move " + from + " -> " + to + " to WebDAV", e);
+            throw new WebDavReplicationException(
+                    "Failed to replicate move " + from + " -> " + to + " to WebDAV", e);
         }
     }
 
@@ -185,21 +198,33 @@ public class WebDavSyncService {
         } catch (IOException e) {
             throw new WebDavReplicationException("Failed to list WebDAV repository", e);
         }
-        log.info("WebDAV sync: PROPFIND listed {} remote files in {}ms",
-                remoteEntries.size(), System.currentTimeMillis() - t0);
+        log.info(
+                "WebDAV sync: PROPFIND listed {} remote files in {}ms",
+                remoteEntries.size(),
+                System.currentTimeMillis() - t0);
 
-        Map<String, WebDavClient.RemoteEntry> remoteByPath = remoteEntries.stream()
-                .collect(Collectors.toMap(WebDavClient.RemoteEntry::path, e -> e, (a, b) -> a));
+        Map<String, WebDavClient.RemoteEntry> remoteByPath =
+                remoteEntries.stream()
+                        .collect(
+                                Collectors.toMap(
+                                        WebDavClient.RemoteEntry::path, e -> e, (a, b) -> a));
 
         // Load all baselines upfront to avoid N individual DB queries in the loop.
         long tBaselines = System.currentTimeMillis();
-        Map<String, VaultFileSync> allBaselines = baselineRepository.findAll().stream()
-                .collect(Collectors.toMap(VaultFileSync::getPath, b -> b));
-        log.info("WebDAV sync: loaded {} baselines in {}ms", allBaselines.size(), System.currentTimeMillis() - tBaselines);
+        Map<String, VaultFileSync> allBaselines =
+                baselineRepository.findAll().stream()
+                        .collect(Collectors.toMap(VaultFileSync::getPath, b -> b));
+        log.info(
+                "WebDAV sync: loaded {} baselines in {}ms",
+                allBaselines.size(),
+                System.currentTimeMillis() - tBaselines);
 
         long tLocal = System.currentTimeMillis();
         Set<String> localPaths = listLocalMarkdown();
-        log.info("WebDAV sync: listed {} local files in {}ms", localPaths.size(), System.currentTimeMillis() - tLocal);
+        log.info(
+                "WebDAV sync: listed {} local files in {}ms",
+                localPaths.size(),
+                System.currentTimeMillis() - tLocal);
         Set<String> allPaths = new TreeSet<>();
         allPaths.addAll(localPaths);
         allPaths.addAll(remoteByPath.keySet());
@@ -230,20 +255,24 @@ public class WebDavSyncService {
             WebDavClient.RemoteEntry remote = remoteByPath.get(path);
             String currentRemoteEtag = remote != null ? remote.versionKey() : null;
 
-            // ETag fast-path: remote unchanged when both stored and current ETags are non-null and equal.
+            // ETag fast-path: remote unchanged when both stored and current ETags are non-null and
+            // equal.
             // Servers that don't return ETags always fall back to fetching content (conservative).
-            boolean remoteEtagUnchanged = syncedEtag != null
-                    && currentRemoteEtag != null
-                    && Objects.equals(currentRemoteEtag, syncedEtag);
+            boolean remoteEtagUnchanged =
+                    syncedEtag != null
+                            && currentRemoteEtag != null
+                            && Objects.equals(currentRemoteEtag, syncedEtag);
 
             // Use file mtime to detect local changes without reading content.
             // If the file hasn't been touched since the last sync, we trust the stored hash.
             boolean localMayHaveChanged = true;
             if (baseline != null && baseline.getUpdatedAt() != null && localExists) {
                 try {
-                    Instant mtime = Files.getLastModifiedTime(pathResolver.resolve(path)).toInstant();
+                    Instant mtime =
+                            Files.getLastModifiedTime(pathResolver.resolve(path)).toInstant();
                     localMayHaveChanged = mtime.isAfter(baseline.getUpdatedAt());
-                } catch (IOException ignored) {}
+                } catch (IOException ignored) {
+                }
             }
 
             // Fast-path: nothing changed on either side.
@@ -285,7 +314,9 @@ public class WebDavSyncService {
 
             if (remoteChanged && !localChanged) {
                 if (pullSnapshot == null) {
-                    pullSnapshot = snapshotService.beginSnapshot(null, "webdav-sync", "WebDAV sync", "WEBDAV_PULL");
+                    pullSnapshot =
+                            snapshotService.beginSnapshot(
+                                    null, "webdav-sync", "WebDAV sync", "WEBDAV_PULL");
                 }
                 // Ensure we have the actual content before applying.
                 if (remoteContent == null && remote != null) {
@@ -300,7 +331,10 @@ public class WebDavSyncService {
                         webDavClient.put(path, localContent);
                         upsertBaseline(path, localHash, null, true, false, null);
                     } catch (IOException e) {
-                        log.warn("Failed to push local-only file {} during sync: {}", path, e.getMessage());
+                        log.warn(
+                                "Failed to push local-only file {} during sync: {}",
+                                path,
+                                e.getMessage());
                     }
                 }
                 // Otherwise it was already pushed on save; nothing to do.
@@ -315,23 +349,38 @@ public class WebDavSyncService {
             }
         }
 
-        log.info("WebDAV sync: loop done in {}ms — {} pulled, {} deleted, {} conflicts",
-                System.currentTimeMillis() - tLoop, pulled.size(), deleted.size(), conflicts.size());
+        log.info(
+                "WebDAV sync: loop done in {}ms — {} pulled, {} deleted, {} conflicts",
+                System.currentTimeMillis() - tLoop,
+                pulled.size(),
+                deleted.size(),
+                conflicts.size());
         if (pullSnapshot != null) {
             snapshotService.finalizeSnapshot(pullSnapshot, null);
         }
         return new SyncResultDto(pulled, deleted, conflicts);
     }
 
-    private void applyRemote(Snapshot snapshot, String path, String remoteContent,
-                             WebDavClient.RemoteEntry remote, String remoteHash,
-                             List<String> pulled, List<String> deleted) {
+    private void applyRemote(
+            Snapshot snapshot,
+            String path,
+            String remoteContent,
+            WebDavClient.RemoteEntry remote,
+            String remoteHash,
+            List<String> pulled,
+            List<String> deleted) {
         try {
             snapshotService.captureFile(snapshot, path);
             if (remoteContent != null) {
                 writeLocal(path, remoteContent);
                 snapshotService.recordAfter(snapshot, path);
-                upsertBaseline(path, remoteHash, remote != null ? remote.versionKey() : null, true, false, null);
+                upsertBaseline(
+                        path,
+                        remoteHash,
+                        remote != null ? remote.versionKey() : null,
+                        true,
+                        false,
+                        null);
                 pulled.add(path);
             } else {
                 deleteLocal(path);
@@ -350,29 +399,41 @@ public class WebDavSyncService {
 
     public List<ConflictDto> listConflicts() {
         return baselineRepository.findByConflictTrue().stream()
-                .map(b -> new ConflictDto(b.getPath(),
-                        localExists(b.getPath()) ? readLocal(b.getPath()) : null,
-                        b.getRemoteContent()))
+                .map(
+                        b ->
+                                new ConflictDto(
+                                        b.getPath(),
+                                        localExists(b.getPath()) ? readLocal(b.getPath()) : null,
+                                        b.getRemoteContent()))
                 .toList();
     }
 
     public void resolveConflict(String path, String keep) {
         String normalized = pathResolver.normalizeRelativePath(path);
-        VaultFileSync baseline = baselineRepository.findById(normalized)
-                .filter(VaultFileSync::isConflict)
-                .orElseThrow(() -> new java.util.NoSuchElementException("No conflict for path: " + path));
+        VaultFileSync baseline =
+                baselineRepository
+                        .findById(normalized)
+                        .filter(VaultFileSync::isConflict)
+                        .orElseThrow(
+                                () ->
+                                        new java.util.NoSuchElementException(
+                                                "No conflict for path: " + path));
 
         if (KEEP_LOCAL.equalsIgnoreCase(keep)) {
             String localContent = localExists(normalized) ? readLocal(normalized) : "";
             try {
                 webDavClient.put(normalized, localContent);
             } catch (IOException e) {
-                throw new WebDavReplicationException("Failed to push resolved local content for " + normalized, e);
+                throw new WebDavReplicationException(
+                        "Failed to push resolved local content for " + normalized, e);
             }
             upsertBaseline(normalized, sha256(localContent), null, true, false, null);
         } else if (KEEP_REMOTE.equalsIgnoreCase(keep)) {
-            String remoteContent = baseline.getRemoteContent() == null ? "" : baseline.getRemoteContent();
-            Snapshot snapshot = snapshotService.beginSnapshot(null, "webdav-conflict-resolve", normalized, "WEBDAV_PULL");
+            String remoteContent =
+                    baseline.getRemoteContent() == null ? "" : baseline.getRemoteContent();
+            Snapshot snapshot =
+                    snapshotService.beginSnapshot(
+                            null, "webdav-conflict-resolve", normalized, "WEBDAV_PULL");
             try {
                 snapshotService.captureFile(snapshot, normalized);
                 writeLocal(normalized, remoteContent);
@@ -392,8 +453,13 @@ public class WebDavSyncService {
     // Baseline helpers
     // ---------------------------------------------------------------------
 
-    private void upsertBaseline(String path, String syncedHash, String etag,
-                                boolean replicated, boolean conflict, String remoteContent) {
+    private void upsertBaseline(
+            String path,
+            String syncedHash,
+            String etag,
+            boolean replicated,
+            boolean conflict,
+            String remoteContent) {
         VaultFileSync row = baselineRepository.findById(path).orElseGet(VaultFileSync::new);
         row.setPath(path);
         row.setSyncedHash(syncedHash);
@@ -436,15 +502,16 @@ public class WebDavSyncService {
         try (var stream = Files.walk(root)) {
             stream.filter(Files::isRegularFile)
                     .filter(p -> p.getFileName().toString().endsWith(".md"))
-                    .filter(p -> {
-                        Path rel = root.relativize(p);
-                        for (Path seg : rel) {
-                            if (seg.toString().startsWith(".")) {
-                                return false;
-                            }
-                        }
-                        return true;
-                    })
+                    .filter(
+                            p -> {
+                                Path rel = root.relativize(p);
+                                for (Path seg : rel) {
+                                    if (seg.toString().startsWith(".")) {
+                                        return false;
+                                    }
+                                }
+                                return true;
+                            })
                     .forEach(p -> paths.add(root.relativize(p).toString().replace('\\', '/')));
         } catch (IOException e) {
             throw new UncheckedIOException(e);

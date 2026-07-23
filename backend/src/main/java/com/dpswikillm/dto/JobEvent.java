@@ -13,5 +13,4 @@ public record JobEvent(
         String path,
         String action,
         String message,
-        String result
-) {}
+        String result) {}

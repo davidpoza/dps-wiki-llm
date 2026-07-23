@@ -13,10 +13,18 @@ public record NormalizedSourcePayload(
         String canonicalUrl,
         String checksum,
         Map<String, Object> metadata,
-        LlmSourceNote sourceNote
-) {
+        LlmSourceNote sourceNote) {
     public NormalizedSourcePayload withSourceNote(LlmSourceNote note) {
-        return new NormalizedSourcePayload(sourceId, sourceKind, capturedAt, rawPath, title, content, canonicalUrl,
-                checksum, metadata, note);
+        return new NormalizedSourcePayload(
+                sourceId,
+                sourceKind,
+                capturedAt,
+                rawPath,
+                title,
+                content,
+                canonicalUrl,
+                checksum,
+                metadata,
+                note);
     }
 }

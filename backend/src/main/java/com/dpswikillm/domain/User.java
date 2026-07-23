@@ -78,19 +78,52 @@ public class User implements UserDetails {
         return enabled;
     }
 
-    public UUID getId() { return id; }
-    public String getEmail() { return email; }
-    public String getRoles() { return roles; }
-    public List<String> getRoleList() { return Arrays.asList(roles.split(",")); }
-    public OffsetDateTime getCreatedAt() { return createdAt; }
-    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public UUID getId() {
+        return id;
+    }
 
-    public boolean isTwoFactorEnabled() { return twoFactorEnabled; }
-    public void setTwoFactorEnabled(boolean twoFactorEnabled) { this.twoFactorEnabled = twoFactorEnabled; }
-    public String getTwoFactorSecret() { return twoFactorSecret; }
-    public void setTwoFactorSecret(String twoFactorSecret) { this.twoFactorSecret = twoFactorSecret; }
-    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public String getEmail() {
+        return email;
+    }
+
+    public String getRoles() {
+        return roles;
+    }
+
+    public List<String> getRoleList() {
+        return Arrays.asList(roles.split(","));
+    }
+
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public OffsetDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public boolean isTwoFactorEnabled() {
+        return twoFactorEnabled;
+    }
+
+    public void setTwoFactorEnabled(boolean twoFactorEnabled) {
+        this.twoFactorEnabled = twoFactorEnabled;
+    }
+
+    public String getTwoFactorSecret() {
+        return twoFactorSecret;
+    }
+
+    public void setTwoFactorSecret(String twoFactorSecret) {
+        this.twoFactorSecret = twoFactorSecret;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
 
     @PreUpdate
-    void onUpdate() { this.updatedAt = OffsetDateTime.now(); }
+    void onUpdate() {
+        this.updatedAt = OffsetDateTime.now();
+    }
 }

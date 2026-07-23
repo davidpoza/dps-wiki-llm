@@ -32,8 +32,8 @@ public class ChatSessionController {
     private final ChatSessionService sessionService;
     private final ChatSessionVaultExportService exportService;
 
-    public ChatSessionController(ChatSessionService sessionService,
-                                  ChatSessionVaultExportService exportService) {
+    public ChatSessionController(
+            ChatSessionService sessionService, ChatSessionVaultExportService exportService) {
         this.sessionService = sessionService;
         this.exportService = exportService;
     }
@@ -47,13 +47,14 @@ public class ChatSessionController {
 
     @GetMapping
     public List<ChatSessionDto> listSessions(@AuthenticationPrincipal User user) {
-        return sessionService.listSessions(user.getId())
-                .stream().map(ChatSessionDto::from).toList();
+        return sessionService.listSessions(user.getId()).stream()
+                .map(ChatSessionDto::from)
+                .toList();
     }
 
     @GetMapping("/{id}")
-    public ChatSessionDetailDto getSession(@AuthenticationPrincipal User user,
-                                           @PathVariable UUID id) {
+    public ChatSessionDetailDto getSession(
+            @AuthenticationPrincipal User user, @PathVariable UUID id) {
         ChatSession session = sessionService.getSession(id, user.getId());
         List<ChatMessage> messages = sessionService.getMessages(id, user.getId());
         return ChatSessionDetailDto.from(session, messages);
@@ -66,16 +67,17 @@ public class ChatSessionController {
     }
 
     @PostMapping("/{id}/messages")
-    public List<ChatMessageDto> addMessage(@AuthenticationPrincipal User user,
-                                           @PathVariable UUID id,
-                                           @RequestBody @Valid SendMessageRequest request) {
+    public List<ChatMessageDto> addMessage(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID id,
+            @RequestBody @Valid SendMessageRequest request) {
         List<ChatMessage> messages = sessionService.addMessage(id, user.getId(), request.content());
         return messages.stream().map(ChatMessageDto::from).toList();
     }
 
     @PostMapping("/{id}/export-to-vault")
-    public Map<String, String> exportToVault(@AuthenticationPrincipal User user,
-                                              @PathVariable UUID id) throws IOException {
+    public Map<String, String> exportToVault(
+            @AuthenticationPrincipal User user, @PathVariable UUID id) throws IOException {
         String path = exportService.exportToVault(id, user.getId());
         return Map.of("path", path);
     }

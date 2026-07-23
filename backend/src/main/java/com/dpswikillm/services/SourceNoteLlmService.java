@@ -21,8 +21,11 @@ public class SourceNoteLlmService {
     private final PromptService promptService;
     private final RetryingLlmExecutor retrying;
 
-    public SourceNoteLlmService(LlmClient llmClient, JsonExtractionService jsonExtractionService,
-                                PromptService promptService, RetryingLlmExecutor retrying) {
+    public SourceNoteLlmService(
+            LlmClient llmClient,
+            JsonExtractionService jsonExtractionService,
+            PromptService promptService,
+            RetryingLlmExecutor retrying) {
         this.llmClient = llmClient;
         this.jsonExtractionService = jsonExtractionService;
         this.promptService = promptService;
@@ -33,15 +36,32 @@ public class SourceNoteLlmService {
         // Retry the whole generate-and-parse cycle: a malformed response (missing
         // required fields or keywords) yields a fresh generation rather than
         // failing the ingest outright.
-        JsonNode node = retrying.executeParsing(() -> {
-            log.debug("Sending source payload to LLM ({} chars)", payload.content().length());
-            String response = llmClient.chatJson(List.of(
-                    new ChatMessage("system", promptService.getText("source-note-system")),
-                    new ChatMessage("user", "Source payload:\n" + payload.content())));
-            log.debug("LLM raw response ({} chars): {}", response.length(), response);
-            return jsonExtractionService.extractObject(response,
-                    json -> nonEmpty(json, "summary") && nonEmpty(json, "raw_context") && nonEmptyArray(json, "keywords"));
-        });
+        JsonNode node =
+                retrying.executeParsing(
+                        () -> {
+                            log.debug(
+                                    "Sending source payload to LLM ({} chars)",
+                                    payload.content().length());
+                            String response =
+                                    llmClient.chatJson(
+                                            List.of(
+                                                    new ChatMessage(
+                                                            "system",
+                                                            promptService.getText(
+                                                                    "source-note-system")),
+                                                    new ChatMessage(
+                                                            "user",
+                                                            "Source payload:\n"
+                                                                    + payload.content())));
+                            log.debug(
+                                    "LLM raw response ({} chars): {}", response.length(), response);
+                            return jsonExtractionService.extractObject(
+                                    response,
+                                    json ->
+                                            nonEmpty(json, "summary")
+                                                    && nonEmpty(json, "raw_context")
+                                                    && nonEmptyArray(json, "keywords"));
+                        });
         return new LlmSourceNote(
                 node.get("summary").asText(),
                 node.get("raw_context").asText(),
@@ -53,10 +73,10 @@ public class SourceNoteLlmService {
     }
 
     /**
-     * Builds the frontmatter keyword list from the LLM response, mechanically
-     * normalizing each entry and removing blanks/duplicates. This keeps the stored
-     * format (lowercase kebab-case) stable even when the model does not fully comply
-     * with the prompt, mirroring {@code KeywordGenerationService}.
+     * Builds the frontmatter keyword list from the LLM response, mechanically normalizing each
+     * entry and removing blanks/duplicates. This keeps the stored format (lowercase kebab-case)
+     * stable even when the model does not fully comply with the prompt, mirroring {@code
+     * KeywordGenerationService}.
      */
     private List<String> normalizedKeywords(JsonNode node) {
         List<String> keywords = new ArrayList<>();
@@ -77,12 +97,13 @@ public class SourceNoteLlmService {
     }
 
     /**
-     * Enforces the mechanical keyword format: lowercase, spaces replaced by hyphens
-     * (kebab-case), with collapsed/trimmed hyphens. Singular form and article removal
-     * are the model's responsibility via the prompt.
+     * Enforces the mechanical keyword format: lowercase, spaces replaced by hyphens (kebab-case),
+     * with collapsed/trimmed hyphens. Singular form and article removal are the model's
+     * responsibility via the prompt.
      */
     private String normalizeKeyword(String raw) {
-        return raw.trim().toLowerCase(Locale.ROOT)
+        return raw.trim()
+                .toLowerCase(Locale.ROOT)
                 .replaceAll("\\s+", "-")
                 .replaceAll("-{2,}", "-")
                 .replaceAll("^-+|-+$", "");

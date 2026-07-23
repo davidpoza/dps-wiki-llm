@@ -21,7 +21,8 @@ public class EmbeddingsHealthIndicator implements HealthIndicator {
     public Health health() {
         try {
             URI uri = URI.create(properties.embeddings().baseUrl() + "/health");
-            ResponseEntity<String> response = restClient.get().uri(uri).retrieve().toEntity(String.class);
+            ResponseEntity<String> response =
+                    restClient.get().uri(uri).retrieve().toEntity(String.class);
             if (response.getStatusCode().is2xxSuccessful()) {
                 return Health.up()
                         .withDetail("model", properties.embeddings().model())
@@ -30,9 +31,7 @@ public class EmbeddingsHealthIndicator implements HealthIndicator {
             }
             return Health.down().withDetail("status", response.getStatusCode().value()).build();
         } catch (RuntimeException ex) {
-            return Health.down(ex)
-                    .withDetail("baseUrl", properties.embeddings().baseUrl())
-                    .build();
+            return Health.down(ex).withDetail("baseUrl", properties.embeddings().baseUrl()).build();
         }
     }
 }

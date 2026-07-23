@@ -1,5 +1,10 @@
 package com.dpswikillm.services;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
 import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.domain.User;
 import com.dpswikillm.repositories.UserRepository;
@@ -8,7 +13,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -16,16 +20,10 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
-
 @ExtendWith(MockitoExtension.class)
 class UserServiceTests {
 
-    @Mock
-    private UserRepository userRepository;
+    @Mock private UserRepository userRepository;
 
     private PasswordEncoder passwordEncoder;
     private UserService userService;
@@ -33,20 +31,26 @@ class UserServiceTests {
     @BeforeEach
     void setUp() {
         passwordEncoder = new BCryptPasswordEncoder();
-        AppProperties props = new AppProperties(
-                "/vault",
-                List.of(),
-                null, null, null,
-                new AppProperties.Jwt("", 86400000L),
-                new AppProperties.Admin("admin", "secret"), null, null
-        );
+        AppProperties props =
+                new AppProperties(
+                        "/vault",
+                        List.of(),
+                        null,
+                        null,
+                        null,
+                        new AppProperties.Jwt("", 86400000L),
+                        new AppProperties.Admin("admin", "secret"),
+                        null,
+                        null);
         userService = new UserService(userRepository, passwordEncoder, props);
     }
 
     @Test
     void createUser_encodesPassword() {
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        User user = userService.createUser("alice", "alice@test.com", "plaintext", List.of("ROLE_USER"));
+        User user =
+                userService.createUser(
+                        "alice", "alice@test.com", "plaintext", List.of("ROLE_USER"));
         assertThat(user.getPassword()).startsWith("$2a$");
         assertThat(user.getPassword()).isNotEqualTo("plaintext");
     }
@@ -54,7 +58,9 @@ class UserServiceTests {
     @Test
     void createUser_setsCorrectRoles() {
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        User user = userService.createUser("alice", "alice@test.com", "pass", List.of("ROLE_USER", "ROLE_ADMIN"));
+        User user =
+                userService.createUser(
+                        "alice", "alice@test.com", "pass", List.of("ROLE_USER", "ROLE_ADMIN"));
         assertThat(user.getRoles()).contains("ROLE_USER").contains("ROLE_ADMIN");
     }
 

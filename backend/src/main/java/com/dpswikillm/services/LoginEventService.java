@@ -14,28 +14,37 @@ public class LoginEventService {
     private final LoginEventRepository repository;
     private final GeoLocationService geoLocationService;
 
-    public LoginEventService(LoginEventRepository repository, GeoLocationService geoLocationService) {
+    public LoginEventService(
+            LoginEventRepository repository, GeoLocationService geoLocationService) {
         this.repository = repository;
         this.geoLocationService = geoLocationService;
     }
 
-    public void record(User user, String username, HttpServletRequest request,
-                       boolean success, String failureReason) {
+    public void record(
+            User user,
+            String username,
+            HttpServletRequest request,
+            boolean success,
+            String failureReason) {
         String ip = extractIp(request);
         GeoLocationService.GeoData geo = geoLocationService.resolve(ip);
-        repository.save(new LoginEvent(user, username, ip, geo.country(), geo.city(), success, failureReason));
+        repository.save(
+                new LoginEvent(
+                        user, username, ip, geo.country(), geo.city(), success, failureReason));
     }
 
     public List<LoginEventDto> getHistory(User user) {
         return repository.findTop20ByUserOrderByCreatedAtDesc(user).stream()
-                .map(e -> new LoginEventDto(
-                        e.getId(),
-                        e.getCreatedAt(),
-                        e.getIpAddress(),
-                        e.getCountry(),
-                        e.getCity(),
-                        e.isSuccess(),
-                        e.getFailureReason()))
+                .map(
+                        e ->
+                                new LoginEventDto(
+                                        e.getId(),
+                                        e.getCreatedAt(),
+                                        e.getIpAddress(),
+                                        e.getCountry(),
+                                        e.getCity(),
+                                        e.isSuccess(),
+                                        e.getFailureReason()))
                 .toList();
     }
 

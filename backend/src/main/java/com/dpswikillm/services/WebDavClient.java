@@ -17,12 +17,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Thin wrapper around the Sardine WebDAV client. All library-specific concerns
- * (credentials, path→URL encoding, MKCOL of parent collections, PROPFIND walking)
- * are isolated here so the rest of the code stays library-agnostic.
+ * Thin wrapper around the Sardine WebDAV client. All library-specific concerns (credentials,
+ * path→URL encoding, MKCOL of parent collections, PROPFIND walking) are isolated here so the rest
+ * of the code stays library-agnostic.
  *
- * <p>When {@code WEBDAV_URL} is blank the client is disabled: mutating calls are
- * no-ops and reads return empty, so local editing keeps working without WebDAV.
+ * <p>When {@code WEBDAV_URL} is blank the client is disabled: mutating calls are no-ops and reads
+ * return empty, so local editing keeps working without WebDAV.
  */
 @Component
 public class WebDavClient {
@@ -59,7 +59,10 @@ public class WebDavClient {
         return SardineFactory.begin(config.username(), config.password());
     }
 
-    /** Maps a vault-relative path (possibly nested, with spaces/non-ASCII) to the absolute WebDAV URL. */
+    /**
+     * Maps a vault-relative path (possibly nested, with spaces/non-ASCII) to the absolute WebDAV
+     * URL.
+     */
     public String urlFor(String relPath) {
         StringBuilder sb = new StringBuilder(baseUrl);
         for (String segment : relPath.split("/")) {
@@ -81,7 +84,10 @@ public class WebDavClient {
         }
         Sardine sardine = sardine();
         ensureParentCollections(sardine, relPath);
-        sardine.put(urlFor(relPath), content.getBytes(StandardCharsets.UTF_8), "text/markdown; charset=utf-8");
+        sardine.put(
+                urlFor(relPath),
+                content.getBytes(StandardCharsets.UTF_8),
+                "text/markdown; charset=utf-8");
     }
 
     public Optional<String> get(String relPath) throws IOException {
@@ -123,7 +129,10 @@ public class WebDavClient {
         sardine.move(fromUrl, urlFor(toRel));
     }
 
-    /** Returns the version key (ETag or Last-Modified) for a single file, or {@code null} if it doesn't exist. */
+    /**
+     * Returns the version key (ETag or Last-Modified) for a single file, or {@code null} if it
+     * doesn't exist.
+     */
     public String getEtag(String relPath) throws IOException {
         if (!isEnabled()) {
             return null;
@@ -147,9 +156,9 @@ public class WebDavClient {
     /**
      * Lists every {@code .md} file under the base URL with its ETag.
      *
-     * <p>Tries a single {@code Depth: infinity} PROPFIND first (one HTTP request for the
-     * whole tree). Falls back to a recursive {@code Depth: 1} walk if the server rejects
-     * the infinity request (some servers disable it for large vaults).
+     * <p>Tries a single {@code Depth: infinity} PROPFIND first (one HTTP request for the whole
+     * tree). Falls back to a recursive {@code Depth: 1} walk if the server rejects the infinity
+     * request (some servers disable it for large vaults).
      */
     public List<RemoteEntry> list() throws IOException {
         if (!isEnabled()) {
@@ -159,7 +168,9 @@ public class WebDavClient {
         try {
             return listInfinity(sardine);
         } catch (IOException e) {
-            log.debug("Depth:infinity PROPFIND failed ({}), falling back to recursive walk", e.getMessage());
+            log.debug(
+                    "Depth:infinity PROPFIND failed ({}), falling back to recursive walk",
+                    e.getMessage());
             List<RemoteEntry> out = new ArrayList<>();
             walk(sardine, "", out);
             return out;
@@ -173,8 +184,10 @@ public class WebDavClient {
             if (!resource.isDirectory()) {
                 String rel = relativePath(resource);
                 if (!rel.isEmpty() && rel.endsWith(".md")) {
-                    String lastModified = resource.getModified() != null
-                            ? resource.getModified().toInstant().toString() : null;
+                    String lastModified =
+                            resource.getModified() != null
+                                    ? resource.getModified().toInstant().toString()
+                                    : null;
                     out.add(new RemoteEntry(rel, resource.getEtag(), lastModified));
                 }
             }
@@ -199,8 +212,10 @@ public class WebDavClient {
             if (resource.isDirectory()) {
                 walk(sardine, rel, out);
             } else if (rel.endsWith(".md")) {
-                String lastModified = resource.getModified() != null
-                        ? resource.getModified().toInstant().toString() : null;
+                String lastModified =
+                        resource.getModified() != null
+                                ? resource.getModified().toInstant().toString()
+                                : null;
                 out.add(new RemoteEntry(rel, resource.getEtag(), lastModified));
             }
         }
@@ -255,7 +270,9 @@ public class WebDavClient {
     }
 
     public record RemoteEntry(String path, String etag, String lastModified) {
-        /** ETag if available, otherwise the ISO Last-Modified string. Used as an opaque version key. */
+        /**
+         * ETag if available, otherwise the ISO Last-Modified string. Used as an opaque version key.
+         */
         public String versionKey() {
             return etag != null ? etag : lastModified;
         }

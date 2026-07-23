@@ -12,9 +12,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "job_connection_candidates")
 public class JobConnectionCandidate {
-    @Id
-    @GeneratedValue
-    private UUID id;
+    @Id @GeneratedValue private UUID id;
 
     private UUID jobId;
     private String targetPath;

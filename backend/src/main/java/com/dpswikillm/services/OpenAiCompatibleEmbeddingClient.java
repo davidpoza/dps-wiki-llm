@@ -22,15 +22,14 @@ public class OpenAiCompatibleEmbeddingClient implements EmbeddingClient {
     private final RetryingLlmExecutor retrying;
     private final int maxBatchSize;
 
-    public OpenAiCompatibleEmbeddingClient(AppProperties properties, RestClient.Builder builder, RetryingLlmExecutor retrying) {
+    public OpenAiCompatibleEmbeddingClient(
+            AppProperties properties, RestClient.Builder builder, RetryingLlmExecutor retrying) {
         this.properties = properties;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout((int) CONNECT_TIMEOUT.toMillis());
         factory.setReadTimeout((int) READ_TIMEOUT.toMillis());
-        this.restClient = builder
-                .baseUrl(properties.embeddings().baseUrl())
-                .requestFactory(factory)
-                .build();
+        this.restClient =
+                builder.baseUrl(properties.embeddings().baseUrl()).requestFactory(factory).build();
         this.retrying = retrying;
         this.maxBatchSize = properties.embeddings().maxBatchSize();
     }
@@ -65,34 +64,58 @@ public class OpenAiCompatibleEmbeddingClient implements EmbeddingClient {
 
     @SuppressWarnings("unchecked")
     private List<float[]> embedBatch(List<String> inputs) {
-        return retrying.execute(() -> {
-            try {
-                // Use TEI native /embed endpoint — supports truncate:true unlike /embeddings (OpenAI-compat)
-                List<List<Number>> response = restClient.post()
-                        .uri("/embed")
-                        .header("Authorization", "Bearer " + properties.embeddings().apiKey())
-                        .body(Map.of("inputs", inputs, "truncate", true, "normalize", true))
-                        .retrieve()
-                        .body(List.class);
-                List<float[]> vectors = new ArrayList<>();
-                for (List<Number> values : response) {
-                    float[] vector = new float[values.size()];
-                    for (int i = 0; i < values.size(); i += 1) {
-                        vector[i] = values.get(i).floatValue();
+        return retrying.execute(
+                () -> {
+                    try {
+                        // Use TEI native /embed endpoint — supports truncate:true unlike
+                        // /embeddings (OpenAI-compat)
+                        List<List<Number>> response =
+                                restClient
+                                        .post()
+                                        .uri("/embed")
+                                        .header(
+                                                "Authorization",
+                                                "Bearer " + properties.embeddings().apiKey())
+                                        .body(
+                                                Map.of(
+                                                        "inputs",
+                                                        inputs,
+                                                        "truncate",
+                                                        true,
+                                                        "normalize",
+                                                        true))
+                                        .retrieve()
+                                        .body(List.class);
+                        List<float[]> vectors = new ArrayList<>();
+                        for (List<Number> values : response) {
+                            float[] vector = new float[values.size()];
+                            for (int i = 0; i < values.size(); i += 1) {
+                                vector[i] = values.get(i).floatValue();
+                            }
+                            vectors.add(vector);
+                        }
+                        return vectors;
+                    } catch (RestClientResponseException ex) {
+                        boolean retryable =
+                                ex.getStatusCode().value() == 429
+                                        || ex.getStatusCode().is5xxServerError();
+                        throw new LlmClientException(
+                                "Embedding sidecar failed with HTTP "
+                                        + ex.getStatusCode().value()
+                                        + ": "
+                                        + ex.getResponseBodyAsString(),
+                                ex,
+                                retryable);
+                    } catch (ResourceAccessException ex) {
+                        throw new LlmClientException(
+                                "Embedding sidecar unreachable: " + rootCause(ex), ex, true);
+                    } catch (RuntimeException ex) {
+                        throw new LlmClientException(
+                                "Embedding sidecar returned an invalid response: " + rootCause(ex),
+                                ex,
+                                true);
                     }
-                    vectors.add(vector);
-                }
-                return vectors;
-            } catch (RestClientResponseException ex) {
-                boolean retryable = ex.getStatusCode().value() == 429 || ex.getStatusCode().is5xxServerError();
-                throw new LlmClientException("Embedding sidecar failed with HTTP " + ex.getStatusCode().value()
-                        + ": " + ex.getResponseBodyAsString(), ex, retryable);
-            } catch (ResourceAccessException ex) {
-                throw new LlmClientException("Embedding sidecar unreachable: " + rootCause(ex), ex, true);
-            } catch (RuntimeException ex) {
-                throw new LlmClientException("Embedding sidecar returned an invalid response: " + rootCause(ex), ex, true);
-            }
-        });
+                });
     }
 
     private static String rootCause(Throwable ex) {

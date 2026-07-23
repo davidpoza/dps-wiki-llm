@@ -29,18 +29,21 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(
             @NonNull HttpServletRequest request,
             @NonNull HttpServletResponse response,
-            @NonNull FilterChain filterChain) throws ServletException, IOException {
+            @NonNull FilterChain filterChain)
+            throws ServletException, IOException {
 
         String token = extractToken(request);
 
-        if (token != null && jwtUtil.validateToken(token)
+        if (token != null
+                && jwtUtil.validateToken(token)
                 && !JwtUtil.SCOPE_2FA.equals(jwtUtil.extractScope(token))
                 && SecurityContextHolder.getContext().getAuthentication() == null) {
             String username = jwtUtil.extractUsername(token);
             UserDetails userDetails = userService.loadUserByUsername(username);
             if (userDetails.isEnabled()) {
-                var auth = new UsernamePasswordAuthenticationToken(
-                        userDetails, null, userDetails.getAuthorities());
+                var auth =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails, null, userDetails.getAuthorities());
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(auth);
             }

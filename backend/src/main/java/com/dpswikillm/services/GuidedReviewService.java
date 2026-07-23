@@ -38,15 +38,16 @@ public class GuidedReviewService {
     private final JobLifecycleService lifecycleService;
     private final ObjectMapper objectMapper;
 
-    public GuidedReviewService(JobRepository jobRepository,
-                               JobConnectionCandidateRepository candidateRepository,
-                               OperationRepository operationRepository,
-                               MutationApplier mutationApplier,
-                               ReindexService reindexService,
-                               EmbeddingIndexService embeddingIndexService,
-                               SnapshotService snapshotService,
-                               JobLifecycleService lifecycleService,
-                               ObjectMapper objectMapper) {
+    public GuidedReviewService(
+            JobRepository jobRepository,
+            JobConnectionCandidateRepository candidateRepository,
+            OperationRepository operationRepository,
+            MutationApplier mutationApplier,
+            ReindexService reindexService,
+            EmbeddingIndexService embeddingIndexService,
+            SnapshotService snapshotService,
+            JobLifecycleService lifecycleService,
+            ObjectMapper objectMapper) {
         this.jobRepository = jobRepository;
         this.candidateRepository = candidateRepository;
         this.operationRepository = operationRepository;
@@ -66,7 +67,8 @@ public class GuidedReviewService {
     @Transactional
     public MutationResult review(java.util.UUID jobId, ReviewRequest request) throws Exception {
         Job job = jobRepository.findById(jobId).orElseThrow();
-        List<JobConnectionCandidate> candidates = candidateRepository.findByJobIdOrderByCreatedAtAsc(jobId);
+        List<JobConnectionCandidate> candidates =
+                candidateRepository.findByJobIdOrderByCreatedAtAsc(jobId);
         Map<java.util.UUID, JobConnectionCandidate> byId = new LinkedHashMap<>();
         for (JobConnectionCandidate candidate : candidates) {
             byId.put(candidate.getId(), candidate);
@@ -82,10 +84,15 @@ public class GuidedReviewService {
         }
         candidateRepository.saveAll(candidates);
 
-        String sourceNotePath = candidates.isEmpty() ? null : candidates.getFirst().getProposedLink();
-        List<JobConnectionCandidate> accepted = candidates.stream()
-                .filter(candidate -> candidate.getDecision() == ConnectionCandidateDecision.accepted)
-                .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+        String sourceNotePath =
+                candidates.isEmpty() ? null : candidates.getFirst().getProposedLink();
+        List<JobConnectionCandidate> accepted =
+                candidates.stream()
+                        .filter(
+                                candidate ->
+                                        candidate.getDecision()
+                                                == ConnectionCandidateDecision.accepted)
+                        .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
         if (request.manualTargetPaths() != null && sourceNotePath != null) {
             for (String targetPath : request.manualTargetPaths()) {
                 JobConnectionCandidate manual = new JobConnectionCandidate();
@@ -108,25 +115,37 @@ public class GuidedReviewService {
     }
 
     @Transactional
-    public MutationResult applyAccepted(Job job, List<JobConnectionCandidate> accepted, String planId,
-                                        boolean commitImmediately) throws Exception {
+    public MutationResult applyAccepted(
+            Job job,
+            List<JobConnectionCandidate> accepted,
+            String planId,
+            boolean commitImmediately)
+            throws Exception {
         if (accepted == null || accepted.isEmpty()) {
             return MutationResult.empty(planId);
         }
         candidateRepository.saveAll(accepted);
         List<MutationAction> actions = new ArrayList<>();
         for (JobConnectionCandidate candidate : accepted) {
-            actions.add(new MutationAction(
-                    MutationActionType.update,
-                    candidate.getTargetPath(),
-                    null,
-                    Map.of(),
-                    Map.of(
-                            candidate.getProposedSection() == null ? "Related" : candidate.getProposedSection(),
-                            List.of("[[" + candidate.getProposedLink() + "]]"),
-                            "Sources",
-                            List.of("[[" + candidate.getProposedLink() + "]]")),
-                    "review:" + job.getId() + ":" + candidate.getTargetPath() + ":" + candidate.getProposedLink()));
+            actions.add(
+                    new MutationAction(
+                            MutationActionType.update,
+                            candidate.getTargetPath(),
+                            null,
+                            Map.of(),
+                            Map.of(
+                                    candidate.getProposedSection() == null
+                                            ? "Related"
+                                            : candidate.getProposedSection(),
+                                    List.of("[[" + candidate.getProposedLink() + "]]"),
+                                    "Sources",
+                                    List.of("[[" + candidate.getProposedLink() + "]]")),
+                            "review:"
+                                    + job.getId()
+                                    + ":"
+                                    + candidate.getTargetPath()
+                                    + ":"
+                                    + candidate.getProposedLink()));
         }
 
         // Reverse (forward) links: the source note links back out to each accepted target so every
@@ -141,16 +160,21 @@ public class GuidedReviewService {
                     .add("[[" + candidate.getTargetPath() + "]]");
         }
         for (Map.Entry<String, LinkedHashSet<String>> entry : forwardLinksBySource.entrySet()) {
-            actions.add(new MutationAction(
-                    MutationActionType.update,
-                    entry.getKey(),
-                    null,
-                    Map.of(),
-                    Map.of("Related", new ArrayList<>(entry.getValue())),
-                    "forward-links:" + job.getId() + ":" + entry.getKey()));
+            actions.add(
+                    new MutationAction(
+                            MutationActionType.update,
+                            entry.getKey(),
+                            null,
+                            Map.of(),
+                            Map.of("Related", new ArrayList<>(entry.getValue())),
+                            "forward-links:" + job.getId() + ":" + entry.getKey()));
         }
 
-        lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "review-apply", "Applying accepted connection candidates");
+        lifecycleService.transition(
+                job.getId(),
+                JobStatus.PROGRESS,
+                "review-apply",
+                "Applying accepted connection candidates");
 
         // Capture before state for all target paths, source notes and idempotency ledger
         Snapshot snapshot = resolveSnapshot(job);
@@ -164,8 +188,13 @@ public class GuidedReviewService {
 
         MutationResult result = mutationApplier.apply(new MutationPlan(planId, actions));
         reindexService.reindexWiki();
-        embeddingIndexService.embedIncremental(p -> lifecycleService.progress(job, "embedding-scan", "embeddings",
-                "{\"current\":" + p.processed() + ",\"total\":" + p.total() + "}"));
+        embeddingIndexService.embedIncremental(
+                p ->
+                        lifecycleService.progress(
+                                job,
+                                "embedding-scan",
+                                "embeddings",
+                                "{\"current\":" + p.processed() + ",\"total\":" + p.total() + "}"));
 
         for (String p : result.created()) snapshotService.recordAfter(snapshot, p);
         for (String p : result.updated()) snapshotService.recordAfter(snapshot, p);
@@ -183,7 +212,8 @@ public class GuidedReviewService {
             }
             snapshot.setMessage("Apply guided ingestion review");
             snapshotService.finalizeSnapshot(snapshot, job);
-            lifecycleService.transition(job.getId(), JobStatus.COMPLETED, "completed", "Guided review completed");
+            lifecycleService.transition(
+                    job.getId(), JobStatus.COMPLETED, "completed", "Guided review completed");
         }
 
         return result;
@@ -193,7 +223,8 @@ public class GuidedReviewService {
         if (job.getSnapshotId() != null) {
             return snapshotService.findById(job.getSnapshotId());
         }
-        Snapshot snapshot = snapshotService.beginSnapshot(job.getId().toString(), "guided-review", null);
+        Snapshot snapshot =
+                snapshotService.beginSnapshot(job.getId().toString(), "guided-review", null);
         job.setSnapshotId(snapshot.getId());
         jobRepository.save(job);
         return snapshot;
@@ -203,7 +234,9 @@ public class GuidedReviewService {
         List<String> paths = new ArrayList<>();
         if (job.getAffectedPaths() != null && !job.getAffectedPaths().isBlank()) {
             try {
-                paths.addAll(objectMapper.readValue(job.getAffectedPaths(), new TypeReference<List<String>>() {}));
+                paths.addAll(
+                        objectMapper.readValue(
+                                job.getAffectedPaths(), new TypeReference<List<String>>() {}));
             } catch (Exception ignored) {
                 paths.clear();
             }

@@ -20,12 +20,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Batch-generates the frontmatter {@code keywords} field for existing notes under
- * {@code wiki/concepts} and {@code wiki/sources} that do not already have one. The
- * LLM input text is the note's {@code Summary} section when present, otherwise the
- * note body with the {@code Sources}, {@code Related}, and {@code Links} sections
- * removed. Writes flow through {@link FileService#saveContent} so they are versioned
- * and replicated to WebDAV.
+ * Batch-generates the frontmatter {@code keywords} field for existing notes under {@code
+ * wiki/concepts} and {@code wiki/sources} that do not already have one. The LLM input text is the
+ * note's {@code Summary} section when present, otherwise the note body with the {@code Sources},
+ * {@code Related}, and {@code Links} sections removed. Writes flow through {@link
+ * FileService#saveContent} so they are versioned and replicated to WebDAV.
  */
 @Service
 public class KeywordGenerationService {
@@ -43,9 +42,14 @@ public class KeywordGenerationService {
     private final JsonExtractionService jsonExtractionService;
     private final RetryingLlmExecutor retrying;
 
-    public KeywordGenerationService(VaultPathResolver pathResolver, MarkdownService markdownService,
-                                    FileService fileService, LlmClient llmClient, PromptService promptService,
-                                    JsonExtractionService jsonExtractionService, RetryingLlmExecutor retrying) {
+    public KeywordGenerationService(
+            VaultPathResolver pathResolver,
+            MarkdownService markdownService,
+            FileService fileService,
+            LlmClient llmClient,
+            PromptService promptService,
+            JsonExtractionService jsonExtractionService,
+            RetryingLlmExecutor retrying) {
         this.pathResolver = pathResolver;
         this.markdownService = markdownService;
         this.fileService = fileService;
@@ -59,7 +63,8 @@ public class KeywordGenerationService {
         return generateKeywords(progress -> {});
     }
 
-    public KeywordGenerationProgress generateKeywords(Consumer<KeywordGenerationProgress> onProgress) throws IOException {
+    public KeywordGenerationProgress generateKeywords(
+            Consumer<KeywordGenerationProgress> onProgress) throws IOException {
         List<Path> files = collectNotes();
         int total = files.size();
         int processed = 0;
@@ -79,7 +84,8 @@ public class KeywordGenerationService {
             processed += 1;
             onProgress.accept(new KeywordGenerationProgress(processed, total, updated, skipped));
         }
-        KeywordGenerationProgress result = new KeywordGenerationProgress(processed, total, updated, skipped);
+        KeywordGenerationProgress result =
+                new KeywordGenerationProgress(processed, total, updated, skipped);
         if (total == 0) {
             onProgress.accept(result);
         }
@@ -103,7 +109,9 @@ public class KeywordGenerationService {
         return files;
     }
 
-    /** @return true if the note was updated with keywords, false if it was skipped. */
+    /**
+     * @return true if the note was updated with keywords, false if it was skipped.
+     */
     private boolean generateForNote(Path path) {
         String body;
         try {
@@ -159,12 +167,19 @@ public class KeywordGenerationService {
     }
 
     private List<String> generateKeywords(String inputText) {
-        JsonNode node = retrying.executeParsing(() -> {
-            String response = llmClient.chatJson(List.of(
-                    new ChatMessage("system", promptService.getText(PROMPT_KEY)),
-                    new ChatMessage("user", inputText)));
-            return jsonExtractionService.extractObject(response, json -> nonEmptyArray(json, "keywords"));
-        });
+        JsonNode node =
+                retrying.executeParsing(
+                        () -> {
+                            String response =
+                                    llmClient.chatJson(
+                                            List.of(
+                                                    new ChatMessage(
+                                                            "system",
+                                                            promptService.getText(PROMPT_KEY)),
+                                                    new ChatMessage("user", inputText)));
+                            return jsonExtractionService.extractObject(
+                                    response, json -> nonEmptyArray(json, "keywords"));
+                        });
         List<String> keywords = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         for (JsonNode item : node.get("keywords")) {
@@ -180,12 +195,13 @@ public class KeywordGenerationService {
     }
 
     /**
-     * Enforces the mechanical keyword format: lowercase, spaces replaced by hyphens
-     * (kebab-case), with collapsed/trimmed hyphens. Singular form and article removal
-     * are the model's responsibility via the prompt.
+     * Enforces the mechanical keyword format: lowercase, spaces replaced by hyphens (kebab-case),
+     * with collapsed/trimmed hyphens. Singular form and article removal are the model's
+     * responsibility via the prompt.
      */
     private String normalizeKeyword(String raw) {
-        return raw.trim().toLowerCase(Locale.ROOT)
+        return raw.trim()
+                .toLowerCase(Locale.ROOT)
                 .replaceAll("\\s+", "-")
                 .replaceAll("-{2,}", "-")
                 .replaceAll("^-+|-+$", "");
@@ -197,7 +213,10 @@ public class KeywordGenerationService {
     }
 
     private String toRelativePath(Path path) {
-        return pathResolver.vaultRoot().relativize(path.toAbsolutePath().normalize())
-                .toString().replace('\\', '/');
+        return pathResolver
+                .vaultRoot()
+                .relativize(path.toAbsolutePath().normalize())
+                .toString()
+                .replace('\\', '/');
     }
 }

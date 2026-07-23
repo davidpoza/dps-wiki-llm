@@ -10,9 +10,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "snapshots")
 public class Snapshot {
-    @Id
-    @GeneratedValue
-    private UUID id;
+    @Id @GeneratedValue private UUID id;
 
     private String jobId;
     private String operationType;
@@ -21,16 +19,51 @@ public class Snapshot {
     private String source = "JOB";
     private Instant createdAt = Instant.now();
 
-    public UUID getId() { return id; }
-    public String getJobId() { return jobId; }
-    public void setJobId(String jobId) { this.jobId = jobId; }
-    public String getOperationType() { return operationType; }
-    public void setOperationType(String operationType) { this.operationType = operationType; }
-    public String getMessage() { return message; }
-    public void setMessage(String message) { this.message = message; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-    public String getSource() { return source; }
-    public void setSource(String source) { this.source = source; }
-    public Instant getCreatedAt() { return createdAt; }
+    public UUID getId() {
+        return id;
+    }
+
+    public String getJobId() {
+        return jobId;
+    }
+
+    public void setJobId(String jobId) {
+        this.jobId = jobId;
+    }
+
+    public String getOperationType() {
+        return operationType;
+    }
+
+    public void setOperationType(String operationType) {
+        this.operationType = operationType;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
 }

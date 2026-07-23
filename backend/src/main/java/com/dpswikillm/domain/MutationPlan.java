@@ -1,7 +1,8 @@
 package com.dpswikillm.domain;
 
-import java.util.List;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
 
-public record MutationPlan(@JsonProperty("plan_id") String planId,
-                           @JsonProperty("page_actions") List<MutationAction> pageActions) {}
+public record MutationPlan(
+        @JsonProperty("plan_id") String planId,
+        @JsonProperty("page_actions") List<MutationAction> pageActions) {}

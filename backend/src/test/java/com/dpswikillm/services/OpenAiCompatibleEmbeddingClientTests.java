@@ -24,13 +24,18 @@ class OpenAiCompatibleEmbeddingClientTests {
     @Test
     void appliesE5QueryPrefixAndReturnsVector() throws Exception {
         List<String> capturedBodies = new ArrayList<>();
-        HttpServer server = startEmbedServer((requestBody, inputCount) -> {
-            capturedBodies.add(requestBody);
-            return "[[0.1,0.2]]";
-        });
+        HttpServer server =
+                startEmbedServer(
+                        (requestBody, inputCount) -> {
+                            capturedBodies.add(requestBody);
+                            return "[[0.1,0.2]]";
+                        });
         try {
-            OpenAiCompatibleEmbeddingClient client = new OpenAiCompatibleEmbeddingClient(
-                    properties(baseUrl(server), 32), RestClient.builder(), new RetryingLlmExecutor());
+            OpenAiCompatibleEmbeddingClient client =
+                    new OpenAiCompatibleEmbeddingClient(
+                            properties(baseUrl(server), 32),
+                            RestClient.builder(),
+                            new RetryingLlmExecutor());
 
             assertThat(client.embedQuery("hello")).containsExactly(0.1f, 0.2f);
             assertThat(capturedBodies).hasSize(1);
@@ -44,14 +49,19 @@ class OpenAiCompatibleEmbeddingClientTests {
     void splitsLargeBatchAccordingToConfiguredSize() throws Exception {
         AtomicInteger requests = new AtomicInteger();
         // Echo back one vector per input; second request marked with a distinct value.
-        HttpServer server = startEmbedServer((requestBody, inputCount) -> {
-            int idx = requests.getAndIncrement();
-            String vector = idx == 0 ? "[0.1,0.2]" : "[0.3,0.4]";
-            return "[" + Collections_nCopies(inputCount, vector) + "]";
-        });
+        HttpServer server =
+                startEmbedServer(
+                        (requestBody, inputCount) -> {
+                            int idx = requests.getAndIncrement();
+                            String vector = idx == 0 ? "[0.1,0.2]" : "[0.3,0.4]";
+                            return "[" + Collections_nCopies(inputCount, vector) + "]";
+                        });
         try {
-            OpenAiCompatibleEmbeddingClient client = new OpenAiCompatibleEmbeddingClient(
-                    properties(baseUrl(server), 32), RestClient.builder(), new RetryingLlmExecutor());
+            OpenAiCompatibleEmbeddingClient client =
+                    new OpenAiCompatibleEmbeddingClient(
+                            properties(baseUrl(server), 32),
+                            RestClient.builder(),
+                            new RetryingLlmExecutor());
 
             List<String> texts = IntStream.range(0, 40).mapToObj(i -> "text" + i).toList();
             List<float[]> vectors = client.embedPassages(texts);
@@ -76,16 +86,22 @@ class OpenAiCompatibleEmbeddingClientTests {
 
     private static HttpServer startEmbedServer(EmbedResponder responder) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/embed", exchange -> {
-            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            JsonNode inputs = MAPPER.readTree(body).get("inputs");
-            int count = inputs != null && inputs.isArray() ? inputs.size() : 1;
-            byte[] payload = responder.respond(body, count).getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, payload.length);
-            exchange.getResponseBody().write(payload);
-            exchange.close();
-        });
+        server.createContext(
+                "/embed",
+                exchange -> {
+                    String body =
+                            new String(
+                                    exchange.getRequestBody().readAllBytes(),
+                                    StandardCharsets.UTF_8);
+                    JsonNode inputs = MAPPER.readTree(body).get("inputs");
+                    int count = inputs != null && inputs.isArray() ? inputs.size() : 1;
+                    byte[] payload =
+                            responder.respond(body, count).getBytes(StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().add("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(200, payload.length);
+                    exchange.getResponseBody().write(payload);
+                    exchange.close();
+                });
         server.start();
         return server;
     }
@@ -98,8 +114,18 @@ class OpenAiCompatibleEmbeddingClientTests {
         return new AppProperties(
                 "/vault",
                 List.of("http://localhost:4200"),
-                new AppProperties.Embeddings(baseUrl, "multilingual-e5-small", "", 384, Duration.ofSeconds(1), maxBatchSize),
+                new AppProperties.Embeddings(
+                        baseUrl,
+                        "multilingual-e5-small",
+                        "",
+                        384,
+                        Duration.ofSeconds(1),
+                        maxBatchSize),
                 new AppProperties.Llm("http://llm.test/v1", "gpt-oss", "test"),
-                new AppProperties.Telegram("", ""), null, null, null, null);
+                new AppProperties.Telegram("", ""),
+                null,
+                null,
+                null,
+                null);
     }
 }

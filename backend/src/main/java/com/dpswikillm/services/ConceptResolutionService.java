@@ -43,13 +43,14 @@ public class ConceptResolutionService {
     private final AppSettingRepository settingRepository;
     private final ObjectMapper objectMapper;
 
-    public ConceptResolutionService(SemanticSearchService semanticSearchService,
-                                    LlmClient llmClient,
-                                    PromptService promptService,
-                                    MarkdownService markdownService,
-                                    VaultPathResolver pathResolver,
-                                    AppSettingRepository settingRepository,
-                                    ObjectMapper objectMapper) {
+    public ConceptResolutionService(
+            SemanticSearchService semanticSearchService,
+            LlmClient llmClient,
+            PromptService promptService,
+            MarkdownService markdownService,
+            VaultPathResolver pathResolver,
+            AppSettingRepository settingRepository,
+            ObjectMapper objectMapper) {
         this.semanticSearchService = semanticSearchService;
         this.llmClient = llmClient;
         this.promptService = promptService;
@@ -63,7 +64,8 @@ public class ConceptResolutionService {
         double threshold = readThreshold();
         List<MutationAction> resolved = new ArrayList<>();
         List<ConceptProposal> proposals = new ArrayList<>();
-        List<MutationAction> actions = plan.pageActions() == null ? List.<MutationAction>of() : plan.pageActions();
+        List<MutationAction> actions =
+                plan.pageActions() == null ? List.<MutationAction>of() : plan.pageActions();
         log.info("Concept resolution: processing {} plan actions", actions.size());
         for (MutationAction action : actions) {
             log.info("  action={} path={}", action.action(), action.path());
@@ -71,7 +73,10 @@ public class ConceptResolutionService {
             resolved.add(result.action());
             if (result.proposal() != null) {
                 proposals.add(result.proposal());
-                log.info("  → proposal generated: {} (deduplicated={})", result.proposal().proposedPath(), result.proposal().deduplicated());
+                log.info(
+                        "  → proposal generated: {} (deduplicated={})",
+                        result.proposal().proposedPath(),
+                        result.proposal().deduplicated());
             }
         }
         log.info("Concept resolution complete: {} proposal(s) generated", proposals.size());
@@ -88,45 +93,61 @@ public class ConceptResolutionService {
             // Guardrail rejected this concept create — still surface it as a proposal
             String conceptName = slugToName(action.path());
             String proposedTitle = action.title() != null ? action.title() : conceptName;
-            return new ResolvedAction(action, new ConceptProposal(action.path(), proposedTitle, false, null));
+            return new ResolvedAction(
+                    action, new ConceptProposal(action.path(), proposedTitle, false, null));
         }
         if (action.action() != MutationActionType.create) {
             return new ResolvedAction(action, null);
         }
         String conceptName = slugToName(action.path());
         String proposedTitle = action.title() != null ? action.title() : conceptName;
-        List<SearchResult> candidates = semanticSearchService
-                .searchByType(conceptName, CONCEPT_DOC_TYPE, JUDGE_CANDIDATE_LIMIT)
-                .stream()
-                .filter(r -> r.score() >= threshold)
-                .toList();
+        List<SearchResult> candidates =
+                semanticSearchService
+                        .searchByType(conceptName, CONCEPT_DOC_TYPE, JUDGE_CANDIDATE_LIMIT)
+                        .stream()
+                        .filter(r -> r.score() >= threshold)
+                        .toList();
         if (candidates.isEmpty()) {
-            return new ResolvedAction(action, new ConceptProposal(action.path(), proposedTitle, false, null));
+            return new ResolvedAction(
+                    action, new ConceptProposal(action.path(), proposedTitle, false, null));
         }
         String matchedPath = callJudge(conceptName, candidates);
         if (matchedPath == null) {
-            return new ResolvedAction(action, new ConceptProposal(action.path(), proposedTitle, false, null));
+            return new ResolvedAction(
+                    action, new ConceptProposal(action.path(), proposedTitle, false, null));
         }
-        log.info("Concept '{}' matched to existing '{}' — rewriting create → update", action.path(), matchedPath);
+        log.info(
+                "Concept '{}' matched to existing '{}' — rewriting create → update",
+                action.path(),
+                matchedPath);
         MutationAction updated = buildUpdateAction(action, matchedPath);
-        return new ResolvedAction(updated, new ConceptProposal(action.path(), proposedTitle, true, matchedPath));
+        return new ResolvedAction(
+                updated, new ConceptProposal(action.path(), proposedTitle, true, matchedPath));
     }
 
     private String callJudge(String conceptName, List<SearchResult> candidates) {
         String systemPrompt = promptService.getText(JUDGE_PROMPT_KEY);
         String userMessage = buildJudgeMessage(conceptName, candidates);
         try {
-            String response = CompletableFuture
-                    .supplyAsync(() -> llmClient.chatJson(List.of(
-                            new ChatMessage("system", systemPrompt),
-                            new ChatMessage("user", userMessage))))
-                    .get(JUDGE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            String response =
+                    CompletableFuture.supplyAsync(
+                                    () ->
+                                            llmClient.chatJson(
+                                                    List.of(
+                                                            new ChatMessage("system", systemPrompt),
+                                                            new ChatMessage("user", userMessage))))
+                            .get(JUDGE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             return extractMatch(response);
         } catch (TimeoutException ex) {
-            log.warn("Concept judge timed out for '{}' — keeping original create action", conceptName);
+            log.warn(
+                    "Concept judge timed out for '{}' — keeping original create action",
+                    conceptName);
             return null;
         } catch (Exception ex) {
-            log.warn("Concept judge failed for '{}': {} — keeping original create action", conceptName, ex.getMessage());
+            log.warn(
+                    "Concept judge failed for '{}': {} — keeping original create action",
+                    conceptName,
+                    ex.getMessage());
             return null;
         }
     }
@@ -136,12 +157,17 @@ public class ConceptResolutionService {
         sb.append("Proposed concept: ").append(conceptName).append("\n\n");
         sb.append("Existing concepts:\n");
         for (SearchResult candidate : candidates) {
-            String snippet = candidate.body() != null && candidate.body().length() > 200
-                    ? candidate.body().substring(0, 200) + "..."
-                    : candidate.body();
-            sb.append("- path: ").append(candidate.path())
-              .append(", title: ").append(candidate.title())
-              .append(", snippet: ").append(snippet).append("\n");
+            String snippet =
+                    candidate.body() != null && candidate.body().length() > 200
+                            ? candidate.body().substring(0, 200) + "..."
+                            : candidate.body();
+            sb.append("- path: ")
+                    .append(candidate.path())
+                    .append(", title: ")
+                    .append(candidate.title())
+                    .append(", snippet: ")
+                    .append(snippet)
+                    .append("\n");
         }
         return sb.toString();
     }
@@ -164,46 +190,62 @@ public class ConceptResolutionService {
 
     private MutationAction buildUpdateAction(MutationAction original, String targetPath) {
         Map<String, Object> frontmatter = mergeAliases(original, targetPath);
-        return new MutationAction(MutationActionType.update, targetPath, original.title(),
-                frontmatter, original.sections(), original.idempotencyKey());
+        return new MutationAction(
+                MutationActionType.update,
+                targetPath,
+                original.title(),
+                frontmatter,
+                original.sections(),
+                original.idempotencyKey());
     }
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> mergeAliases(MutationAction original, String targetPath) {
-        Map<String, Object> frontmatter = new LinkedHashMap<>(
-                original.frontmatter() != null ? original.frontmatter() : Map.of());
+        Map<String, Object> frontmatter =
+                new LinkedHashMap<>(
+                        original.frontmatter() != null ? original.frontmatter() : Map.of());
 
         String proposedSlug = slugFromPath(original.path());
         Path existing = pathResolver.resolve(targetPath);
         if (Files.exists(existing)) {
             try {
                 String existingContent = Files.readString(existing, StandardCharsets.UTF_8);
-                Map<String, Object> existingFrontmatter = markdownService.parse(existingContent).frontmatter();
+                Map<String, Object> existingFrontmatter =
+                        markdownService.parse(existingContent).frontmatter();
                 Object existingAliases = existingFrontmatter.get("aliases");
-                List<String> aliases = existingAliases instanceof List<?> list
-                        ? new ArrayList<>((List<String>) list)
-                        : new ArrayList<>();
+                List<String> aliases =
+                        existingAliases instanceof List<?> list
+                                ? new ArrayList<>((List<String>) list)
+                                : new ArrayList<>();
                 if (!aliases.contains(proposedSlug)) {
                     aliases.add(proposedSlug);
                     frontmatter.put("aliases", aliases);
                 }
             } catch (IOException ex) {
-                log.warn("Could not read existing concept file '{}' for alias merge: {}", targetPath, ex.getMessage());
+                log.warn(
+                        "Could not read existing concept file '{}' for alias merge: {}",
+                        targetPath,
+                        ex.getMessage());
             }
         }
         return frontmatter;
     }
 
     private double readThreshold() {
-        return settingRepository.findById(THRESHOLD_SETTING_KEY)
-                .map(s -> {
-                    try {
-                        return Double.parseDouble(s.getValue());
-                    } catch (NumberFormatException ex) {
-                        log.warn("Invalid concept.similarity-threshold value '{}', using default {}", s.getValue(), DEFAULT_THRESHOLD);
-                        return DEFAULT_THRESHOLD;
-                    }
-                })
+        return settingRepository
+                .findById(THRESHOLD_SETTING_KEY)
+                .map(
+                        s -> {
+                            try {
+                                return Double.parseDouble(s.getValue());
+                            } catch (NumberFormatException ex) {
+                                log.warn(
+                                        "Invalid concept.similarity-threshold value '{}', using default {}",
+                                        s.getValue(),
+                                        DEFAULT_THRESHOLD);
+                                return DEFAULT_THRESHOLD;
+                            }
+                        })
                 .orElse(DEFAULT_THRESHOLD);
     }
 

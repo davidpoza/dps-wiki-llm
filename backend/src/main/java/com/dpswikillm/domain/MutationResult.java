@@ -8,9 +8,9 @@ public record MutationResult(
         List<String> created,
         List<String> updated,
         List<String> skipped,
-        List<String> idempotentHits
-) {
+        List<String> idempotentHits) {
     public static MutationResult empty(String planId) {
-        return new MutationResult(planId, new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+        return new MutationResult(
+                planId, new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
     }
 }

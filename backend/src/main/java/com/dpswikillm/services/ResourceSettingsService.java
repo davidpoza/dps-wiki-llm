@@ -17,12 +17,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class ResourceSettingsService {
 
     private static final String RESOURCE_FOLDER_KEY = "resource-folder";
-    private static final Set<String> IMAGE_EXTENSIONS = Set.of("png", "jpg", "jpeg", "gif", "webp", "svg");
+    private static final Set<String> IMAGE_EXTENSIONS =
+            Set.of("png", "jpg", "jpeg", "gif", "webp", "svg");
 
     private final AppSettingRepository repository;
     private final VaultPathResolver pathResolver;
 
-    public ResourceSettingsService(AppSettingRepository repository, VaultPathResolver pathResolver) {
+    public ResourceSettingsService(
+            AppSettingRepository repository, VaultPathResolver pathResolver) {
         this.repository = repository;
         this.pathResolver = pathResolver;
     }
@@ -32,16 +34,16 @@ public class ResourceSettingsService {
     }
 
     public String getResourceFolder() {
-        return repository.findById(RESOURCE_FOLDER_KEY)
-                .map(AppSetting::getValue)
-                .orElse("");
+        return repository.findById(RESOURCE_FOLDER_KEY).map(AppSetting::getValue).orElse("");
     }
 
     @Transactional
     public ResourceSettingsDto updateSettings(String resourceFolder) {
         String normalized = normalizeOptionalFolder(resourceFolder);
-        AppSetting setting = repository.findById(RESOURCE_FOLDER_KEY)
-                .orElseGet(() -> new AppSetting(RESOURCE_FOLDER_KEY, ""));
+        AppSetting setting =
+                repository
+                        .findById(RESOURCE_FOLDER_KEY)
+                        .orElseGet(() -> new AppSetting(RESOURCE_FOLDER_KEY, ""));
         setting.setValue(normalized);
         repository.save(setting);
         return new ResourceSettingsDto(normalized);
@@ -89,10 +91,15 @@ public class ResourceSettingsService {
         }
 
         try (var stream = Files.walk(folder)) {
-            return stream
-                    .filter(Files::isRegularFile)
+            return stream.filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().equals(filename))
-                    .map(path -> pathResolver.vaultRoot().relativize(path).toString().replace('\\', '/'))
+                    .map(
+                            path ->
+                                    pathResolver
+                                            .vaultRoot()
+                                            .relativize(path)
+                                            .toString()
+                                            .replace('\\', '/'))
                     .sorted(Comparator.naturalOrder())
                     .findFirst()
                     .or(() -> Optional.of(resourceFolder + "/" + filename));

@@ -7,7 +7,6 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,8 +25,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.web.client.RestTemplate;
-import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.message.Message;
 
 class WikiBotServiceTests {
     private static final long ALLOWED_CHAT_ID = 12345L;
@@ -46,10 +45,23 @@ class WikiBotServiceTests {
         rawIntakeService = mock(RawIntakeService.class);
         restTemplate = mock(RestTemplate.class);
 
-        AppProperties props = new AppProperties(null, List.of(),
-                new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1), 8),
-                new AppProperties.Llm("http://localhost", "model", ""),
-                new AppProperties.Telegram("bot-token", String.valueOf(ALLOWED_CHAT_ID)), null, null, null, null);
+        AppProperties props =
+                new AppProperties(
+                        null,
+                        List.of(),
+                        new AppProperties.Embeddings(
+                                "http://embeddings:8080",
+                                "multilingual-e5-small",
+                                "",
+                                384,
+                                Duration.ofSeconds(1),
+                                8),
+                        new AppProperties.Llm("http://localhost", "model", ""),
+                        new AppProperties.Telegram("bot-token", String.valueOf(ALLOWED_CHAT_ID)),
+                        null,
+                        null,
+                        null,
+                        null);
 
         bot = new WikiBotService(props, queueService, eventService, rawIntakeService, restTemplate);
     }
@@ -105,18 +117,31 @@ class WikiBotServiceTests {
     @Test
     void completedJobSendsResultBackToChat() throws Exception {
         UUID jobId = UUID.randomUUID();
-        when(queueService.enqueue(any(), any(), any())).thenReturn(new EnqueueJobResponse(jobId, 1));
+        when(queueService.enqueue(any(), any(), any()))
+                .thenReturn(new EnqueueJobResponse(jobId, 1));
 
         AtomicReference<Consumer<JobEvent>> capturedListener = new AtomicReference<>();
-        org.mockito.Mockito.doAnswer(invocation -> {
-            capturedListener.set(invocation.getArgument(1));
-            return null;
-        }).when(eventService).registerTerminalListener(any(), any());
+        org.mockito.Mockito.doAnswer(
+                        invocation -> {
+                            capturedListener.set(invocation.getArgument(1));
+                            return null;
+                        })
+                .when(eventService)
+                .registerTerminalListener(any(), any());
 
         bot.consume(update(ALLOWED_CHAT_ID, "what is Foo?"));
 
-        JobEvent completedEvent = new JobEvent(JobStatus.COMPLETED, jobId, JobType.ANSWER, 0,
-                "completed", null, null, "Done", "{\"message\":\"answer ready\"}");
+        JobEvent completedEvent =
+                new JobEvent(
+                        JobStatus.COMPLETED,
+                        jobId,
+                        JobType.ANSWER,
+                        0,
+                        "completed",
+                        null,
+                        null,
+                        "Done",
+                        "{\"message\":\"answer ready\"}");
         capturedListener.get().accept(completedEvent);
 
         ArgumentCaptor<Object> bodyCaptor = ArgumentCaptor.forClass(Object.class);
@@ -128,18 +153,31 @@ class WikiBotServiceTests {
     @Test
     void failedJobSendsErrorMessage() throws Exception {
         UUID jobId = UUID.randomUUID();
-        when(queueService.enqueue(any(), any(), any())).thenReturn(new EnqueueJobResponse(jobId, 1));
+        when(queueService.enqueue(any(), any(), any()))
+                .thenReturn(new EnqueueJobResponse(jobId, 1));
 
         AtomicReference<Consumer<JobEvent>> capturedListener = new AtomicReference<>();
-        org.mockito.Mockito.doAnswer(invocation -> {
-            capturedListener.set(invocation.getArgument(1));
-            return null;
-        }).when(eventService).registerTerminalListener(any(), any());
+        org.mockito.Mockito.doAnswer(
+                        invocation -> {
+                            capturedListener.set(invocation.getArgument(1));
+                            return null;
+                        })
+                .when(eventService)
+                .registerTerminalListener(any(), any());
 
         bot.consume(update(ALLOWED_CHAT_ID, "fail?"));
 
-        JobEvent failedEvent = new JobEvent(JobStatus.FAILED, jobId, JobType.ANSWER, 0,
-                "failed", null, null, "LLM unreachable", null);
+        JobEvent failedEvent =
+                new JobEvent(
+                        JobStatus.FAILED,
+                        jobId,
+                        JobType.ANSWER,
+                        0,
+                        "failed",
+                        null,
+                        null,
+                        "LLM unreachable",
+                        null);
         capturedListener.get().accept(failedEvent);
 
         ArgumentCaptor<Object> bodyCaptor = ArgumentCaptor.forClass(Object.class);

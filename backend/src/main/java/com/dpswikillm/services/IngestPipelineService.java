@@ -46,23 +46,24 @@ public class IngestPipelineService {
     private final ConceptResolutionService conceptResolutionService;
     private final ObjectMapper objectMapper;
 
-    public IngestPipelineService(SourceNormalizer sourceNormalizer,
-                                 SourceNoteLlmService sourceNoteLlmService,
-                                 SourceNotePlanner sourceNotePlanner,
-                                 LlmMutationPlanService llmMutationPlanService,
-                                 MutationGuardrailService guardrailService,
-                                 MutationApplier mutationApplier,
-                                 RootIndexService rootIndexService,
-                                 ReindexService reindexService,
-                                 EmbeddingIndexService embeddingIndexService,
-                                 SnapshotService snapshotService,
-                                 VaultPathResolver pathResolver,
-                                 JobLifecycleService lifecycleService,
-                                 JobRepository jobRepository,
-                                 ConnectionDiscoveryService connectionDiscoveryService,
-                                 GuidedReviewService guidedReviewService,
-                                 ConceptResolutionService conceptResolutionService,
-                                 ObjectMapper objectMapper) {
+    public IngestPipelineService(
+            SourceNormalizer sourceNormalizer,
+            SourceNoteLlmService sourceNoteLlmService,
+            SourceNotePlanner sourceNotePlanner,
+            LlmMutationPlanService llmMutationPlanService,
+            MutationGuardrailService guardrailService,
+            MutationApplier mutationApplier,
+            RootIndexService rootIndexService,
+            ReindexService reindexService,
+            EmbeddingIndexService embeddingIndexService,
+            SnapshotService snapshotService,
+            VaultPathResolver pathResolver,
+            JobLifecycleService lifecycleService,
+            JobRepository jobRepository,
+            ConnectionDiscoveryService connectionDiscoveryService,
+            GuidedReviewService guidedReviewService,
+            ConceptResolutionService conceptResolutionService,
+            ObjectMapper objectMapper) {
         this.sourceNormalizer = sourceNormalizer;
         this.sourceNoteLlmService = sourceNoteLlmService;
         this.sourceNotePlanner = sourceNotePlanner;
@@ -85,7 +86,8 @@ public class IngestPipelineService {
     @Transactional
     public void run(Job job) throws Exception {
         Path ledger = pathResolver.resolve("state/runtime/idempotency-keys.json");
-        String ledgerSnapshot = Files.exists(ledger) ? Files.readString(ledger, StandardCharsets.UTF_8) : null;
+        String ledgerSnapshot =
+                Files.exists(ledger) ? Files.readString(ledger, StandardCharsets.UTF_8) : null;
 
         Snapshot snapshot = snapshotService.beginSnapshot(job.getId().toString(), "ingest", null);
         PipelineTx tx = new PipelineTx();
@@ -94,15 +96,24 @@ public class IngestPipelineService {
         tx.onRollback("restore-vault-files", () -> snapshotService.hardReset(snapshot.getId()));
 
         try {
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "normalization", "Normalizing raw artifact");
+            lifecycleService.transition(
+                    job.getId(), JobStatus.PROGRESS, "normalization", "Normalizing raw artifact");
             NormalizedSourcePayload payload = sourceNormalizer.normalize(job.getPayloadRef());
             snapshotService.captureFileAsNew(snapshot, payload.rawPath());
             lifecycleService.fileEvent(job, payload.rawPath(), "read");
 
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "llm-cleaning", "Cleaning source note with LLM");
+            lifecycleService.transition(
+                    job.getId(),
+                    JobStatus.PROGRESS,
+                    "llm-cleaning",
+                    "Cleaning source note with LLM");
             payload = payload.withSourceNote(sourceNoteLlmService.clean(payload));
 
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "baseline-apply", "Applying baseline source note");
+            lifecycleService.transition(
+                    job.getId(),
+                    JobStatus.PROGRESS,
+                    "baseline-apply",
+                    "Applying baseline source note");
             MutationPlan baseline = sourceNotePlanner.baselinePlan(payload);
             String sourceNotePath = sourceNotePlanner.sourceNotePath(payload);
 
@@ -112,7 +123,8 @@ public class IngestPipelineService {
 
             MutationResult baselineResult = mutationApplier.apply(baseline);
             boolean indexUpdated = rootIndexService.addEntry(payload.title(), sourceNotePath);
-            lifecycleService.fileEvent(job, sourceNotePath, baselineResult.created().isEmpty() ? "update" : "create");
+            lifecycleService.fileEvent(
+                    job, sourceNotePath, baselineResult.created().isEmpty() ? "update" : "create");
             lifecycleService.fileEvent(job, "INDEX.md", indexUpdated ? "update" : "read");
 
             for (String p : baselineResult.created()) snapshotService.recordAfter(snapshot, p);
@@ -120,39 +132,65 @@ public class IngestPipelineService {
             snapshotService.recordAfter(snapshot, "INDEX.md");
             snapshotService.recordAfter(snapshot, "state/runtime/idempotency-keys.json");
 
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "reindex", "Reindexing wiki documents");
+            lifecycleService.transition(
+                    job.getId(), JobStatus.PROGRESS, "reindex", "Reindexing wiki documents");
             reindexService.reindexWiki();
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "embedding", "Generating embeddings");
+            lifecycleService.transition(
+                    job.getId(), JobStatus.PROGRESS, "embedding", "Generating embeddings");
             embeddingIndexService.embedIncremental(embeddingProgress(job));
 
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "connection-discovery", "Requesting optional connection plan");
+            lifecycleService.transition(
+                    job.getId(),
+                    JobStatus.PROGRESS,
+                    "connection-discovery",
+                    "Requesting optional connection plan");
             MutationPlan llmPlan = requestOptionalPlan(payload, sourceNotePath);
-            log.info("Job {}: LLM plan has {} action(s)", job.getId(),
+            log.info(
+                    "Job {}: LLM plan has {} action(s)",
+                    job.getId(),
                     llmPlan.pageActions() == null ? 0 : llmPlan.pageActions().size());
             if (llmPlan.pageActions() != null) {
                 for (var a : llmPlan.pageActions()) {
                     log.info("  LLM action: {} {}", a.action(), a.path());
                 }
             }
-            GuardrailResult guarded = guardrailService.guardrail(llmPlan, payload.rawPath(), sourceNotePath);
+            GuardrailResult guarded =
+                    guardrailService.guardrail(llmPlan, payload.rawPath(), sourceNotePath);
             if (!guarded.rejections().isEmpty()) {
-                log.info("Job {}: guardrail rejected {} action(s): {}", job.getId(), guarded.rejections().size(), guarded.rejections());
+                log.info(
+                        "Job {}: guardrail rejected {} action(s): {}",
+                        job.getId(),
+                        guarded.rejections().size(),
+                        guarded.rejections());
             }
-            lifecycleService.transition(job.getId(), JobStatus.PROGRESS, "concept-resolution", "Resolving concept duplicates");
-            ConceptResolutionResult conceptResult = conceptResolutionService.resolve(guarded.plan());
+            lifecycleService.transition(
+                    job.getId(),
+                    JobStatus.PROGRESS,
+                    "concept-resolution",
+                    "Resolving concept duplicates");
+            ConceptResolutionResult conceptResult =
+                    conceptResolutionService.resolve(guarded.plan());
             lifecycleService.conceptProposals(job, conceptResult.proposals());
 
             // Apply new concept pages (creates that weren't deduplicated to an existing concept)
-            List<MutationAction> newConceptActions = conceptResult.plan().pageActions() == null ? List.of()
-                    : conceptResult.plan().pageActions().stream()
-                            .filter(a -> a.action() == MutationActionType.create
-                                    && a.path() != null && a.path().startsWith("wiki/concepts/"))
-                            .toList();
+            List<MutationAction> newConceptActions =
+                    conceptResult.plan().pageActions() == null
+                            ? List.of()
+                            : conceptResult.plan().pageActions().stream()
+                                    .filter(
+                                            a ->
+                                                    a.action() == MutationActionType.create
+                                                            && a.path() != null
+                                                            && a.path()
+                                                                    .startsWith("wiki/concepts/"))
+                                    .toList();
             List<String> createdConceptPaths = new ArrayList<>();
             if (!newConceptActions.isEmpty()) {
                 for (var a : newConceptActions) snapshotService.captureFile(snapshot, a.path());
-                MutationResult conceptCreateResult = mutationApplier.apply(
-                        new MutationPlan("concept-creates-" + job.getId(), newConceptActions));
+                MutationResult conceptCreateResult =
+                        mutationApplier.apply(
+                                new MutationPlan(
+                                        "concept-creates-" + job.getId(), newConceptActions));
                 for (String p : conceptCreateResult.created()) {
                     snapshotService.recordAfter(snapshot, p);
                     lifecycleService.fileEvent(job, p, "create");
@@ -168,35 +206,54 @@ public class IngestPipelineService {
                 }
             }
 
-            var candidates = connectionDiscoveryService.discoverAndPersist(job, payload, sourceNotePath, conceptResult.plan());
+            var candidates =
+                    connectionDiscoveryService.discoverAndPersist(
+                            job, payload, sourceNotePath, conceptResult.plan());
 
             if (job.getMode() == JobMode.validated) {
                 snapshotService.recordAfter(snapshot, payload.rawPath());
-                List<String> baselinePaths = new ArrayList<>(List.of(sourceNotePath, "INDEX.md", "state/runtime/idempotency-keys.json", payload.rawPath()));
+                List<String> baselinePaths =
+                        new ArrayList<>(
+                                List.of(
+                                        sourceNotePath,
+                                        "INDEX.md",
+                                        "state/runtime/idempotency-keys.json",
+                                        payload.rawPath()));
                 baselinePaths.addAll(createdConceptPaths);
                 job.setAffectedPaths(toJson(baselinePaths));
                 job.setSnapshotId(snapshot.getId());
                 jobRepository.save(job);
-                lifecycleService.transition(job.getId(), JobStatus.AWAITING_REVIEW, "awaiting-review",
+                lifecycleService.transition(
+                        job.getId(),
+                        JobStatus.AWAITING_REVIEW,
+                        "awaiting-review",
                         "Baseline applied; connection application deferred to guided review");
-                lifecycleService.awaitingReview(job, "Connection candidates ready for review", objectMapper.writeValueAsString(candidates));
+                lifecycleService.awaitingReview(
+                        job,
+                        "Connection candidates ready for review",
+                        objectMapper.writeValueAsString(candidates));
                 tx.clear();
                 return;
             }
 
             MutationResult connectionsResult = MutationResult.empty("no-connections");
             if (!candidates.isEmpty()) {
-                candidates.forEach(candidate -> candidate.setDecision(ConnectionCandidateDecision.accepted));
+                candidates.forEach(
+                        candidate -> candidate.setDecision(ConnectionCandidateDecision.accepted));
                 for (var candidate : candidates) {
                     snapshotService.captureFile(snapshot, candidate.getTargetPath());
                 }
                 // applyAccepted now writes both directions (backlink into targets + reverse link
-                // into the source note) and reindexes/embeds internally, so no separate forward-link
+                // into the source note) and reindexes/embeds internally, so no separate
+                // forward-link
                 // pass is needed here.
-                connectionsResult = guidedReviewService.applyAccepted(job, candidates,
-                        "unattended-connections-" + job.getId(), false);
-                for (String p : connectionsResult.created()) snapshotService.recordAfter(snapshot, p);
-                for (String p : connectionsResult.updated()) snapshotService.recordAfter(snapshot, p);
+                connectionsResult =
+                        guidedReviewService.applyAccepted(
+                                job, candidates, "unattended-connections-" + job.getId(), false);
+                for (String p : connectionsResult.created())
+                    snapshotService.recordAfter(snapshot, p);
+                for (String p : connectionsResult.updated())
+                    snapshotService.recordAfter(snapshot, p);
                 snapshotService.recordAfter(snapshot, "state/runtime/idempotency-keys.json");
                 snapshotService.recordAfter(snapshot, sourceNotePath);
             }
@@ -209,17 +266,24 @@ public class IngestPipelineService {
             allPaths.addAll(connectionsResult.updated());
             allPaths.add("state/runtime/idempotency-keys.json");
             allPaths.add(payload.rawPath());
-            int connectionCount = connectionsResult.created().size() + connectionsResult.updated().size();
-            String commitMessage = connectionCount > 0
-                    ? "Ingest: " + payload.title() + " (+" + connectionCount + " connections)"
-                    : "Ingest: " + payload.title();
+            int connectionCount =
+                    connectionsResult.created().size() + connectionsResult.updated().size();
+            String commitMessage =
+                    connectionCount > 0
+                            ? "Ingest: "
+                                    + payload.title()
+                                    + " (+"
+                                    + connectionCount
+                                    + " connections)"
+                            : "Ingest: " + payload.title();
 
             snapshot.setMessage(commitMessage);
             snapshotService.finalizeSnapshot(snapshot, job);
             job.setAffectedPaths(toJson(allPaths));
             jobRepository.save(job);
 
-            lifecycleService.transition(job.getId(), JobStatus.COMPLETED, "completed", "Ingest completed");
+            lifecycleService.transition(
+                    job.getId(), JobStatus.COMPLETED, "completed", "Ingest completed");
             tx.clear();
         } catch (Exception ex) {
             tx.rollback();
@@ -229,12 +293,17 @@ public class IngestPipelineService {
     }
 
     /**
-     * Emit an {@code embedding-scan} progress event per batch so the UI can show a
-     * live percentage while the (slow) embedding phase runs.
+     * Emit an {@code embedding-scan} progress event per batch so the UI can show a live percentage
+     * while the (slow) embedding phase runs.
      */
-    private java.util.function.Consumer<EmbeddingIndexService.EmbedProgress> embeddingProgress(Job job) {
-        return p -> lifecycleService.progress(job, "embedding-scan", "embeddings",
-                "{\"current\":" + p.processed() + ",\"total\":" + p.total() + "}");
+    private java.util.function.Consumer<EmbeddingIndexService.EmbedProgress> embeddingProgress(
+            Job job) {
+        return p ->
+                lifecycleService.progress(
+                        job,
+                        "embedding-scan",
+                        "embeddings",
+                        "{\"current\":" + p.processed() + ",\"total\":" + p.total() + "}");
     }
 
     private void capturePathsInPlan(Snapshot snapshot, MutationPlan plan) throws IOException {
@@ -245,7 +314,8 @@ public class IngestPipelineService {
         }
     }
 
-    private MutationPlan requestOptionalPlan(NormalizedSourcePayload payload, String sourceNotePath) {
+    private MutationPlan requestOptionalPlan(
+            NormalizedSourcePayload payload, String sourceNotePath) {
         try {
             return llmMutationPlanService.requestPlan(payload, sourceNotePath);
         } catch (RuntimeException ex) {

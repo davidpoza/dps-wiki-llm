@@ -12,9 +12,7 @@ import java.util.UUID;
 @Table(name = "chat_sessions")
 public class ChatSession {
 
-    @Id
-    @GeneratedValue
-    private UUID id;
+    @Id @GeneratedValue private UUID id;
 
     @Column(name = "user_id", nullable = false)
     private UUID userId;
@@ -35,12 +33,31 @@ public class ChatSession {
         this.title = title;
     }
 
-    public UUID getId() { return id; }
-    public UUID getUserId() { return userId; }
-    public String getTitle() { return title; }
-    public OffsetDateTime getCreatedAt() { return createdAt; }
-    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public UUID getId() {
+        return id;
+    }
 
-    public void setTitle(String title) { this.title = title; }
-    public void touch() { this.updatedAt = OffsetDateTime.now(); }
+    public UUID getUserId() {
+        return userId;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public OffsetDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public void touch() {
+        this.updatedAt = OffsetDateTime.now();
+    }
 }

@@ -15,9 +15,7 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "jobs")
 public class Job {
-    @Id
-    @GeneratedValue
-    private UUID id;
+    @Id @GeneratedValue private UUID id;
 
     @Enumerated(EnumType.STRING)
     private JobType type;
@@ -82,7 +80,9 @@ public class Job {
         if (status == JobStatus.STARTED) {
             this.startedAt = this.updatedAt;
         }
-        if (status == JobStatus.COMPLETED || status == JobStatus.FAILED || status == JobStatus.REVERTED) {
+        if (status == JobStatus.COMPLETED
+                || status == JobStatus.FAILED
+                || status == JobStatus.REVERTED) {
             this.completedAt = this.updatedAt;
         }
     }

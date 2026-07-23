@@ -1,11 +1,11 @@
 package com.dpswikillm.config;
 
+import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
-import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
@@ -35,12 +35,16 @@ public class RabbitConfig {
 
     @Bean
     public Queue writeQueue() {
-        return QueueBuilder.durable(WRITE_QUEUE).withArgument("x-dead-letter-exchange", DLX).build();
+        return QueueBuilder.durable(WRITE_QUEUE)
+                .withArgument("x-dead-letter-exchange", DLX)
+                .build();
     }
 
     @Bean
     public Queue answerQueue() {
-        return QueueBuilder.durable(ANSWER_QUEUE).withArgument("x-dead-letter-exchange", DLX).build();
+        return QueueBuilder.durable(ANSWER_QUEUE)
+                .withArgument("x-dead-letter-exchange", DLX)
+                .build();
     }
 
     @Bean
@@ -72,17 +76,20 @@ public class RabbitConfig {
     public RetryOperationsInterceptor jobRetryInterceptor() {
         return RetryInterceptorBuilder.stateless()
                 .maxAttempts(3)
-                .recoverer((args, cause) -> {
-                    throw new AmqpRejectAndDontRequeueException("Job retries exhausted", cause);
-                })
+                .recoverer(
+                        (args, cause) -> {
+                            throw new AmqpRejectAndDontRequeueException(
+                                    "Job retries exhausted", cause);
+                        })
                 .build();
     }
 
     @Bean
     @ConditionalOnBean(ConnectionFactory.class)
-    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(ConnectionFactory connectionFactory,
-                                                                        Jackson2JsonMessageConverter converter,
-                                                                        RetryOperationsInterceptor jobRetryInterceptor) {
+    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
+            ConnectionFactory connectionFactory,
+            Jackson2JsonMessageConverter converter,
+            RetryOperationsInterceptor jobRetryInterceptor) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(converter);

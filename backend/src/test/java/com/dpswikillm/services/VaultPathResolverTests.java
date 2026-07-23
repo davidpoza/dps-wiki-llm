@@ -11,8 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class VaultPathResolverTests {
-    @TempDir
-    Path vault;
+    @TempDir Path vault;
 
     @Test
     void rejectsTraversalOutsideVault() {
@@ -32,11 +31,22 @@ class VaultPathResolverTests {
     }
 
     private VaultPathResolver resolver() {
-        return new VaultPathResolver(new AppProperties(
-                vault.toString(),
-                List.of("http://localhost:4200"),
-                new AppProperties.Embeddings("http://embeddings:8080", "multilingual-e5-small", "", 384, Duration.ofSeconds(1), 8),
-                new AppProperties.Llm("http://localhost:11434/v1", "gpt-oss", "test"),
-                new AppProperties.Telegram("", ""), null, null, null, null));
+        return new VaultPathResolver(
+                new AppProperties(
+                        vault.toString(),
+                        List.of("http://localhost:4200"),
+                        new AppProperties.Embeddings(
+                                "http://embeddings:8080",
+                                "multilingual-e5-small",
+                                "",
+                                384,
+                                Duration.ofSeconds(1),
+                                8),
+                        new AppProperties.Llm("http://localhost:11434/v1", "gpt-oss", "test"),
+                        new AppProperties.Telegram("", ""),
+                        null,
+                        null,
+                        null,
+                        null));
     }
 }

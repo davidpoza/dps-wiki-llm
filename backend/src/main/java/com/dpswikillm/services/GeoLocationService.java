@@ -20,9 +20,7 @@ public class GeoLocationService {
     private static final String IP_API_URL = "http://ip-api.com/json/%s?fields=status,country,city";
     private static final Duration TIMEOUT = Duration.ofSeconds(3);
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(TIMEOUT)
-            .build();
+    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
 
     public record GeoData(String country, String city) {}
 
@@ -31,12 +29,14 @@ public class GeoLocationService {
             return new GeoData("Local", "Local");
         }
         try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(String.format(IP_API_URL, ipAddress)))
-                    .timeout(TIMEOUT)
-                    .GET()
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpRequest request =
+                    HttpRequest.newBuilder()
+                            .uri(URI.create(String.format(IP_API_URL, ipAddress)))
+                            .timeout(TIMEOUT)
+                            .GET()
+                            .build();
+            HttpResponse<String> response =
+                    httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             return parseResponse(response.body());
         } catch (IOException | InterruptedException e) {
             log.warn("Geolocation lookup failed for {}: {}", ipAddress, e.getMessage());

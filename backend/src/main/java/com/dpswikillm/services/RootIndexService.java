@@ -18,7 +18,10 @@ public class RootIndexService {
         Path index = pathResolver.resolve("INDEX.md");
         Files.createDirectories(index.getParent());
         String entry = "- [[" + title + "]] (" + path + ")";
-        String existing = Files.exists(index) ? Files.readString(index, StandardCharsets.UTF_8) : "# Index\n\n";
+        String existing =
+                Files.exists(index)
+                        ? Files.readString(index, StandardCharsets.UTF_8)
+                        : "# Index\n\n";
         if (existing.contains(entry)) {
             return false;
         }
