@@ -51,12 +51,16 @@ interface FileGroup {
                       <p-checkbox
                         [ngModel]="isChecked(entry)"
                         [binary]="true"
+                        [disabled]="entry.sourceSection !== 'Related'"
                         (onChange)="toggle(entry)"
                       />
                       <span class="link-label">
                         {{ entry.displayAlias || entry.link }}
                         @if (entry.displayAlias) {
                           <span class="link-slug">([[{{ entry.link }}]])</span>
+                        }
+                        @if (entry.sourceSection !== 'Related') {
+                          <span class="section-badge">[{{ entry.sourceSection }}]</span>
                         }
                       </span>
                     </div>
@@ -98,6 +102,7 @@ interface FileGroup {
     .link-item { display: flex; align-items: center; gap: 10px; }
     .link-label { font-size: 0.875rem; color: var(--app-text); }
     .link-slug { font-size: 0.75rem; color: var(--app-text-subtle); font-family: monospace; margin-left: 4px; }
+    .section-badge { font-size: 0.7rem; color: var(--app-text-muted); font-family: monospace; margin-left: 6px; background: var(--app-surface-subtle); border: 1px solid var(--app-border); border-radius: 4px; padding: 1px 4px; }
     .modal-footer { display: flex; justify-content: flex-end; gap: 10px; }
     .empty-msg { color: var(--app-text-muted); font-size: 0.875rem; }
   `],
@@ -164,7 +169,7 @@ export class BrokenLinksModalComponent {
   onConfirm(): void {
     const keys = this.selectedKeys();
     const selected = this.brokenLinks()
-      .filter(e => keys.has(this.entryKey(e)))
+      .filter(e => e.sourceSection === 'Related' && keys.has(this.entryKey(e)))
       .map(e => ({ sourceFile: e.sourceFile, link: e.link }));
     this.confirmed.emit(selected);
   }

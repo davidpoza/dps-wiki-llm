@@ -49,9 +49,10 @@ public class BrokenLinkScanService {
             try {
                 String content = Files.readString(path, StandardCharsets.UTF_8);
                 MarkdownDocument doc = markdownService.parse(content);
-                String related = doc.sections().get("Related");
-                if (related != null && !related.isBlank()) {
-                    extractBrokenLinks(relPath, related, validSlugs, broken);
+                for (Map.Entry<String, String> section : doc.sections().entrySet()) {
+                    if (section.getValue() != null && !section.getValue().isBlank()) {
+                        extractBrokenLinks(relPath, section.getValue(), section.getKey(), validSlugs, broken);
+                    }
                 }
             } catch (IOException ex) {
                 log.warn("Could not read {}: {}", path, ex.getMessage());
@@ -180,15 +181,15 @@ public class BrokenLinkScanService {
         return body.isBlank() ? "## " + title : "## " + title + "\n" + body;
     }
 
-    private void extractBrokenLinks(String sourceFile, String related, Set<String> validSlugs,
-                                    List<BrokenLinkEntry> broken) {
-        for (String line : related.split("\n")) {
+    private void extractBrokenLinks(String sourceFile, String sectionContent, String sourceSection,
+                                    Set<String> validSlugs, List<BrokenLinkEntry> broken) {
+        for (String line : sectionContent.split("\n")) {
             Matcher m = WIKI_LINK.matcher(line);
             while (m.find()) {
                 String slug = m.group(1).trim();
                 String alias = m.group(2) != null ? m.group(2).trim() : null;
                 if (!isValidSlug(slug, validSlugs)) {
-                    broken.add(new BrokenLinkEntry(sourceFile, slug, alias));
+                    broken.add(new BrokenLinkEntry(sourceFile, slug, alias, sourceSection));
                 }
             }
         }
