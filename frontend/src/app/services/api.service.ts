@@ -483,7 +483,7 @@ export class ApiService {
   }
 
   getActuatorInfo(): Observable<{ build?: { version?: string } }> {
-    return this.http.get<{ build?: { version?: string } }>('/actuator/info');
+    return this.http.get<{ build?: { version?: string } }>('/api/actuator/info');
   }
 
   discoverLinks(path: string): Observable<LinkDiscoveryEvent> {
