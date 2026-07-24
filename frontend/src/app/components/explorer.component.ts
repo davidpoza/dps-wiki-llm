@@ -34,6 +34,7 @@ import { createClipboardImagePlugin } from './clipboard-image.plugin';
 import { createImageResourceViewPlugin } from './image-resource-view.plugin';
 import type { EditorView } from '@milkdown/prose/view';
 import { TreeNode, ConfirmationService, MessageService, MenuItem } from 'primeng/api';
+import { Tree } from 'primeng/tree';
 import { ButtonModule } from 'primeng/button';
 import { ContextMenuModule } from 'primeng/contextmenu';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -96,14 +97,22 @@ import { FormsModule } from '@angular/forms';
             (onClick)="globalSearchService.open()"
           />
           <p-button
-            [icon]="treePanelCollapsed() ? 'pi pi-chevron-right' : 'pi pi-chevron-left'"
+            icon="pi pi-folder"
             [text]="true"
             severity="secondary"
             size="small"
-            [title]="
-              treePanelCollapsed() ? ('explorer.expandPanel' | transloco) : ('explorer.collapsePanel' | transloco)
-            "
-            (onClick)="toggleTreePanel()"
+            title="Árbol de ficheros"
+            [class.sidebar-btn-active]="sidebarPanel() === 'files'"
+            (onClick)="toggleSidebarPanel('files')"
+          />
+          <p-button
+            icon="pi pi-list"
+            [text]="true"
+            severity="secondary"
+            size="small"
+            title="Tabla de contenido"
+            [class.sidebar-btn-active]="sidebarPanel() === 'toc'"
+            (onClick)="toggleSidebarPanel('toc')"
           />
         </nav>
 
@@ -112,25 +121,48 @@ import { FormsModule } from '@angular/forms';
           [class.collapsed]="treePanelCollapsed()"
           [style.width.px]="treePanelCollapsed() ? 0 : treePanelWidth()"
         >
-          <p-tree
-            [value]="treeNodes()"
-            selectionMode="single"
-            [(selection)]="selectedNode"
-            (onNodeSelect)="onNodeSelect($event)"
-            [contextMenu]="cm"
-            (onNodeContextMenuSelect)="onNodeContextMenuSelect($event)"
-            styleClass="w-full"
-            [emptyMessage]="'explorer.noResults' | transloco"
-            [virtualScroll]="true"
-            [virtualScrollItemSize]="32"
-            scrollHeight="flex"
-          >
-            <ng-template pTemplate="default" let-node>
-              <span class="tree-label" [title]="node.label">{{ node.label }}</span>
-            </ng-template>
-          </p-tree>
-          @if (treeNodes().length === 0) {
-            <p class="empty-msg">{{ 'explorer.noDocuments' | transloco }}</p>
+          @if (sidebarPanel() === 'files') {
+            <p-tree
+              #fileTree
+              [value]="treeNodes()"
+              selectionMode="single"
+              [(selection)]="selectedNode"
+              (onNodeSelect)="onNodeSelect($event)"
+              [contextMenu]="cm"
+              (onNodeContextMenuSelect)="onNodeContextMenuSelect($event)"
+              styleClass="w-full"
+              [emptyMessage]="'explorer.noResults' | transloco"
+              [virtualScroll]="true"
+              [virtualScrollItemSize]="32"
+              scrollHeight="flex"
+            >
+              <ng-template pTemplate="default" let-node>
+                <span class="tree-label" [title]="node.label">{{ node.label }}</span>
+              </ng-template>
+            </p-tree>
+            @if (treeNodes().length === 0) {
+              <p class="empty-msg">{{ 'explorer.noDocuments' | transloco }}</p>
+            }
+          } @else if (sidebarPanel() === 'toc') {
+            <div class="toc-panel">
+              @if (!selectedPath()) {
+                <p class="toc-empty">Abre un fichero para ver su índice</p>
+              } @else if (tocTreeNodes().length === 0) {
+                <p class="toc-empty">Sin encabezados</p>
+              } @else {
+                <p-tree
+                  [value]="tocTreeNodes()"
+                  selectionMode="single"
+                  styleClass="toc-tree w-full"
+                  scrollHeight="flex"
+                  (onNodeSelect)="onTocNodeSelect($event)"
+                >
+                  <ng-template pTemplate="default" let-node>
+                    <span class="toc-node-label" [title]="node.label">{{ node.label }}</span>
+                  </ng-template>
+                </p-tree>
+              }
+            </div>
           }
         </aside>
 
@@ -626,6 +658,11 @@ import { FormsModule } from '@angular/forms';
         border-right: 1px solid var(--app-border);
         background: var(--app-surface-muted);
       }
+      :host ::ng-deep .sidebar-btn-active .p-button {
+        color: var(--app-primary) !important;
+        background: var(--app-primary-soft) !important;
+        border-radius: 6px;
+      }
       .resizer {
         flex-shrink: 0;
         width: 5px;
@@ -700,6 +737,34 @@ import { FormsModule } from '@angular/forms';
         color: var(--app-text-muted);
         font-size: 0.85rem;
         padding: 8px;
+      }
+      .toc-panel {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        height: 100%;
+      }
+      .toc-empty {
+        color: var(--app-text-muted);
+        font-size: 0.82rem;
+        padding: 8px;
+      }
+      :host ::ng-deep .toc-tree .p-tree-node-content {
+        padding: 2px 4px;
+      }
+      :host ::ng-deep .toc-tree .p-tree-node-label {
+        font-size: 0.82rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .toc-node-label {
+        font-size: 0.82rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 180px;
+        display: inline-block;
       }
       .editor-panel {
         flex: 1;
@@ -1278,6 +1343,7 @@ import { FormsModule } from '@angular/forms';
 })
 export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, UnsavedChangesAware {
   @ViewChild('editorContainer') editorContainer!: ElementRef<HTMLDivElement>;
+  @ViewChild('fileTree') fileTree?: Tree;
 
   private readonly fileService = inject(FileService);
   private readonly api = inject(ApiService);
@@ -1338,7 +1404,8 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly frontmatterRawYaml = signal('');
   readonly frontmatterYamlError = signal(false);
   readonly treePanelWidth = signal(280);
-  readonly treePanelCollapsed = signal(window.innerWidth < 768);
+  readonly sidebarPanel = signal<'collapsed' | 'files' | 'toc'>(window.innerWidth < 768 ? 'collapsed' : 'files');
+  readonly treePanelCollapsed = computed(() => this.sidebarPanel() === 'collapsed');
   readonly contextMenuItems = signal<MenuItem[]>([]);
   readonly contextMenuNode = signal<TreeNode | null>(null);
   readonly showRenameDialog = signal(false);
@@ -1406,6 +1473,33 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   private editor: Editor | null = null;
   private editorView: EditorView | null = null;
   private currentMarkdown = '';
+  readonly tocMarkdown = signal('');
+  readonly tocHeadings = computed(() => {
+    const re = /^(#{1,6})\s+(.+)/gm;
+    const results: { level: number; text: string }[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(this.tocMarkdown())) !== null) {
+      results.push({ level: m[1].length, text: m[2].trim() });
+    }
+    return results;
+  });
+  readonly tocTreeNodes = computed((): TreeNode[] => {
+    const roots: TreeNode[] = [];
+    const stack: { level: number; node: TreeNode }[] = [];
+    for (const h of this.tocHeadings()) {
+      const node: TreeNode = { label: h.text, data: h.text, leaf: true, expanded: true };
+      while (stack.length > 0 && stack[stack.length - 1].level >= h.level) stack.pop();
+      if (stack.length === 0) {
+        roots.push(node);
+      } else {
+        const parent = stack[stack.length - 1].node;
+        (parent.children ??= []).push(node);
+        parent.leaf = false;
+      }
+      stack.push({ level: h.level, node });
+    }
+    return roots;
+  });
   private rawFileContent = '';
   private isLoading = false;
   private treeSubscription: Subscription | null = null;
@@ -1451,6 +1545,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         if (currentPath) {
           const node = this.allFiles().find((n) => n.data === currentPath);
           if (node) this.selectedNode = node;
+          this.revealInTree(currentPath);
         }
         this.cdr.markForCheck();
       },
@@ -1481,6 +1576,47 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
       expanded: expanded.has(n.data as string),
       children: n.children ? this.restoreExpanded(n.children, expanded) : [],
     }));
+  }
+
+  private expandAncestors(nodes: TreeNode[], filePath: string): boolean {
+    let changed = false;
+    for (const node of nodes) {
+      if (node.leaf) continue;
+      const nodePath = node.data as string;
+      if (filePath === nodePath || filePath.startsWith(nodePath + '/')) {
+        if (!node.expanded) {
+          node.expanded = true;
+          changed = true;
+        }
+        if (this.expandAncestors(node.children ?? [], filePath)) changed = true;
+      }
+    }
+    return changed;
+  }
+
+  private getFlatVisibleIndex(nodes: TreeNode[], targetPath: string): number {
+    let index = 0;
+    const walk = (ns: TreeNode[]): boolean => {
+      for (const n of ns) {
+        if (n.data === targetPath) return true;
+        index++;
+        if (!n.leaf && n.expanded && n.children?.length) {
+          if (walk(n.children)) return true;
+        }
+      }
+      return false;
+    };
+    return walk(nodes) ? index : -1;
+  }
+
+  private revealInTree(path: string): void {
+    if (this.navigatingFromTree) return;
+    const changed = this.expandAncestors(this.treeNodes(), path);
+    if (changed) this.treeNodes.update((n) => [...n]);
+    setTimeout(() => {
+      const idx = this.getFlatVisibleIndex(this.treeNodes(), path);
+      if (idx >= 0) this.fileTree?.scroller?.scrollToIndex(idx);
+    }, 0);
   }
 
   private reloadTree(): void {
@@ -1720,6 +1856,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
           if (this.isLoading) {
             this.isLoading = false;
             this.currentMarkdown = markdown;
+            this.tocMarkdown.set(markdown);
             return;
           }
           if (this.selectedPath() && markdown !== this.currentMarkdown) {
@@ -1727,6 +1864,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
             this.cdr.markForCheck();
           }
           this.currentMarkdown = markdown;
+          this.tocMarkdown.set(markdown);
         });
       })
       .use(commonmark)
@@ -1816,12 +1954,14 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         this.editingFrontmatter.set(false);
         this.frontmatterYamlError.set(false);
         this.currentMarkdown = parsed.content;
+        this.tocMarkdown.set(parsed.content);
         if (this.editor) {
           this.isLoading = true;
           this.editor.action(replaceAll(parsed.content));
         }
         const node = this.allFiles().find((n) => n.data === path);
         if (node) this.selectedNode = node;
+        this.revealInTree(path);
         this.cdr.markForCheck();
       },
       error: () =>
@@ -1835,7 +1975,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   private openFile(node: TreeNode): void {
     this.navigatingFromTree = true;
-    if (window.innerWidth < 768) this.treePanelCollapsed.set(true);
+    if (window.innerWidth < 768) this.sidebarPanel.set('collapsed');
     this.loadFile(node);
     const segments = (node.data as string).split('/');
     this.router.navigate(['explorer', ...segments]);
@@ -1928,6 +2068,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         this.editingFrontmatter.set(false);
         this.frontmatterYamlError.set(false);
         this.currentMarkdown = parsed.content;
+        this.tocMarkdown.set(parsed.content);
         if (this.editor) {
           this.isLoading = true;
           this.editor.action(replaceAll(parsed.content));
@@ -1979,8 +2120,18 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     return String(value ?? '');
   }
 
-  toggleTreePanel(): void {
-    this.treePanelCollapsed.update((v) => !v);
+  toggleSidebarPanel(mode: 'files' | 'toc'): void {
+    this.sidebarPanel.set(this.sidebarPanel() === mode ? 'collapsed' : mode);
+  }
+
+  scrollToHeading(text: string): void {
+    const headings = this.editorContainer.nativeElement.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6');
+    const target = Array.from(headings).find((el) => el.textContent?.trim() === text);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  onTocNodeSelect(event: { node: TreeNode }): void {
+    this.scrollToHeading(event.node.data as string);
   }
 
   navigateToWikilink(target: string): void {
@@ -2064,7 +2215,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   @HostListener('window:resize')
   onWindowResize(): void {
     if (window.innerWidth < 768 && !this.treePanelCollapsed()) {
-      this.treePanelCollapsed.set(true);
+      this.sidebarPanel.set('collapsed');
     }
   }
 
@@ -2208,6 +2359,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         this.frontmatter.set(parsed.data);
         this.editingFrontmatter.set(false);
         this.currentMarkdown = parsed.content;
+        this.tocMarkdown.set(parsed.content);
         if (this.editor) {
           this.isLoading = true;
           this.editor.action(replaceAll(parsed.content));
@@ -2455,6 +2607,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     }
 
     this.currentMarkdown = markdown;
+    this.tocMarkdown.set(markdown);
     this.editor?.action(replaceAll(markdown));
     this.isDirty.set(true);
     this.save();
