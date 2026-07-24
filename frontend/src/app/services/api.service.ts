@@ -282,8 +282,8 @@ export class ApiService {
     return this.http.get<Conflict[]>('/api/webdav/conflicts');
   }
 
-  resolveConflict(path: string, keep: 'LOCAL' | 'REMOTE'): Observable<void> {
-    return this.http.post<void>('/api/webdav/conflicts/resolve', { path, keep });
+  resolveConflict(path: string, keep: 'LOCAL' | 'REMOTE' | 'SKIP' | 'MANUAL', content?: string): Observable<void> {
+    return this.http.post<void>('/api/webdav/conflicts/resolve', { path, keep, ...(content !== undefined ? { content } : {}) });
   }
 
   getPrompts(): Observable<Prompt[]> {

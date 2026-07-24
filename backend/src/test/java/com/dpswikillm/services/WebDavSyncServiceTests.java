@@ -251,7 +251,7 @@ class WebDavSyncServiceTests {
         assertThat(conflicts.getFirst().localContent()).isEqualTo("local-change");
         assertThat(conflicts.getFirst().remoteContent()).isEqualTo("remote-change");
 
-        service.resolveConflict("a.md", WebDavSyncService.KEEP_LOCAL);
+        service.resolveConflict("a.md", WebDavSyncService.KEEP_LOCAL, null);
 
         assertThat(webdav.remote.get("a.md")).isEqualTo("local-change");
         assertThat(readLocal("a.md")).isEqualTo("local-change");
@@ -266,7 +266,7 @@ class WebDavSyncServiceTests {
         webdav.remote.put("a.md", "remote-change");
         service.sync();
 
-        service.resolveConflict("a.md", WebDavSyncService.KEEP_REMOTE);
+        service.resolveConflict("a.md", WebDavSyncService.KEEP_REMOTE, null);
 
         assertThat(readLocal("a.md")).isEqualTo("remote-change");
         assertThat(baselineStore.get("a.md").isConflict()).isFalse();
@@ -279,7 +279,7 @@ class WebDavSyncServiceTests {
     @Test
     void resolveUnknownConflictThrows() {
         assertThatThrownBy(
-                        () -> service.resolveConflict("missing.md", WebDavSyncService.KEEP_LOCAL))
+                        () -> service.resolveConflict("missing.md", WebDavSyncService.KEEP_LOCAL, null))
                 .isInstanceOf(java.util.NoSuchElementException.class);
     }
 

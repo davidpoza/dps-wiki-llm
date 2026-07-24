@@ -6,6 +6,7 @@ import { PaginatorModule, PaginatorState } from 'primeng/paginator';
 import { Router } from '@angular/router';
 import { ApiService, SyncEvent } from '../services/api.service';
 import { Conflict, FileHistoryEntry, SyncResult } from '../types';
+import { ConflictMergeEditorComponent } from './conflict-merge-editor.component';
 
 const PAGE_SIZE = 20;
 const FIRST_PAGE = 0;
@@ -13,7 +14,7 @@ const FIRST_PAGE = 0;
 @Component({
   selector: 'app-git-history',
   standalone: true,
-  imports: [NgClass, TranslocoPipe, DialogModule, PaginatorModule],
+  imports: [NgClass, TranslocoPipe, DialogModule, PaginatorModule, ConflictMergeEditorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="history">
@@ -97,45 +98,73 @@ const FIRST_PAGE = 0;
     </div>
 
     <p-dialog
-      [header]="'sync.conflictsHeader' | transloco"
       [(visible)]="showConflicts"
       [modal]="true"
       [draggable]="false"
       [style]="{ width: '90vw', maxWidth: '1100px' }"
     >
+      <ng-template pTemplate="header">
+        <div class="conflicts-dialog-header">
+          <span>{{ 'sync.conflictsHeader' | transloco }}</span>
+          <span class="resolved-counter">{{ 'sync.resolvedCounter' | transloco: { resolved: resolvedCount(), total: totalConflicts() } }}</span>
+        </div>
+      </ng-template>
+
       @if (conflicts().length === 0) {
         <p class="empty">{{ 'sync.noConflicts' | transloco }}</p>
       }
+
+      @if (conflicts().length > 0) {
+        <div class="bulk-bar">
+          <button class="bulk-btn" (click)="resolveAll('LOCAL')">{{ 'sync.applyAllLocal' | transloco }}</button>
+          <button class="bulk-btn" (click)="resolveAll('REMOTE')">{{ 'sync.applyAllRemote' | transloco }}</button>
+        </div>
+      }
+
       @for (conflict of conflicts(); track conflict.path) {
         <div class="conflict">
-          <div class="conflict-path">{{ conflict.path }}</div>
-          <div class="conflict-panes">
-            <div class="conflict-pane">
-              <div class="pane-header">
-                <span>{{ 'sync.localVersion' | transloco }}</span>
-                <button class="keep-btn" (click)="resolve(conflict.path, 'LOCAL')">
-                  {{ 'sync.keepThis' | transloco }}
-                </button>
-              </div>
-              <pre class="pane-body">@for (line of splitLines(conflict.localContent); track $index) {
-<span [ngClass]="conflictLineClass(conflict, $index, 'local')">{{ line }}</span>
-}</pre>
-            </div>
-            <div class="conflict-pane">
-              <div class="pane-header">
-                <span>{{ 'sync.remoteVersion' | transloco }}</span>
-                <button class="keep-btn" (click)="resolve(conflict.path, 'REMOTE')">
-                  {{ 'sync.keepThis' | transloco }}
-                </button>
-              </div>
-              <pre class="pane-body">@for (line of splitLines(conflict.remoteContent); track $index) {
-<span [ngClass]="conflictLineClass(conflict, $index, 'remote')">{{ line }}</span>
-}</pre>
+          <div class="conflict-row" (click)="toggleExpand(conflict.path)">
+            <i class="pi" [ngClass]="expandedConflicts().has(conflict.path) ? 'pi-chevron-down' : 'pi-chevron-right'"></i>
+            <span class="conflict-path">{{ conflict.path }}</span>
+            <div class="conflict-actions" (click)="$event.stopPropagation()">
+              <button class="keep-btn" (click)="resolve(conflict.path, 'LOCAL')">{{ 'sync.localVersion' | transloco }}</button>
+              <button class="keep-btn" (click)="resolve(conflict.path, 'REMOTE')">{{ 'sync.remoteVersion' | transloco }}</button>
+              <button class="skip-btn" [title]="'sync.skipTooltip' | transloco" (click)="resolve(conflict.path, 'SKIP')">{{ 'sync.skipConflict' | transloco }}</button>
+              <button class="manual-btn" (click)="openMergeEditor(conflict)">{{ 'sync.manualResolve' | transloco }}</button>
             </div>
           </div>
+
+          @if (expandedConflicts().has(conflict.path)) {
+            <div class="conflict-panes">
+              <div class="conflict-pane">
+                <div class="pane-header">
+                  <span>{{ 'sync.localVersion' | transloco }}</span>
+                </div>
+                <pre class="pane-body">@for (line of splitLines(conflict.localContent); track $index) {
+<span [ngClass]="conflictLineClass(conflict, $index, 'local')">{{ line }}</span>
+}</pre>
+              </div>
+              <div class="conflict-pane">
+                <div class="pane-header">
+                  <span>{{ 'sync.remoteVersion' | transloco }}</span>
+                </div>
+                <pre class="pane-body">@for (line of splitLines(conflict.remoteContent); track $index) {
+<span [ngClass]="conflictLineClass(conflict, $index, 'remote')">{{ line }}</span>
+}</pre>
+              </div>
+            </div>
+          }
         </div>
       }
     </p-dialog>
+
+    @if (activeManualConflict()) {
+      <app-conflict-merge-editor
+        [conflict]="activeManualConflict()!"
+        (resolved)="onManualResolved(activeManualConflict()!.path, $event)"
+        (cancelled)="activeManualConflict.set(null)"
+      />
+    }
   `,
   styles: [
     `
@@ -358,24 +387,86 @@ const FIRST_PAGE = 0;
       .line-meta {
         color: #8b949e;
       }
+      .conflicts-dialog-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        width: 100%;
+      }
+      .resolved-counter {
+        font-size: 0.8rem;
+        font-weight: 400;
+        color: var(--app-text-muted);
+      }
+      .bulk-bar {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--app-border);
+      }
+      .bulk-btn {
+        padding: 0.25rem 0.75rem;
+        font-size: 0.8rem;
+        cursor: pointer;
+        border: 1px solid var(--app-border-strong);
+        border-radius: 4px;
+        background: var(--app-surface-muted);
+        color: var(--app-text);
+      }
+      .bulk-btn:hover {
+        background: var(--app-surface-subtle);
+      }
       .conflict {
-        margin-bottom: 1.25rem;
+        margin-bottom: 0.5rem;
+        border: 1px solid var(--app-border);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .conflict-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.45rem 0.6rem;
+        background: var(--app-surface-muted);
+        cursor: pointer;
+        user-select: none;
+      }
+      .conflict-row:hover {
+        background: var(--app-surface-subtle);
+      }
+      .conflict-row .pi {
+        font-size: 0.75rem;
+        color: var(--app-text-muted);
+        flex-shrink: 0;
       }
       .conflict-path {
         font-family: monospace;
+        font-size: 0.8rem;
         font-weight: 600;
-        margin-bottom: 0.4rem;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .conflict-actions {
+        display: flex;
+        gap: 0.35rem;
+        flex-shrink: 0;
       }
       .conflict-panes {
         display: flex;
-        gap: 0.75rem;
+        gap: 0;
+        border-top: 1px solid var(--app-border);
       }
       .conflict-pane {
         flex: 1;
         min-width: 0;
-        border: 1px solid var(--app-border);
-        border-radius: 6px;
         overflow: hidden;
+      }
+      .conflict-pane:first-child {
+        border-right: 1px solid var(--app-border);
       }
       .pane-header {
         display: flex;
@@ -387,18 +478,42 @@ const FIRST_PAGE = 0;
         font-weight: 600;
       }
       .keep-btn {
-        padding: 0.15rem 0.6rem;
-        font-size: 0.75rem;
+        padding: 0.15rem 0.5rem;
+        font-size: 0.72rem;
         cursor: pointer;
         border: 1px solid var(--app-primary);
         border-radius: 4px;
         background: var(--app-primary);
         color: #fff;
       }
+      .skip-btn {
+        padding: 0.15rem 0.5rem;
+        font-size: 0.72rem;
+        cursor: pointer;
+        border: 1px solid var(--app-border-strong);
+        border-radius: 4px;
+        background: var(--app-surface-muted);
+        color: var(--app-text-muted);
+      }
+      .skip-btn:hover {
+        background: var(--app-surface-subtle);
+      }
+      .manual-btn {
+        padding: 0.15rem 0.5rem;
+        font-size: 0.72rem;
+        cursor: pointer;
+        border: 1px solid var(--app-warning, #f59e0b);
+        border-radius: 4px;
+        background: transparent;
+        color: var(--app-warning, #f59e0b);
+      }
+      .manual-btn:hover {
+        background: color-mix(in srgb, var(--app-warning, #f59e0b) 12%, transparent);
+      }
       .pane-body {
         margin: 0;
         border-radius: 0;
-        max-height: 50vh;
+        max-height: 40vh;
       }
       .line-changed {
         background: #3a2f1a;
@@ -419,6 +534,12 @@ const FIRST_PAGE = 0;
           padding: 0.75rem;
         }
         .history-header {
+          flex-wrap: wrap;
+        }
+        .conflict-row {
+          flex-wrap: wrap;
+        }
+        .conflict-actions {
           flex-wrap: wrap;
         }
         .conflict-panes {
@@ -449,6 +570,10 @@ export class GitHistoryComponent implements OnInit {
   readonly syncTotal = signal(0);
   readonly conflicts = signal<Conflict[]>([]);
   readonly showConflicts = signal(false);
+  readonly totalConflicts = signal(0);
+  readonly resolvedCount = computed(() => this.totalConflicts() - this.conflicts().length);
+  readonly expandedConflicts = signal<Set<string>>(new Set());
+  readonly activeManualConflict = signal<Conflict | null>(null);
 
   private readonly openDiffs = new Map<string, string[]>();
   private readonly loadingDiffs = new Set<string>();
@@ -527,6 +652,8 @@ export class GitHistoryComponent implements OnInit {
     this.api.getConflicts().subscribe({
       next: (conflicts) => {
         this.conflicts.set(conflicts);
+        this.totalConflicts.set(conflicts.length);
+        this.expandedConflicts.set(new Set());
         this.showConflicts.set(conflicts.length > 0);
       },
       error: () => {
@@ -536,21 +663,68 @@ export class GitHistoryComponent implements OnInit {
     });
   }
 
-  resolve(path: string, keep: 'LOCAL' | 'REMOTE'): void {
-    this.api.resolveConflict(path, keep).subscribe({
+  resolve(path: string, keep: 'LOCAL' | 'REMOTE' | 'SKIP' | 'MANUAL', content?: string): void {
+    this.api.resolveConflict(path, keep, content).subscribe({
       next: () => {
         const remaining = this.conflicts().filter((c) => c.path !== path);
         this.conflicts.set(remaining);
         if (remaining.length === 0) {
           this.showConflicts.set(false);
         }
-        this.load();
+        if (keep !== 'SKIP') {
+          this.load();
+        }
       },
       error: () => {
         this.syncIsError.set(true);
         this.syncMessage.set(this.t.translate('sync.resolveError'));
       },
     });
+  }
+
+  resolveAll(keep: 'LOCAL' | 'REMOTE'): void {
+    const all = [...this.conflicts()];
+    const errors: string[] = [];
+    let remaining = all.length;
+    const done = () => {
+      remaining--;
+      if (remaining === 0 && errors.length > 0) {
+        this.syncIsError.set(true);
+        this.syncMessage.set(this.t.translate('sync.bulkError'));
+      }
+    };
+    for (const c of all) {
+      this.api.resolveConflict(c.path, keep).subscribe({
+        next: () => {
+          this.conflicts.update((list) => list.filter((x) => x.path !== c.path));
+          if (this.conflicts().length === 0) this.showConflicts.set(false);
+          this.load();
+          done();
+        },
+        error: () => {
+          errors.push(c.path);
+          done();
+        },
+      });
+    }
+  }
+
+  toggleExpand(path: string): void {
+    this.expandedConflicts.update((set) => {
+      const next = new Set(set);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
+
+  openMergeEditor(conflict: Conflict): void {
+    this.activeManualConflict.set(conflict);
+  }
+
+  onManualResolved(path: string, content: string): void {
+    this.activeManualConflict.set(null);
+    this.resolve(path, 'MANUAL', content);
   }
 
   isDiffOpen(changeId: string): boolean {

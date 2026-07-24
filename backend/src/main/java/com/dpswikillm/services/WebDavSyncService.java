@@ -45,6 +45,8 @@ public class WebDavSyncService {
 
     public static final String KEEP_LOCAL = "LOCAL";
     public static final String KEEP_REMOTE = "REMOTE";
+    public static final String KEEP_SKIP = "SKIP";
+    public static final String KEEP_MANUAL = "MANUAL";
 
     private final WebDavClient webDavClient;
     private final VaultFileSyncRepository baselineRepository;
@@ -408,7 +410,7 @@ public class WebDavSyncService {
                 .toList();
     }
 
-    public void resolveConflict(String path, String keep) {
+    public void resolveConflict(String path, String keep, String content) {
         String normalized = pathResolver.normalizeRelativePath(path);
         VaultFileSync baseline =
                 baselineRepository
@@ -444,8 +446,33 @@ public class WebDavSyncService {
             }
             snapshotService.finalizeSnapshot(snapshot, null);
             upsertBaseline(normalized, sha256(remoteContent), null, true, false, null);
+        } else if (KEEP_SKIP.equalsIgnoreCase(keep)) {
+            upsertBaseline(normalized, baseline.getSyncedHash(), baseline.getRemoteEtag(), baseline.isReplicated(), false, null);
+        } else if (KEEP_MANUAL.equalsIgnoreCase(keep)) {
+            if (content == null || content.isBlank()) {
+                throw new IllegalArgumentException("content is required for MANUAL resolution");
+            }
+            try {
+                webDavClient.put(normalized, content);
+            } catch (IOException e) {
+                throw new WebDavReplicationException(
+                        "Failed to push manual resolved content for " + normalized, e);
+            }
+            Snapshot snapshot =
+                    snapshotService.beginSnapshot(
+                            null, "webdav-conflict-resolve", normalized, "WEBDAV_PULL");
+            try {
+                snapshotService.captureFile(snapshot, normalized);
+                writeLocal(normalized, content);
+                snapshotService.recordAfter(snapshot, normalized);
+            } catch (IOException e) {
+                snapshotService.deleteSnapshot(snapshot.getId());
+                throw new UncheckedIOException(e);
+            }
+            snapshotService.finalizeSnapshot(snapshot, null);
+            upsertBaseline(normalized, sha256(content), null, true, false, null);
         } else {
-            throw new IllegalArgumentException("keep must be LOCAL or REMOTE");
+            throw new IllegalArgumentException("keep must be LOCAL, REMOTE, SKIP, or MANUAL");
         }
     }
 

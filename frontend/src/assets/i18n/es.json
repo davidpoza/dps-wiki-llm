@@ -111,7 +111,19 @@
     "noConflicts": "No hay conflictos pendientes.",
     "localVersion": "Versión local",
     "remoteVersion": "Versión remota",
-    "keepThis": "Conservar esta versión"
+    "keepThis": "Conservar esta versión",
+    "resolvedCounter": "{{ resolved }} / {{ total }} resueltos",
+    "applyAllLocal": "Aplicar versión local a todos",
+    "applyAllRemote": "Aplicar versión remota a todos",
+    "skipConflict": "No resolver",
+    "skipTooltip": "Descarta el conflicto sin cambios; se volverá a detectar en el próximo sync",
+    "manualResolve": "Resolución manual",
+    "takeLocal": "Tomar local completo",
+    "takeRemote": "Tomar remoto completo",
+    "submitManual": "Resolver",
+    "cancelManual": "Cancelar",
+    "bulkError": "Algunos conflictos no se pudieron resolver.",
+    "mergeEditorTitle": "Resolución manual: {{ path }}"
   },
   "versions": {
     "button": "Versiones",

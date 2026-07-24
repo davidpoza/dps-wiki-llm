@@ -82,7 +82,7 @@ public class WebDavController {
     @PostMapping("/conflicts/resolve")
     public ResponseEntity<?> resolve(@RequestBody ConflictResolveRequest request) {
         try {
-            webDavSyncService.resolveConflict(request.path(), request.keep());
+            webDavSyncService.resolveConflict(request.path(), request.keep(), request.content());
             return ResponseEntity.ok().build();
         } catch (NoSuchElementException e) {
             return ResponseEntity.notFound().build();

@@ -111,7 +111,19 @@
     "noConflicts": "No pending conflicts.",
     "localVersion": "Local version",
     "remoteVersion": "Remote version",
-    "keepThis": "Keep this version"
+    "keepThis": "Keep this version",
+    "resolvedCounter": "{{ resolved }} / {{ total }} resolved",
+    "applyAllLocal": "Apply local version to all",
+    "applyAllRemote": "Apply remote version to all",
+    "skipConflict": "Don't resolve",
+    "skipTooltip": "Dismiss conflict without changes; it will be re-detected on the next sync",
+    "manualResolve": "Manual resolution",
+    "takeLocal": "Take full local",
+    "takeRemote": "Take full remote",
+    "submitManual": "Resolve",
+    "cancelManual": "Cancel",
+    "bulkError": "Some conflicts could not be resolved.",
+    "mergeEditorTitle": "Manual resolution: {{ path }}"
   },
   "versions": {
     "button": "Versions",
