@@ -3,8 +3,10 @@ package com.dpswikillm.repositories;
 import com.dpswikillm.domain.DocumentRecord;
 import com.dpswikillm.domain.SearchResult;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -256,6 +258,25 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
                                 rs.getTimestamp("updated_at").toInstant(),
                                 rs.getString("body")),
                 docType);
+    }
+
+    @Override
+    public Optional<Instant> findEmbeddingStatus(String path) {
+        List<Instant> result =
+                jdbcTemplate.query(
+                        """
+                SELECT de.embedded_at
+                FROM documents d
+                JOIN document_embeddings de ON de.document_id = d.id
+                WHERE d.path = ?
+                LIMIT 1
+                """,
+                        (rs, rowNum) -> {
+                            Timestamp ts = rs.getTimestamp("embedded_at");
+                            return ts != null ? ts.toInstant() : null;
+                        },
+                        path);
+        return result.isEmpty() ? Optional.empty() : Optional.ofNullable(result.get(0));
     }
 
     private String vectorLiteral(float[] vector) {

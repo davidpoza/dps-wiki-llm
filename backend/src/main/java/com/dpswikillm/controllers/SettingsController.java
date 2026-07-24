@@ -15,6 +15,7 @@ import com.dpswikillm.services.ReindexService;
 import com.dpswikillm.services.ResourceSettingsService;
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.MediaType;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -171,6 +173,47 @@ public class SettingsController {
                     }
                 });
         return emitter;
+    }
+
+    @GetMapping(value = "/health-check/partial", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public ResponseEntity<SseEmitter> healthCheckPartial(
+            @RequestParam(required = false) List<String> paths) {
+        if (paths == null || paths.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        Set<String> pathSet = Set.copyOf(paths);
+        SseEmitter emitter = new SseEmitter(0L);
+        CompletableFuture.runAsync(
+                () -> {
+                    try {
+                        HealthCheckProgress result =
+                                healthCheckService.run(
+                                        pathSet,
+                                        progress -> {
+                                            try {
+                                                emitter.send(
+                                                        SseEmitter.event()
+                                                                .name("progress")
+                                                                .data(progress));
+                                            } catch (IOException | IllegalStateException ex) {
+                                                throw new IllegalStateException(
+                                                        "SSE send failed", ex);
+                                            }
+                                        });
+                        emitter.send(SseEmitter.event().name("done").data(result));
+                        emitter.complete();
+                    } catch (Exception ex) {
+                        try {
+                            emitter.send(
+                                    SseEmitter.event()
+                                            .name("error")
+                                            .data(new ErrorMessage(ex.getMessage())));
+                        } catch (IOException | IllegalStateException ignored) {
+                        }
+                        emitter.complete();
+                    }
+                });
+        return ResponseEntity.ok(emitter);
     }
 
     @GetMapping(value = "/broken-links/scan", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

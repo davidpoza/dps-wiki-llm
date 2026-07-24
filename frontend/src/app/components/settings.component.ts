@@ -9,6 +9,7 @@ import { APP_VERSION } from '../version';
 import { BrokenLinksModalComponent } from './broken-links-modal.component';
 import { ConceptDedupModalComponent } from './concept-dedup-modal.component';
 import { KeywordSelectionModalComponent } from './keyword-selection-modal.component';
+import { HealthCheckSelectionModalComponent } from './health-check-selection-modal.component';
 
 interface PromptState extends Prompt {
   saving: boolean;
@@ -19,7 +20,7 @@ interface PromptState extends Prompt {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [FormsModule, ButtonModule, SelectButtonModule, NavComponent, BrokenLinksModalComponent, ConceptDedupModalComponent, KeywordSelectionModalComponent],
+  imports: [FormsModule, ButtonModule, SelectButtonModule, NavComponent, BrokenLinksModalComponent, ConceptDedupModalComponent, KeywordSelectionModalComponent, HealthCheckSelectionModalComponent],
   template: `
     <main class="app-shell">
       <app-nav />
@@ -105,6 +106,13 @@ interface PromptState extends Prompt {
               [disabled]="healthChecking()"
               (onClick)="startHealthCheck()"
             />
+            <p-button
+              label="Seleccionar notas…"
+              severity="secondary"
+              size="small"
+              [disabled]="healthChecking()"
+              (onClick)="showHealthCheckModal.set(true)"
+            />
             @if (healthChecking()) {
               <span class="reindex-progress">
                 @if (hcPhase() === 'embeddings') {
@@ -126,6 +134,10 @@ interface PromptState extends Prompt {
             }
           </div>
         </section>
+
+        @if (showHealthCheckModal()) {
+          <app-health-check-selection-modal (cancel)="showHealthCheckModal.set(false)" />
+        }
 
         <section class="settings-section">
           <h2>Recursos</h2>
@@ -433,6 +445,7 @@ export class SettingsComponent implements OnInit {
   readonly reindexError = signal<string | null>(null);
 
   readonly showKeywordModal = signal(false);
+  readonly showHealthCheckModal = signal(false);
   readonly healthChecking = signal(false);
   readonly hcPhase = signal<'embeddings' | 'connections' | 'done'>('embeddings');
   readonly hcProcessed = signal(0);

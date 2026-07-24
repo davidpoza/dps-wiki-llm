@@ -147,6 +147,11 @@ export type ConceptDedupScanEvent =
   | ConceptDedupScanWarning
   | ConceptDedupScanResult;
 
+export interface EmbeddingStatus {
+  hasEmbedding: boolean;
+  lastUpdated: string | null;
+}
+
 export interface BrokenLinkEntry {
   sourceFile: string;
   link: string;
@@ -403,6 +408,40 @@ export class ApiService {
     });
   }
 
+  runHealthCheckPartial(paths: string[]): Observable<HealthCheckProgress> {
+    return new Observable((observer: Observer<HealthCheckProgress>) => {
+      const token = this.auth.token();
+      const pathParams = paths.map((p) => `paths=${encodeURIComponent(p)}`).join('&');
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+      const url = `/api/settings/health-check/partial?${pathParams}${tokenParam}`;
+      const es = new EventSource(url);
+      let completed = false;
+
+      es.addEventListener('progress', (e: MessageEvent) => {
+        observer.next(JSON.parse(e.data) as HealthCheckProgress);
+      });
+      es.addEventListener('done', (e: MessageEvent) => {
+        completed = true;
+        observer.next(JSON.parse(e.data) as HealthCheckProgress);
+        es.close();
+        observer.complete();
+      });
+      es.addEventListener('error', (e: MessageEvent) => {
+        completed = true;
+        const data = e.data ? (JSON.parse(e.data) as { message: string }) : { message: 'Error desconocido' };
+        es.close();
+        observer.error(new Error(data.message));
+      });
+      es.onerror = () => {
+        es.close();
+        if (!completed) {
+          observer.error(new Error('Error de conexión'));
+        }
+      };
+      return () => es.close();
+    });
+  }
+
   scanBrokenLinks(): Observable<BrokenLinkScanEvent> {
     return new Observable((observer: Observer<BrokenLinkScanEvent>) => {
       const token = this.auth.token();
@@ -536,5 +575,11 @@ export class ApiService {
   listNotes(folders: string[]): Observable<NoteEntry[]> {
     const params = folders.map((f) => `folders=${encodeURIComponent(f)}`).join('&');
     return this.http.get<NoteEntry[]>(`/api/notes/list?${params}`);
+  }
+
+  getEmbeddingStatus(path: string): Observable<EmbeddingStatus> {
+    return this.http.get<EmbeddingStatus>('/api/documents/embedding-status', {
+      params: { path },
+    });
   }
 }

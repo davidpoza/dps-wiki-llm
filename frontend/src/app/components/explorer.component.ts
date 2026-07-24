@@ -44,7 +44,7 @@ import { TreeModule } from 'primeng/tree';
 import { HttpStatusCode } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
-import { ApiService, DiscoveredLink } from '../services/api.service';
+import { ApiService, DiscoveredLink, EmbeddingStatus } from '../services/api.service';
 import { AuthService } from '../services/auth.service';
 import { FileService } from '../services/file.service';
 import { NavComponent } from './nav.component';
@@ -138,6 +138,15 @@ import { FormsModule } from '@angular/forms';
           @if (selectedPath()) {
             <div class="editor-header">
               <div class="editor-title" [title]="selectedPath()">
+                @if (embeddingStatus(); as es) {
+                  <span
+                    class="embedding-status-icon"
+                    [class.embedding-status-icon--has]="es.hasEmbedding"
+                    [title]="es.hasEmbedding && es.lastUpdated ? ('Embedding: ' + formatDate(es.lastUpdated)) : 'Sin embedding calculado'"
+                  >
+                    <i [class]="es.hasEmbedding ? 'pi pi-circle-fill' : 'pi pi-circle'"></i>
+                  </span>
+                }
                 @if (selectedPathParts(); as parts) {
                   <span class="file-path">
                     @if (parts.dir) {
@@ -815,6 +824,17 @@ import { FormsModule } from '@angular/forms';
         line-height: 1;
         flex-shrink: 0;
       }
+      .embedding-status-icon {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+        font-size: 0.55rem;
+        color: var(--app-text-muted);
+        cursor: default;
+      }
+      .embedding-status-icon--has {
+        color: var(--p-primary-color, #10b981);
+      }
       .editor-actions {
         display: flex;
         align-items: center;
@@ -1354,6 +1374,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     return idx === -1 ? { dir: '', name: path } : { dir: path.slice(0, idx + 1), name: path.slice(idx + 1) };
   });
   readonly isDirty = signal(false);
+  readonly embeddingStatus = signal<EmbeddingStatus | null>(null);
   readonly regeneratingKeywords = signal(false);
   readonly isKeywordEligible = computed(() => {
     const path = this.selectedPath();
@@ -1842,6 +1863,11 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   private loadFileByPath(path: string): void {
     const label = path.split('/').pop() ?? path;
+    this.embeddingStatus.set(null);
+    this.api.getEmbeddingStatus(path).subscribe({
+      next: (status) => this.embeddingStatus.set(status),
+      error: () => {},
+    });
     this.fileService.getContent(path).subscribe({
       next: (rawContent) => {
         const parsed = this.parseFrontmatter(rawContent);

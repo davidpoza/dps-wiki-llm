@@ -2,8 +2,10 @@ package com.dpswikillm.repositories;
 
 import com.dpswikillm.domain.DocumentRecord;
 import com.dpswikillm.domain.SearchResult;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface DocumentIndexRepository {
@@ -33,4 +35,6 @@ public interface DocumentIndexRepository {
     List<SimilarPair> findSimilarPairsByDocType(String model, String docType, double threshold);
 
     List<DocumentRecord> findDocumentsByDocType(String docType);
+
+    Optional<Instant> findEmbeddingStatus(String path);
 }

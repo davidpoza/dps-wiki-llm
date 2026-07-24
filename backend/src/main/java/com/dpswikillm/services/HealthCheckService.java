@@ -87,6 +87,16 @@ public class HealthCheckService {
     }
 
     public HealthCheckProgress run(Consumer<HealthCheckProgress> onProgress) throws IOException {
+        return run(Set.of(), onProgress);
+    }
+
+    /**
+     * Runs the health check with phase 2 restricted to the given paths. An empty set means "all
+     * notes" (same as the full health check). Phase 1 (embeddings) always runs over the whole
+     * vault.
+     */
+    public HealthCheckProgress run(Set<String> pathFilter, Consumer<HealthCheckProgress> onProgress)
+            throws IOException {
         // Phase 1: reindex (pick up manual edits) then embed anything missing/changed.
         reindexService.reindexWiki();
         EmbeddingIndexService.EmbedIndexResult embedResult =
@@ -105,12 +115,13 @@ public class HealthCheckService {
                         "embeddings", embeddingsBuilt, embeddingsBuilt, embeddingsBuilt, 0));
 
         // Phase 2: discover and materialize new connections between concepts/sources notes.
-        int connectionsFound = discoverConnections(embeddingsBuilt, onProgress);
+        int connectionsFound = discoverConnections(embeddingsBuilt, pathFilter, onProgress);
 
         return new HealthCheckProgress("done", 0, 0, embeddingsBuilt, connectionsFound);
     }
 
-    private int discoverConnections(int embeddingsBuilt, Consumer<HealthCheckProgress> onProgress)
+    private int discoverConnections(
+            int embeddingsBuilt, Set<String> pathFilter, Consumer<HealthCheckProgress> onProgress)
             throws IOException {
         List<DocumentRecord> all = repository.findAllDocuments();
         Map<String, DocumentRecord> byPath = new HashMap<>();
@@ -123,6 +134,7 @@ public class HealthCheckService {
                                 doc ->
                                         doc.path().startsWith("wiki/concepts/")
                                                 || doc.path().startsWith("wiki/sources/"))
+                        .filter(doc -> pathFilter.isEmpty() || pathFilter.contains(doc.path()))
                         .sorted(Comparator.comparing(DocumentRecord::path))
                         .toList();
         int total = sources.size();
