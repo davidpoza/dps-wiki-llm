@@ -275,6 +275,11 @@ class SemanticRetrievalServicesTests {
         }
 
         @Override
+        public java.util.Set<String> findEmbeddedPathsByDocType(String model, String docType) {
+            return java.util.Set.of();
+        }
+
+        @Override
         public Optional<Instant> findEmbeddingStatus(String path) {
             return Optional.empty();
         }

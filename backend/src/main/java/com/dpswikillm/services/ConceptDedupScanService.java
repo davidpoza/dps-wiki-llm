@@ -67,15 +67,11 @@ public class ConceptDedupScanService {
             byPath.put(doc.path(), doc);
         }
 
-        Set<String> pathsWithEmbeddings = new LinkedHashSet<>();
+        Set<String> pathsWithEmbeddings =
+                repository.findEmbeddedPathsByDocType(model, CONCEPT_DOC_TYPE);
 
         List<SimilarPair> pairs =
                 repository.findSimilarPairsByDocType(model, CONCEPT_DOC_TYPE, threshold);
-
-        for (SimilarPair pair : pairs) {
-            pathsWithEmbeddings.add(pair.path1());
-            pathsWithEmbeddings.add(pair.path2());
-        }
 
         int current = 0;
         for (DocumentRecord doc : allConcepts) {
@@ -90,10 +86,14 @@ public class ConceptDedupScanService {
         }
 
         List<List<String>> rawGroups = buildTransitiveGroups(pairs);
+        List<List<String>> judgeableGroups = rawGroups.stream().filter(g -> g.size() >= 2).toList();
+        int totalGroups = judgeableGroups.size();
 
         List<ConceptDedupGroup> result = new ArrayList<>();
-        for (List<String> group : rawGroups) {
-            if (group.size() < 2) continue;
+        for (int i = 0; i < judgeableGroups.size(); i++) {
+            List<String> group = judgeableGroups.get(i);
+            onProgress.accept(
+                    new ScanProgress("concept-dedup-judge", group.get(0), i + 1, totalGroups));
             ConceptDedupGroup confirmed = callJudge(group, byPath);
             if (confirmed != null) {
                 result.add(confirmed);

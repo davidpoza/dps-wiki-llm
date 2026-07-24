@@ -4,9 +4,11 @@ import com.dpswikillm.domain.DocumentRecord;
 import com.dpswikillm.domain.SearchResult;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -238,6 +240,22 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
                 docType,
                 docType,
                 threshold);
+    }
+
+    @Override
+    public Set<String> findEmbeddedPathsByDocType(String model, String docType) {
+        List<String> paths =
+                jdbcTemplate.queryForList(
+                        """
+                        SELECT d.path
+                        FROM documents d
+                        JOIN document_embeddings de ON de.document_id = d.id
+                        WHERE d.doc_type = ? AND de.model = ?
+                        """,
+                        String.class,
+                        docType,
+                        model);
+        return new LinkedHashSet<>(paths);
     }
 
     @Override

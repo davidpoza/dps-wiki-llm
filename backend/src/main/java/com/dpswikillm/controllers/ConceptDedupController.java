@@ -13,6 +13,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +28,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RestController
 @RequestMapping("/concept-dedup")
 public class ConceptDedupController {
+    private static final Logger log = LoggerFactory.getLogger(ConceptDedupController.class);
 
     private final ConceptDedupScanService scanService;
     private final JobQueueService jobQueueService;
@@ -87,8 +90,9 @@ public class ConceptDedupController {
                                             "step", progress.step(),
                                             "message", progress.message(),
                                             "result", resultJson)));
-        } catch (IOException | IllegalStateException ex) {
-            throw new IllegalStateException("SSE send failed", ex);
+        } catch (Exception ex) {
+            // Client disconnected — swallow so the scan continues to completion.
+            log.debug("SSE send failed (client disconnected): {}", ex.getMessage());
         }
     }
 }

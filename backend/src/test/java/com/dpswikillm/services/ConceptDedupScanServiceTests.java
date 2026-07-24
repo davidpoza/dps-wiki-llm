@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,7 @@ class ConceptDedupScanServiceTests {
         when(promptService.getText("concept-dedup-judge-system")).thenReturn("You are a judge.");
         when(settingRepository.findById("concept.dedup-similarity-threshold"))
                 .thenReturn(Optional.empty());
+        when(repository.findEmbeddedPathsByDocType(anyString(), anyString())).thenReturn(Set.of());
 
         AppProperties props =
                 new AppProperties(
@@ -177,15 +179,10 @@ class ConceptDedupScanServiceTests {
         DocumentRecord docA = doc("wiki/concepts/machine-learning.md", "content");
         DocumentRecord docB = doc("wiki/concepts/orphan.md", "no embedding");
         when(repository.findDocumentsByDocType("concept")).thenReturn(List.of(docA, docB));
+        when(repository.findEmbeddedPathsByDocType(anyString(), anyString()))
+                .thenReturn(Set.of("wiki/concepts/machine-learning.md"));
         when(repository.findSimilarPairsByDocType(anyString(), anyString(), anyDouble()))
-                .thenReturn(
-                        List.of(
-                                new SimilarPair(
-                                        "wiki/concepts/machine-learning.md",
-                                        "wiki/concepts/machine-learning.md",
-                                        1.0)));
-        when(llmClient.chatJson(any()))
-                .thenReturn("{\"isSameConceptGroup\":false,\"canonicalFilename\":null}");
+                .thenReturn(List.of());
 
         List<String> warnings = new ArrayList<>();
         service.scan(
@@ -194,7 +191,34 @@ class ConceptDedupScanServiceTests {
                         warnings.add(progress.message());
                 });
 
-        assertThat(warnings).contains("wiki/concepts/orphan.md");
+        assertThat(warnings).containsExactly("wiki/concepts/orphan.md");
+    }
+
+    @Test
+    void givenConceptWithEmbeddingButNoPair_emitsScanNotWarning() {
+        DocumentRecord docA = doc("wiki/concepts/unique-topic.md", "very unique content");
+        DocumentRecord docB = doc("wiki/concepts/something-else.md", "unrelated content");
+        when(repository.findDocumentsByDocType("concept")).thenReturn(List.of(docA, docB));
+        when(repository.findEmbeddedPathsByDocType(anyString(), anyString()))
+                .thenReturn(
+                        Set.of("wiki/concepts/unique-topic.md", "wiki/concepts/something-else.md"));
+        when(repository.findSimilarPairsByDocType(anyString(), anyString(), anyDouble()))
+                .thenReturn(List.of());
+
+        List<String> warnings = new ArrayList<>();
+        List<String> scanned = new ArrayList<>();
+        service.scan(
+                progress -> {
+                    if ("concept-dedup-warning".equals(progress.step()))
+                        warnings.add(progress.message());
+                    else if ("concept-dedup-scan".equals(progress.step()))
+                        scanned.add(progress.message());
+                });
+
+        assertThat(warnings).isEmpty();
+        assertThat(scanned)
+                .containsExactlyInAnyOrder(
+                        "wiki/concepts/unique-topic.md", "wiki/concepts/something-else.md");
     }
 
     @Test
