@@ -67,7 +67,11 @@ body {
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
-    sans-serif;
+    sans-serif,
+    'Apple Color Emoji',
+    'Segoe UI Emoji',
+    'Noto Color Emoji',
+    'Segoe UI Symbol';
   background: var(--app-bg);
   color: var(--app-text);
 }
