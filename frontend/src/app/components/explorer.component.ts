@@ -210,6 +210,7 @@ import { FormsModule } from '@angular/forms';
                     [text]="true"
                     (onClick)="insertTable()"
                     title="Insertar tabla"
+                    [disabled]="editorMode() === 'raw'"
                   />
                   <p-button
                     icon="pi pi-cloud-download"
@@ -219,6 +220,16 @@ import { FormsModule } from '@angular/forms';
                     [loading]="syncing()"
                     (onClick)="sync()"
                     [title]="'sync.button' | transloco"
+                  />
+                  <p-button
+                    icon="pi pi-code"
+                    size="small"
+                    severity="secondary"
+                    [text]="true"
+                    title="Modo raw"
+                    [class.sidebar-btn-active]="editorMode() === 'raw'"
+                    [disabled]="!selectedPath()"
+                    (onClick)="toggleEditorMode()"
                   />
                 </div>
                 <div class="actions-divider"></div>
@@ -234,6 +245,7 @@ import { FormsModule } from '@angular/forms';
                     icon="pi pi-sparkles"
                     size="small"
                     severity="secondary"
+                    [disabled]="editorMode() === 'raw'"
                     (onClick)="enrich()"
                     [title]="'explorer.enrichButton' | transloco"
                   />
@@ -320,7 +332,16 @@ import { FormsModule } from '@angular/forms';
               </div>
             }
           }
-          <div #editorContainer class="milkdown-container" [class.hidden]="!selectedPath()"></div>
+          <div #editorContainer class="milkdown-container" [class.hidden]="!selectedPath() || editorMode() === 'raw'"></div>
+          @if (selectedPath() && editorMode() === 'raw') {
+            <textarea
+              class="raw-textarea"
+              [value]="rawModeText()"
+              (input)="rawModeText.set($any($event.target).value); isDirty.set(true)"
+              spellcheck="false"
+              autocomplete="off"
+            ></textarea>
+          }
           @if (!selectedPath()) {
             <div class="placeholder">{{ 'explorer.selectFile' | transloco }}</div>
           }
@@ -858,6 +879,21 @@ import { FormsModule } from '@angular/forms';
       .milkdown-container.hidden {
         display: none;
       }
+      .raw-textarea {
+        flex: 1;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 16px;
+        font-family: monospace;
+        font-size: 0.875rem;
+        line-height: 1.6;
+        border: none;
+        outline: none;
+        resize: none;
+        background: var(--app-surface);
+        color: var(--app-text);
+        overflow-y: auto;
+      }
       .placeholder {
         flex: 1;
         display: flex;
@@ -1391,6 +1427,8 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     return idx === -1 ? { dir: '', name: path } : { dir: path.slice(0, idx + 1), name: path.slice(idx + 1) };
   });
   readonly isDirty = signal(false);
+  readonly editorMode = signal<'wysiwyg' | 'raw'>('wysiwyg');
+  readonly rawModeText = signal('');
   readonly embeddingStatus = signal<EmbeddingStatus | null>(null);
   readonly regeneratingKeywords = signal(false);
   readonly isKeywordEligible = computed(() => {
@@ -1852,7 +1890,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         ctx.set(defaultValueCtx, '');
         ctx.set(editorViewOptionsCtx, { attributes: { spellcheck: 'false' } });
         ctx.get(listenerCtx).markdownUpdated((_ctx, rawMarkdown) => {
-          const markdown = rawMarkdown.replace(/\\\[\\\[([^\]]*)\\\]\\\]/g, '[[$1]]');
+          const markdown = rawMarkdown.replace(/\\\[\\\[([^\]]*?)(?:\\\]\\\]|\]\])/g, '[[$1]]');
           if (this.isLoading) {
             this.isLoading = false;
             this.currentMarkdown = markdown;
@@ -1946,6 +1984,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     this.fileService.getContent(path).subscribe({
       next: (rawContent) => {
         const parsed = this.parseFrontmatter(rawContent);
+        this.editorMode.set('wysiwyg');
         this.selectedPath.set(path);
         this.selectedLabel.set(label);
         this.isDirty.set(false);
@@ -2060,6 +2099,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     this.fileService.getContent(path).subscribe({
       next: (rawContent) => {
         const parsed = this.parseFrontmatter(rawContent);
+        this.editorMode.set('wysiwyg');
         this.selectedPath.set(path);
         this.selectedLabel.set(node.label ?? path);
         this.isDirty.set(false);
@@ -2122,6 +2162,26 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   toggleSidebarPanel(mode: 'files' | 'toc'): void {
     this.sidebarPanel.set(this.sidebarPanel() === mode ? 'collapsed' : mode);
+  }
+
+  toggleEditorMode(): void {
+    if (this.editorMode() === 'wysiwyg') {
+      this.rawModeText.set(this.currentFullContent());
+      this.editorMode.set('raw');
+    } else {
+      const raw = this.rawModeText();
+      const parsed = this.parseFrontmatter(raw);
+      this.frontmatter.set(parsed.data);
+      this.frontmatterRawYaml.set(raw.startsWith('---') ? (raw.split('---')[1] ?? '') : '');
+      this.currentMarkdown = parsed.content;
+      this.tocMarkdown.set(parsed.content);
+      if (this.editor) {
+        this.isLoading = true;
+        this.editor.action(replaceAll(parsed.content));
+      }
+      if (raw !== this.rawFileContent) this.isDirty.set(true);
+      this.editorMode.set('wysiwyg');
+    }
   }
 
   scrollToHeading(text: string): void {
@@ -2279,7 +2339,9 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     if (!path) return;
     const fm = this.frontmatter();
     const fullContent =
-      Object.keys(fm).length > 0 ? this.stringifyWithFrontmatter(this.currentMarkdown, fm) : this.currentMarkdown;
+      this.editorMode() === 'raw'
+        ? this.rawModeText()
+        : Object.keys(fm).length > 0 ? this.stringifyWithFrontmatter(this.currentMarkdown, fm) : this.currentMarkdown;
     this.fileService.saveContent(path, fullContent).subscribe({
       next: () => {
         this.isDirty.set(false);
