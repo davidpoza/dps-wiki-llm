@@ -2,7 +2,6 @@ package com.dpswikillm.services;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -12,15 +11,12 @@ import static org.mockito.Mockito.when;
 import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.domain.DocumentRecord;
 import com.dpswikillm.dto.ConceptDedupGroup;
-import com.dpswikillm.repositories.AppSettingRepository;
 import com.dpswikillm.repositories.DocumentIndexRepository;
-import com.dpswikillm.repositories.DocumentIndexRepository.SimilarPair;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +25,6 @@ import org.junit.jupiter.api.Test;
 class ConceptDedupScanServiceTests {
 
     private DocumentIndexRepository repository;
-    private AppSettingRepository settingRepository;
     private LlmClient llmClient;
     private PromptService promptService;
     private ConceptDedupScanService service;
@@ -37,13 +32,11 @@ class ConceptDedupScanServiceTests {
     @BeforeEach
     void setUp() {
         repository = mock(DocumentIndexRepository.class);
-        settingRepository = mock(AppSettingRepository.class);
         llmClient = mock(LlmClient.class);
         promptService = mock(PromptService.class);
 
-        when(promptService.getText("concept-dedup-judge-system")).thenReturn("You are a judge.");
-        when(settingRepository.findById("concept.dedup-similarity-threshold"))
-                .thenReturn(Optional.empty());
+        when(promptService.getText("concept-batch-dedup-system"))
+                .thenReturn("You are a dedup expert.");
         when(repository.findEmbeddedPathsByDocType(anyString(), anyString())).thenReturn(Set.of());
 
         AppProperties props =
@@ -66,111 +59,104 @@ class ConceptDedupScanServiceTests {
 
         service =
                 new ConceptDedupScanService(
-                        repository,
-                        settingRepository,
-                        props,
-                        llmClient,
-                        promptService,
-                        new ObjectMapper());
+                        repository, props, llmClient, promptService, new ObjectMapper());
     }
 
     @Test
-    void givenNoPairs_returnsEmptyGroups() {
+    void givenNoConcepts_returnsEmptyWithoutCallingLlm() {
         when(repository.findDocumentsByDocType("concept")).thenReturn(List.of());
-        when(repository.findSimilarPairsByDocType(anyString(), anyString(), anyDouble()))
-                .thenReturn(List.of());
 
         List<ConceptDedupGroup> result = service.scan(progress -> {});
+
         assertThat(result).isEmpty();
         verify(llmClient, never()).chatJson(any());
     }
 
     @Test
-    void givenPairAboveThreshold_judgeConfirmsAndReturnsGroup() {
-        DocumentRecord docA = doc("wiki/concepts/machine-learning.md", "machine learning content");
-        DocumentRecord docB = doc("wiki/concepts/aprendizaje-automatico.md", "aprendizaje content");
+    void givenBatchResponseWithGroup_returnsGroup() {
+        DocumentRecord docA = doc("wiki/concepts/deep-work.md", "Deep Work");
+        DocumentRecord docB = doc("wiki/concepts/trabajo-profundo.md", "Trabajo Profundo");
         when(repository.findDocumentsByDocType("concept")).thenReturn(List.of(docA, docB));
-        when(repository.findSimilarPairsByDocType(anyString(), anyString(), anyDouble()))
-                .thenReturn(
-                        List.of(
-                                new SimilarPair(
-                                        "wiki/concepts/machine-learning.md",
-                                        "wiki/concepts/aprendizaje-automatico.md",
-                                        0.91)));
         when(llmClient.chatJson(any()))
                 .thenReturn(
-                        "{\"isSameConceptGroup\":true,\"canonicalFilename\":\"machine-learning\"}");
+                        "[{\"canonical\":\"deep-work\",\"files\":[\"deep-work\",\"trabajo-profundo\"]}]");
 
         List<ConceptDedupGroup> result = service.scan(progress -> {});
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).canonicalFilename()).isEqualTo("machine-learning");
+        assertThat(result.get(0).canonicalFilename()).isEqualTo("deep-work");
         assertThat(result.get(0).files())
-                .containsExactlyInAnyOrder("machine-learning", "aprendizaje-automatico");
+                .containsExactlyInAnyOrder("deep-work", "trabajo-profundo");
     }
 
     @Test
-    void givenPairAboveThreshold_judgeRejectsAndReturnsEmpty() {
-        DocumentRecord docA = doc("wiki/concepts/consistency.md", "consistency content");
-        DocumentRecord docB = doc("wiki/concepts/idempotency.md", "idempotency content");
+    void givenBatchResponseWithNoGroups_returnsEmpty() {
+        DocumentRecord docA = doc("wiki/concepts/consistency.md", "Consistency");
+        DocumentRecord docB = doc("wiki/concepts/idempotency.md", "Idempotency");
         when(repository.findDocumentsByDocType("concept")).thenReturn(List.of(docA, docB));
-        when(repository.findSimilarPairsByDocType(anyString(), anyString(), anyDouble()))
-                .thenReturn(
-                        List.of(
-                                new SimilarPair(
-                                        "wiki/concepts/consistency.md",
-                                        "wiki/concepts/idempotency.md",
-                                        0.89)));
-        when(llmClient.chatJson(any()))
-                .thenReturn("{\"isSameConceptGroup\":false,\"canonicalFilename\":null}");
+        when(llmClient.chatJson(any())).thenReturn("[]");
 
         List<ConceptDedupGroup> result = service.scan(progress -> {});
+
         assertThat(result).isEmpty();
     }
 
     @Test
-    void givenTransitivePair_groupsThreeConcepts() {
-        DocumentRecord docA = doc("wiki/concepts/ml.md", "ml content");
-        DocumentRecord docB = doc("wiki/concepts/machine-learning.md", "machine learning");
-        DocumentRecord docC = doc("wiki/concepts/aprendizaje-automatico.md", "aprendizaje");
+    void givenBatchResponseGroupsThreeConcepts_returnsOneGroup() {
+        DocumentRecord docA = doc("wiki/concepts/ml.md", "ML");
+        DocumentRecord docB = doc("wiki/concepts/machine-learning.md", "Machine Learning");
+        DocumentRecord docC =
+                doc("wiki/concepts/aprendizaje-automatico.md", "Aprendizaje Automático");
         when(repository.findDocumentsByDocType("concept")).thenReturn(List.of(docA, docB, docC));
-        when(repository.findSimilarPairsByDocType(anyString(), anyString(), anyDouble()))
-                .thenReturn(
-                        List.of(
-                                new SimilarPair(
-                                        "wiki/concepts/ml.md",
-                                        "wiki/concepts/machine-learning.md",
-                                        0.95),
-                                new SimilarPair(
-                                        "wiki/concepts/machine-learning.md",
-                                        "wiki/concepts/aprendizaje-automatico.md",
-                                        0.90)));
         when(llmClient.chatJson(any()))
                 .thenReturn(
-                        "{\"isSameConceptGroup\":true,\"canonicalFilename\":\"machine-learning\"}");
+                        "[{\"canonical\":\"machine-learning\","
+                                + "\"files\":[\"ml\",\"machine-learning\",\"aprendizaje-automatico\"]}]");
 
         List<ConceptDedupGroup> result = service.scan(progress -> {});
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).files()).hasSize(3);
         assertThat(result.get(0).canonicalFilename()).isEqualTo("machine-learning");
+        assertThat(result.get(0).files()).hasSize(3);
     }
 
     @Test
-    void givenLlmTimeout_groupSkipped() {
-        DocumentRecord docA = doc("wiki/concepts/machine-learning.md", "content");
-        DocumentRecord docB = doc("wiki/concepts/ml.md", "content");
+    void givenBatchResponseWithInvalidSlug_slugFilteredOut() {
+        DocumentRecord docA = doc("wiki/concepts/deep-work.md", "Deep Work");
+        DocumentRecord docB = doc("wiki/concepts/trabajo-profundo.md", "Trabajo Profundo");
         when(repository.findDocumentsByDocType("concept")).thenReturn(List.of(docA, docB));
-        when(repository.findSimilarPairsByDocType(anyString(), anyString(), anyDouble()))
+        // LLM hallucinates a slug that doesn't exist in the vault
+        when(llmClient.chatJson(any()))
                 .thenReturn(
-                        List.of(
-                                new SimilarPair(
-                                        "wiki/concepts/machine-learning.md",
-                                        "wiki/concepts/ml.md",
-                                        0.93)));
-        when(llmClient.chatJson(any())).thenThrow(new RuntimeException("timeout"));
+                        "[{\"canonical\":\"deep-work\","
+                                + "\"files\":[\"deep-work\",\"trabajo-profundo\",\"nonexistent-concept\"]}]");
 
         List<ConceptDedupGroup> result = service.scan(progress -> {});
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).files())
+                .containsExactlyInAnyOrder("deep-work", "trabajo-profundo");
+    }
+
+    @Test
+    void givenLlmError_returnsEmpty() {
+        DocumentRecord docA = doc("wiki/concepts/machine-learning.md", "content");
+        when(repository.findDocumentsByDocType("concept")).thenReturn(List.of(docA, docA));
+        when(llmClient.chatJson(any())).thenThrow(new RuntimeException("connection error"));
+
+        List<ConceptDedupGroup> result = service.scan(progress -> {});
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void givenMalformedJson_returnsEmpty() {
+        DocumentRecord docA = doc("wiki/concepts/ml.md", "content");
+        when(repository.findDocumentsByDocType("concept")).thenReturn(List.of(docA));
+        when(llmClient.chatJson(any())).thenReturn("not json at all");
+
+        List<ConceptDedupGroup> result = service.scan(progress -> {});
+
         assertThat(result).isEmpty();
     }
 
@@ -181,8 +167,7 @@ class ConceptDedupScanServiceTests {
         when(repository.findDocumentsByDocType("concept")).thenReturn(List.of(docA, docB));
         when(repository.findEmbeddedPathsByDocType(anyString(), anyString()))
                 .thenReturn(Set.of("wiki/concepts/machine-learning.md"));
-        when(repository.findSimilarPairsByDocType(anyString(), anyString(), anyDouble()))
-                .thenReturn(List.of());
+        when(llmClient.chatJson(any())).thenReturn("[]");
 
         List<String> warnings = new ArrayList<>();
         service.scan(
@@ -195,15 +180,12 @@ class ConceptDedupScanServiceTests {
     }
 
     @Test
-    void givenConceptWithEmbeddingButNoPair_emitsScanNotWarning() {
+    void givenConceptWithEmbeddingButUnique_emitsScanNotWarning() {
         DocumentRecord docA = doc("wiki/concepts/unique-topic.md", "very unique content");
-        DocumentRecord docB = doc("wiki/concepts/something-else.md", "unrelated content");
-        when(repository.findDocumentsByDocType("concept")).thenReturn(List.of(docA, docB));
+        when(repository.findDocumentsByDocType("concept")).thenReturn(List.of(docA));
         when(repository.findEmbeddedPathsByDocType(anyString(), anyString()))
-                .thenReturn(
-                        Set.of("wiki/concepts/unique-topic.md", "wiki/concepts/something-else.md"));
-        when(repository.findSimilarPairsByDocType(anyString(), anyString(), anyDouble()))
-                .thenReturn(List.of());
+                .thenReturn(Set.of("wiki/concepts/unique-topic.md"));
+        when(llmClient.chatJson(any())).thenReturn("[]");
 
         List<String> warnings = new ArrayList<>();
         List<String> scanned = new ArrayList<>();
@@ -216,33 +198,27 @@ class ConceptDedupScanServiceTests {
                 });
 
         assertThat(warnings).isEmpty();
-        assertThat(scanned)
-                .containsExactlyInAnyOrder(
-                        "wiki/concepts/unique-topic.md", "wiki/concepts/something-else.md");
+        assertThat(scanned).containsExactly("wiki/concepts/unique-topic.md");
     }
 
     @Test
-    void canonicalFilenameNormalization_stripsInvalidChars() {
+    void canonicalNormalization_stripsInvalidChars() {
         DocumentRecord docA = doc("wiki/concepts/machine-learning.md", "content");
         DocumentRecord docB = doc("wiki/concepts/ml.md", "content");
         when(repository.findDocumentsByDocType("concept")).thenReturn(List.of(docA, docB));
-        when(repository.findSimilarPairsByDocType(anyString(), anyString(), anyDouble()))
-                .thenReturn(
-                        List.of(
-                                new SimilarPair(
-                                        "wiki/concepts/machine-learning.md",
-                                        "wiki/concepts/ml.md",
-                                        0.95)));
         when(llmClient.chatJson(any()))
                 .thenReturn(
-                        "{\"isSameConceptGroup\":true,\"canonicalFilename\":\"Machine Learning!\"}");
+                        "[{\"canonical\":\"Machine Learning!\","
+                                + "\"files\":[\"machine-learning\",\"ml\"]}]");
 
         List<ConceptDedupGroup> result = service.scan(progress -> {});
+
         assertThat(result).hasSize(1);
+        // "Machine Learning!" normalized → "machine-learning"
         assertThat(result.get(0).canonicalFilename()).isEqualTo("machine-learning");
     }
 
-    private DocumentRecord doc(String path, String body) {
-        return new DocumentRecord(UUID.randomUUID(), path, path, "concept", Instant.now(), body);
+    private DocumentRecord doc(String path, String title) {
+        return new DocumentRecord(UUID.randomUUID(), path, title, "concept", Instant.now(), title);
     }
 }

@@ -4,21 +4,17 @@ import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.domain.DocumentRecord;
 import com.dpswikillm.dto.ChatMessage;
 import com.dpswikillm.dto.ConceptDedupGroup;
-import com.dpswikillm.repositories.AppSettingRepository;
 import com.dpswikillm.repositories.DocumentIndexRepository;
-import com.dpswikillm.repositories.DocumentIndexRepository.SimilarPair;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -27,15 +23,13 @@ import org.springframework.stereotype.Service;
 public class ConceptDedupScanService {
     private static final Logger log = LoggerFactory.getLogger(ConceptDedupScanService.class);
     private static final String CONCEPT_DOC_TYPE = "concept";
-    private static final String DEDUP_JUDGE_PROMPT_KEY = "concept-dedup-judge-system";
-    private static final String THRESHOLD_SETTING_KEY = "concept.dedup-similarity-threshold";
-    private static final double DEFAULT_THRESHOLD = 0.88;
-    private static final long JUDGE_TIMEOUT_SECONDS = 5;
+    private static final String BATCH_JUDGE_PROMPT_KEY = "concept-batch-dedup-system";
+    private static final long BATCH_JUDGE_TIMEOUT_MS = 300_000L;
+    private static final long HEARTBEAT_INTERVAL_MS = 10_000L;
 
     public record ScanProgress(String step, String message, int current, int total) {}
 
     private final DocumentIndexRepository repository;
-    private final AppSettingRepository settingRepository;
     private final AppProperties properties;
     private final LlmClient llmClient;
     private final PromptService promptService;
@@ -43,13 +37,11 @@ public class ConceptDedupScanService {
 
     public ConceptDedupScanService(
             DocumentIndexRepository repository,
-            AppSettingRepository settingRepository,
             AppProperties properties,
             LlmClient llmClient,
             PromptService promptService,
             ObjectMapper objectMapper) {
         this.repository = repository;
-        this.settingRepository = settingRepository;
         this.properties = properties;
         this.llmClient = llmClient;
         this.promptService = promptService;
@@ -57,21 +49,13 @@ public class ConceptDedupScanService {
     }
 
     public List<ConceptDedupGroup> scan(Consumer<ScanProgress> onProgress) {
-        double threshold = readThreshold();
         String model = properties.embeddings().model();
 
         List<DocumentRecord> allConcepts = repository.findDocumentsByDocType(CONCEPT_DOC_TYPE);
         int total = allConcepts.size();
-        Map<String, DocumentRecord> byPath = new LinkedHashMap<>();
-        for (DocumentRecord doc : allConcepts) {
-            byPath.put(doc.path(), doc);
-        }
 
         Set<String> pathsWithEmbeddings =
                 repository.findEmbeddedPathsByDocType(model, CONCEPT_DOC_TYPE);
-
-        List<SimilarPair> pairs =
-                repository.findSimilarPairsByDocType(model, CONCEPT_DOC_TYPE, threshold);
 
         int current = 0;
         for (DocumentRecord doc : allConcepts) {
@@ -85,177 +69,113 @@ public class ConceptDedupScanService {
             }
         }
 
-        List<List<String>> rawGroups = buildTransitiveGroups(pairs);
-        List<List<String>> judgeableGroups = rawGroups.stream().filter(g -> g.size() >= 2).toList();
-        int totalGroups = judgeableGroups.size();
+        if (allConcepts.isEmpty()) {
+            return List.of();
+        }
 
-        List<ConceptDedupGroup> result = new ArrayList<>();
-        for (int i = 0; i < judgeableGroups.size(); i++) {
-            List<String> group = judgeableGroups.get(i);
-            onProgress.accept(
-                    new ScanProgress("concept-dedup-judge", group.get(0), i + 1, totalGroups));
-            ConceptDedupGroup confirmed = callJudge(group, byPath);
-            if (confirmed != null) {
-                result.add(confirmed);
+        onProgress.accept(new ScanProgress("concept-dedup-judge", "", 1, 1));
+        return callBatchJudge(allConcepts, onProgress);
+    }
+
+    private List<ConceptDedupGroup> callBatchJudge(
+            List<DocumentRecord> concepts, Consumer<ScanProgress> onProgress) {
+        String systemPrompt = promptService.getText(BATCH_JUDGE_PROMPT_KEY);
+        String userMessage = buildBatchMessage(concepts);
+        CompletableFuture<String> llmFuture =
+                CompletableFuture.supplyAsync(
+                        () ->
+                                llmClient.chatJson(
+                                        List.of(
+                                                new ChatMessage("system", systemPrompt),
+                                                new ChatMessage("user", userMessage))));
+        long deadline = System.currentTimeMillis() + BATCH_JUDGE_TIMEOUT_MS;
+        while (true) {
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining <= 0) {
+                llmFuture.cancel(true);
+                log.warn("Batch dedup judge timed out after {} ms", BATCH_JUDGE_TIMEOUT_MS);
+                return List.of();
+            }
+            long wait = Math.min(remaining, HEARTBEAT_INTERVAL_MS);
+            try {
+                String response = llmFuture.get(wait, TimeUnit.MILLISECONDS);
+                return parseBatchResponse(response, concepts);
+            } catch (TimeoutException ex) {
+                onProgress.accept(new ScanProgress("concept-dedup-judge", "waiting", 1, 1));
+            } catch (Exception ex) {
+                log.warn("Batch dedup judge failed: {}", ex.getMessage());
+                return List.of();
             }
         }
-        return result;
     }
 
-    private List<List<String>> buildTransitiveGroups(List<SimilarPair> pairs) {
-        Map<String, String> parent = new LinkedHashMap<>();
-
-        for (SimilarPair pair : pairs) {
-            String r1 = find(parent, pair.path1());
-            String r2 = find(parent, pair.path2());
-            if (!r1.equals(r2)) {
-                parent.put(r2, r1);
+    private String buildBatchMessage(List<DocumentRecord> concepts) {
+        StringBuilder sb = new StringBuilder("Concept slugs:\n");
+        for (DocumentRecord doc : concepts) {
+            String slug = slugFromPath(doc.path());
+            sb.append("- ").append(slug);
+            if (doc.title() != null
+                    && !doc.title().isBlank()
+                    && !doc.title().equalsIgnoreCase(slug)) {
+                sb.append(" (").append(doc.title()).append(")");
             }
-        }
-
-        Map<String, List<String>> groups = new LinkedHashMap<>();
-        for (String path : parent.keySet()) {
-            String root = find(parent, path);
-            groups.computeIfAbsent(root, k -> new ArrayList<>()).add(path);
-        }
-        for (SimilarPair pair : pairs) {
-            String root1 = find(parent, pair.path1());
-            String root2 = find(parent, pair.path2());
-            groups.computeIfAbsent(root1, k -> new ArrayList<>());
-            groups.computeIfAbsent(root2, k -> new ArrayList<>());
-            if (!groups.get(root1).contains(pair.path1())) groups.get(root1).add(pair.path1());
-            if (!groups.get(root1).contains(pair.path2())) groups.get(root1).add(pair.path2());
-        }
-
-        List<List<String>> result = new ArrayList<>();
-        Set<String> seen = new LinkedHashSet<>();
-        for (SimilarPair pair : pairs) {
-            String root = find(parent, pair.path1());
-            if (seen.add(root)) {
-                result.add(groups.get(root));
-            }
-        }
-        return result;
-    }
-
-    private String find(Map<String, String> parent, String node) {
-        parent.putIfAbsent(node, node);
-        if (parent.get(node).equals(node)) return node;
-        String root = find(parent, parent.get(node));
-        parent.put(node, root);
-        return root;
-    }
-
-    private ConceptDedupGroup callJudge(List<String> paths, Map<String, DocumentRecord> byPath) {
-        String systemPrompt = promptService.getText(DEDUP_JUDGE_PROMPT_KEY);
-        String userMessage = buildJudgeMessage(paths, byPath);
-        try {
-            String response =
-                    CompletableFuture.supplyAsync(
-                                    () ->
-                                            llmClient.chatJson(
-                                                    List.of(
-                                                            new ChatMessage("system", systemPrompt),
-                                                            new ChatMessage("user", userMessage))))
-                            .get(JUDGE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            return parseJudgeResponse(response, paths, byPath);
-        } catch (TimeoutException ex) {
-            log.warn("Concept dedup judge timed out for group {} — skipping", paths);
-            return null;
-        } catch (Exception ex) {
-            log.warn(
-                    "Concept dedup judge failed for group {}: {} — skipping",
-                    paths,
-                    ex.getMessage());
-            return null;
-        }
-    }
-
-    private String buildJudgeMessage(List<String> paths, Map<String, DocumentRecord> byPath) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Evaluate if these concept files all refer to the same concept:\n\n");
-        for (String path : paths) {
-            DocumentRecord doc = byPath.get(path);
-            String slug = slugFromPath(path);
-            String snippet =
-                    doc != null && doc.body() != null
-                            ? (doc.body().length() > 300
-                                    ? doc.body().substring(0, 300) + "..."
-                                    : doc.body())
-                            : "";
-            sb.append("- slug: ").append(slug).append("\n");
-            sb.append("  excerpt: ").append(snippet).append("\n\n");
+            sb.append("\n");
         }
         return sb.toString();
     }
 
-    private ConceptDedupGroup parseJudgeResponse(
-            String response, List<String> paths, Map<String, DocumentRecord> byPath) {
+    private List<ConceptDedupGroup> parseBatchResponse(
+            String response, List<DocumentRecord> allConcepts) {
         try {
-            int start = response.indexOf('{');
-            int end = response.lastIndexOf('}');
-            if (start < 0 || end <= start) return null;
-            JsonNode node = objectMapper.readTree(response.substring(start, end + 1));
-            JsonNode isSame = node.get("isSameConceptGroup");
-            if (isSame == null || !isSame.asBoolean()) return null;
-            JsonNode canonicalNode = node.get("canonicalFilename");
-            String canonical =
-                    canonicalNode != null && !canonicalNode.isNull()
-                            ? canonicalNode.asText().trim()
-                            : null;
-            canonical = normalizeCanonical(canonical, paths, byPath);
-            if (canonical == null) return null;
-            List<String> slugs = paths.stream().map(this::slugFromPath).toList();
-            double avgScore = 0.88;
-            return new ConceptDedupGroup(canonical, slugs, avgScore);
+            int start = response.indexOf('[');
+            int end = response.lastIndexOf(']');
+            if (start < 0 || end <= start) return List.of();
+            JsonNode array = objectMapper.readTree(response.substring(start, end + 1));
+            if (!array.isArray()) return List.of();
+
+            Set<String> validSlugs =
+                    allConcepts.stream()
+                            .map(d -> slugFromPath(d.path()))
+                            .collect(Collectors.toSet());
+
+            List<ConceptDedupGroup> result = new ArrayList<>();
+            for (JsonNode node : array) {
+                JsonNode canonicalNode = node.get("canonical");
+                JsonNode filesNode = node.get("files");
+                if (canonicalNode == null || filesNode == null || !filesNode.isArray()) continue;
+
+                String canonical = normalizeSlug(canonicalNode.asText());
+                if (canonical.isBlank()) continue;
+
+                List<String> files = new ArrayList<>();
+                for (JsonNode f : filesNode) {
+                    String slug = f.asText().trim();
+                    if (validSlugs.contains(slug) && !files.contains(slug)) {
+                        files.add(slug);
+                    }
+                }
+                if (files.size() < 2) continue;
+                if (!files.contains(canonical)) {
+                    canonical = files.get(0);
+                }
+
+                result.add(new ConceptDedupGroup(canonical, files, 1.0));
+            }
+            return result;
         } catch (Exception ex) {
-            log.warn("Failed to parse concept dedup judge response: {}", response);
-            return null;
+            log.warn(
+                    "Failed to parse batch dedup response: {}",
+                    response.substring(0, Math.min(200, response.length())));
+            return List.of();
         }
     }
 
-    private String normalizeCanonical(
-            String proposed, List<String> paths, Map<String, DocumentRecord> byPath) {
-        if (proposed == null || proposed.isBlank()) {
-            return oldestSlug(paths, byPath);
-        }
-        String normalized =
-                proposed.toLowerCase()
-                        .replaceAll("[^a-z0-9-]", "-")
-                        .replaceAll("-+", "-")
-                        .replaceAll("^-|-$", "");
-        if (normalized.isBlank()) return oldestSlug(paths, byPath);
-        return normalized;
-    }
-
-    private String oldestSlug(List<String> paths, Map<String, DocumentRecord> byPath) {
-        return paths.stream()
-                .min(
-                        (a, b) -> {
-                            DocumentRecord da = byPath.get(a);
-                            DocumentRecord db = byPath.get(b);
-                            if (da == null) return 1;
-                            if (db == null) return -1;
-                            if (da.updatedAt() == null) return 1;
-                            if (db.updatedAt() == null) return -1;
-                            return da.updatedAt().compareTo(db.updatedAt());
-                        })
-                .map(this::slugFromPath)
-                .orElse(null);
-    }
-
-    private double readThreshold() {
-        return settingRepository
-                .findById(THRESHOLD_SETTING_KEY)
-                .map(
-                        s -> {
-                            try {
-                                return Double.parseDouble(s.getValue());
-                            } catch (NumberFormatException ex) {
-                                return DEFAULT_THRESHOLD;
-                            }
-                        })
-                .orElse(DEFAULT_THRESHOLD);
+    private String normalizeSlug(String proposed) {
+        if (proposed == null || proposed.isBlank()) return "";
+        return proposed.toLowerCase()
+                .replaceAll("[^a-z0-9-]", "-")
+                .replaceAll("-+", "-")
+                .replaceAll("^-|-$", "");
     }
 
     private String slugFromPath(String path) {
