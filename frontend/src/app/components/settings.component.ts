@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } 
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { SelectButtonModule } from 'primeng/selectbutton';
+import { TabsModule } from 'primeng/tabs';
 import { ApiService, BrokenLinkEntry, BrokenLinkScanEvent, JobSummary, Prompt } from '../services/api.service';
 import { NavComponent } from './nav.component';
 import { ThemeService } from '../services/theme.service';
@@ -20,7 +21,7 @@ interface PromptState extends Prompt {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [FormsModule, ButtonModule, SelectButtonModule, NavComponent, BrokenLinksModalComponent, ConceptDedupModalComponent, KeywordSelectionModalComponent, HealthCheckSelectionModalComponent],
+  imports: [FormsModule, ButtonModule, SelectButtonModule, TabsModule, NavComponent, BrokenLinksModalComponent, ConceptDedupModalComponent, KeywordSelectionModalComponent, HealthCheckSelectionModalComponent],
   template: `
     <main class="app-shell">
       <app-nav />
@@ -30,243 +31,262 @@ interface PromptState extends Prompt {
           <p>Ajustes del sistema</p>
         </header>
 
-        <section class="settings-section">
-          <h2>Apariencia</h2>
-          <p class="section-desc">Elige el tema claro u oscuro de la interfaz.</p>
-          <p-selectButton
-            [options]="themeOptions"
-            [ngModel]="theme.theme()"
-            (onChange)="onThemeChange($event.value)"
-            optionLabel="label"
-            optionValue="value"
-            [allowEmpty]="false"
-          />
-        </section>
+        <p-tabs value="data">
+          <p-tablist>
+            <p-tab value="data">Datos</p-tab>
+            <p-tab value="prompts">Prompts</p-tab>
+          </p-tablist>
+          <p-tabpanels>
+            <p-tabpanel value="data">
+              <div class="tab-sections">
 
-        <section class="settings-section reindex-section">
-          <h2>Índice del Vault</h2>
-          <p class="section-desc">
-            Regenera el índice de documentos del vault. Úsalo si los ficheros han cambiado externamente y la búsqueda no
-            refleja los cambios.
-          </p>
-          <div class="reindex-row">
-            <p-button
-              label="Reindexar"
-              size="small"
-              [loading]="reindexing()"
-              [disabled]="reindexing()"
-              (onClick)="startReindex()"
-            />
-            @if (reindexing()) {
-              <span class="reindex-progress"> Ficheros procesados {{ reindexProcessed() }}/{{ reindexTotal() }} </span>
-            }
-            @if (reindexDone()) {
-              <span class="feedback success">Reindexación completada ({{ reindexTotal() }} ficheros)</span>
-            }
-            @if (reindexError()) {
-              <span class="feedback error">Error en la reindexación</span>
-            }
-          </div>
-        </section>
+                <section class="settings-section">
+                  <h2>Apariencia</h2>
+                  <p class="section-desc">Elige el tema claro u oscuro de la interfaz.</p>
+                  <p-selectButton
+                    [options]="themeOptions"
+                    [ngModel]="theme.theme()"
+                    (onChange)="onThemeChange($event.value)"
+                    optionLabel="label"
+                    optionValue="value"
+                    [allowEmpty]="false"
+                  />
+                </section>
 
-        <section class="settings-section">
-          <h2>Keywords</h2>
-          <p class="section-desc">
-            Regenera el campo <code>keywords</code> (siempre en inglés) en el frontmatter de las notas seleccionadas de
-            <code>wiki/concepts</code> y <code>wiki/sources</code>. Permite sobreescribir keywords existentes. El proceso
-            se encola como job asíncrono reversible en el historial.
-          </p>
-          <div class="reindex-row">
-            <p-button
-              label="Seleccionar notas…"
-              size="small"
-              (onClick)="showKeywordModal.set(true)"
-            />
-          </div>
-        </section>
+                <section class="settings-section reindex-section">
+                  <h2>Índice del Vault</h2>
+                  <p class="section-desc">
+                    Regenera el índice de documentos del vault. Úsalo si los ficheros han cambiado externamente y la búsqueda no
+                    refleja los cambios.
+                  </p>
+                  <div class="reindex-row">
+                    <p-button
+                      label="Reindexar"
+                      size="small"
+                      [loading]="reindexing()"
+                      [disabled]="reindexing()"
+                      (onClick)="startReindex()"
+                    />
+                    @if (reindexing()) {
+                      <span class="reindex-progress"> Ficheros procesados {{ reindexProcessed() }}/{{ reindexTotal() }} </span>
+                    }
+                    @if (reindexDone()) {
+                      <span class="feedback success">Reindexación completada ({{ reindexTotal() }} ficheros)</span>
+                    }
+                    @if (reindexError()) {
+                      <span class="feedback error">Error en la reindexación</span>
+                    }
+                  </div>
+                </section>
 
-        @if (showKeywordModal()) {
-          <app-keyword-selection-modal (cancel)="showKeywordModal.set(false)" />
-        }
+                <section class="settings-section">
+                  <h2>Keywords</h2>
+                  <p class="section-desc">
+                    Regenera el campo <code>keywords</code> (siempre en inglés) en el frontmatter de las notas seleccionadas de
+                    <code>wiki/concepts</code> y <code>wiki/sources</code>. Permite sobreescribir keywords existentes. El proceso
+                    se encola como job asíncrono reversible en el historial.
+                  </p>
+                  <div class="reindex-row">
+                    <p-button
+                      label="Seleccionar notas…"
+                      size="small"
+                      (onClick)="showKeywordModal.set(true)"
+                    />
+                  </div>
+                </section>
 
-        <section class="settings-section">
-          <h2>Health Check</h2>
-          <p class="section-desc">
-            Reconcilia todo el vault: genera los embeddings que falten en <code>wiki/topics</code>,
-            <code>wiki/concepts</code> y <code>wiki/sources</code>, y descubre conexiones nuevas entre notas de
-            <code>wiki/concepts</code> y <code>wiki/sources</code> añadiendo los enlaces y sus backlinks en la sección
-            «Related». Es el mismo proceso de descubrimiento del ingest, aplicado a todo el vault. Los cambios son
-            reversibles desde el historial.
-          </p>
-          <div class="reindex-row">
-            <p-button
-              label="Lanzar Health Check"
-              size="small"
-              [loading]="healthChecking()"
-              [disabled]="healthChecking()"
-              (onClick)="startHealthCheck()"
-            />
-            <p-button
-              label="Seleccionar notas…"
-              severity="secondary"
-              size="small"
-              [disabled]="healthChecking()"
-              (onClick)="showHealthCheckModal.set(true)"
-            />
-            @if (healthChecking()) {
-              <span class="reindex-progress">
-                @if (hcPhase() === 'embeddings') {
-                  Generando embeddings {{ hcProcessed() }}/{{ hcTotal() }} ({{ hcPercent() }}%)
-                } @else {
-                  Buscando conexiones {{ hcProcessed() }}/{{ hcTotal() }} ({{ hcPercent() }}%)
+                @if (showKeywordModal()) {
+                  <app-keyword-selection-modal (cancel)="showKeywordModal.set(false)" />
                 }
-                &nbsp;·&nbsp; embeddings {{ hcEmbeddings() }} · conexiones {{ hcConnections() }}
-              </span>
-            }
-            @if (hcDone()) {
-              <span class="feedback success"
-                >Health Check completado · embeddings construidos: {{ hcEmbeddings() }} · conexiones encontradas:
-                {{ hcConnections() }}</span
-              >
-            }
-            @if (hcError()) {
-              <span class="feedback error">Error en el Health Check</span>
-            }
-          </div>
-        </section>
 
-        @if (showHealthCheckModal()) {
-          <app-health-check-selection-modal (cancel)="showHealthCheckModal.set(false)" />
-        }
-
-        <section class="settings-section">
-          <h2>Recursos</h2>
-          <p class="section-desc">
-            Carpeta relativa al vault para resolver imágenes Obsidian sin ruta, como ![[Pasted image
-            20260618163907.png]].
-          </p>
-          <div class="resource-row">
-            <label for="resource-folder" class="resource-label">Carpeta de recursos</label>
-            <input
-              id="resource-folder"
-              class="resource-input"
-              type="text"
-              [(ngModel)]="resourceFolder"
-              [disabled]="resourceSaving()"
-              placeholder="attachments"
-            />
-            <p-button label="Guardar" size="small" [loading]="resourceSaving()" (onClick)="saveResourceSettings()" />
-          </div>
-          @if (resourceSaved()) {
-            <span class="feedback success">Recursos guardados correctamente</span>
-          }
-          @if (resourceError()) {
-            <span class="feedback error">{{ resourceError() }}</span>
-          }
-        </section>
-
-        <section class="settings-section">
-          <h2>Prompts del LLM</h2>
-          <p class="section-desc">
-            Textos que se envían como instrucciones de sistema al modelo de lenguaje. Los cambios son efectivos de
-            inmediato.
-          </p>
-
-          @if (loading()) {
-            <p class="loading-msg">Cargando prompts…</p>
-          } @else if (prompts().length === 0) {
-            <p class="empty-msg">No hay prompts configurados.</p>
-          } @else {
-            <div class="prompts-list">
-              @for (prompt of prompts(); track prompt.key) {
-                <div class="prompt-card">
-                  <div class="prompt-header">
-                    <label [for]="prompt.key" class="prompt-name">{{ prompt.name }}</label>
-                    <span class="prompt-key">{{ prompt.key }}</span>
-                  </div>
-                  <textarea
-                    [id]="prompt.key"
-                    class="prompt-textarea"
-                    [(ngModel)]="prompt.text"
-                    rows="5"
-                    [disabled]="prompt.saving"
-                  ></textarea>
-                  <div class="prompt-footer">
-                    @if (prompt.saved) {
-                      <span class="feedback success">Guardado correctamente</span>
+                <section class="settings-section">
+                  <h2>Health Check</h2>
+                  <p class="section-desc">
+                    Reconcilia todo el vault: genera los embeddings que falten en <code>wiki/topics</code>,
+                    <code>wiki/concepts</code> y <code>wiki/sources</code>, y descubre conexiones nuevas entre notas de
+                    <code>wiki/concepts</code> y <code>wiki/sources</code> añadiendo los enlaces y sus backlinks en la sección
+                    «Related». Es el mismo proceso de descubrimiento del ingest, aplicado a todo el vault. Los cambios son
+                    reversibles desde el historial.
+                  </p>
+                  <div class="reindex-row">
+                    <p-button
+                      label="Lanzar Health Check"
+                      size="small"
+                      [loading]="healthChecking()"
+                      [disabled]="healthChecking()"
+                      (onClick)="startHealthCheck()"
+                    />
+                    <p-button
+                      label="Seleccionar notas…"
+                      severity="secondary"
+                      size="small"
+                      [disabled]="healthChecking()"
+                      (onClick)="showHealthCheckModal.set(true)"
+                    />
+                    @if (healthChecking()) {
+                      <span class="reindex-progress">
+                        @if (hcPhase() === 'embeddings') {
+                          Generando embeddings {{ hcProcessed() }}/{{ hcTotal() }} ({{ hcPercent() }}%)
+                        } @else {
+                          Buscando conexiones {{ hcProcessed() }}/{{ hcTotal() }} ({{ hcPercent() }}%)
+                        }
+                        &nbsp;·&nbsp; embeddings {{ hcEmbeddings() }} · conexiones {{ hcConnections() }}
+                      </span>
                     }
-                    @if (prompt.error) {
-                      <span class="feedback error">{{ prompt.error }}</span>
+                    @if (hcDone()) {
+                      <span class="feedback success"
+                        >Health Check completado · embeddings construidos: {{ hcEmbeddings() }} · conexiones encontradas:
+                        {{ hcConnections() }}</span
+                      >
                     }
-                    <p-button label="Guardar" size="small" [loading]="prompt.saving" (onClick)="save(prompt)" />
+                    @if (hcError()) {
+                      <span class="feedback error">Error en el Health Check</span>
+                    }
                   </div>
-                </div>
-              }
-            </div>
-          }
-        </section>
+                </section>
 
-        <section class="settings-section">
-          <h2>Mantenimiento</h2>
-          <p class="section-desc">
-            Busca conceptos duplicados en la wiki (por ejemplo, el mismo concepto en español e inglés) y fusiónalos
-            en un único fichero canónico (singular, kebab-case, inglés). Los cambios son reversibles desde el historial.
-          </p>
-          <div class="reindex-row">
-            <p-button
-              label="Buscar conceptos duplicados"
-              size="small"
-              [disabled]="dedupMergeRunning()"
-              [title]="dedupMergeRunning() ? 'Ya hay un job de fusión en curso' : ''"
-              (onClick)="showDedupModal.set(true)"
-            />
-          </div>
-        </section>
+                @if (showHealthCheckModal()) {
+                  <app-health-check-selection-modal (cancel)="showHealthCheckModal.set(false)" />
+                }
 
-        @if (showDedupModal()) {
-          <app-concept-dedup-modal (cancel)="showDedupModal.set(false)" />
-        }
+                <section class="settings-section">
+                  <h2>Recursos</h2>
+                  <p class="section-desc">
+                    Carpeta relativa al vault para resolver imágenes Obsidian sin ruta, como ![[Pasted image
+                    20260618163907.png]].
+                  </p>
+                  <div class="resource-row">
+                    <label for="resource-folder" class="resource-label">Carpeta de recursos</label>
+                    <input
+                      id="resource-folder"
+                      class="resource-input"
+                      type="text"
+                      [(ngModel)]="resourceFolder"
+                      [disabled]="resourceSaving()"
+                      placeholder="attachments"
+                    />
+                    <p-button label="Guardar" size="small" [loading]="resourceSaving()" (onClick)="saveResourceSettings()" />
+                  </div>
+                  @if (resourceSaved()) {
+                    <span class="feedback success">Recursos guardados correctamente</span>
+                  }
+                  @if (resourceError()) {
+                    <span class="feedback error">{{ resourceError() }}</span>
+                  }
+                </section>
 
-        <section class="settings-section">
-          <h2>Enlaces rotos</h2>
-          <p class="section-desc">
-            Busca enlaces wiki <code>[[slug]]</code> en la sección «Related» de todas las notas que apuntan a ficheros
-            inexistentes. Al terminar puedes seleccionar cuáles eliminar.
-          </p>
-          <div class="reindex-row">
-            <p-button
-              label="Buscar enlaces rotos"
-              size="small"
-              [loading]="brokenLinkScanning()"
-              [disabled]="brokenLinkScanning()"
-              (onClick)="startBrokenLinksScan()"
-            />
-            @if (brokenLinkScanning()) {
-              <span class="reindex-progress"> Ficheros procesados {{ blProcessed() }}/{{ blTotal() }} </span>
-            }
-            @if (blDone()) {
-              <span class="feedback success">No se encontraron enlaces rotos</span>
-            }
-            @if (blDeleted() !== null) {
-              <span class="feedback success">{{ blDeleted() }} enlace(s) eliminado(s)</span>
-            }
-            @if (blError()) {
-              <span class="feedback error">Error al buscar enlaces rotos</span>
-            }
-          </div>
-        </section>
+                <section class="settings-section">
+                  <h2>Mantenimiento</h2>
+                  <p class="section-desc">
+                    Busca conceptos duplicados en la wiki (por ejemplo, el mismo concepto en español e inglés) y fusiónalos
+                    en un único fichero canónico (singular, kebab-case, inglés). Los cambios son reversibles desde el historial.
+                  </p>
+                  <div class="reindex-row">
+                    <p-button
+                      label="Buscar conceptos duplicados"
+                      size="small"
+                      [disabled]="dedupMergeRunning()"
+                      [title]="dedupMergeRunning() ? 'Ya hay un job de fusión en curso' : ''"
+                      (onClick)="showDedupModal.set(true)"
+                    />
+                  </div>
+                </section>
 
-        @if (showBrokenLinksModal()) {
-          <app-broken-links-modal
-            [brokenLinks]="brokenLinks()"
-            (cancel)="showBrokenLinksModal.set(false)"
-            (confirmed)="onBrokenLinksConfirmed($event)"
-          />
-        }
+                @if (showDedupModal()) {
+                  <app-concept-dedup-modal (cancel)="showDedupModal.set(false)" />
+                }
 
-        <footer class="version-footer">
-          Frontend: v{{ frontendVersion }} &nbsp;|&nbsp; Backend: v{{ backendVersion() }}
-        </footer>
+                <section class="settings-section">
+                  <h2>Enlaces rotos</h2>
+                  <p class="section-desc">
+                    Busca enlaces wiki <code>[[slug]]</code> en la sección «Related» de todas las notas que apuntan a ficheros
+                    inexistentes. Al terminar puedes seleccionar cuáles eliminar.
+                  </p>
+                  <div class="reindex-row">
+                    <p-button
+                      label="Buscar enlaces rotos"
+                      size="small"
+                      [loading]="brokenLinkScanning()"
+                      [disabled]="brokenLinkScanning()"
+                      (onClick)="startBrokenLinksScan()"
+                    />
+                    @if (brokenLinkScanning()) {
+                      <span class="reindex-progress"> Ficheros procesados {{ blProcessed() }}/{{ blTotal() }} </span>
+                    }
+                    @if (blDone()) {
+                      <span class="feedback success">No se encontraron enlaces rotos</span>
+                    }
+                    @if (blDeleted() !== null) {
+                      <span class="feedback success">{{ blDeleted() }} enlace(s) eliminado(s)</span>
+                    }
+                    @if (blError()) {
+                      <span class="feedback error">Error al buscar enlaces rotos</span>
+                    }
+                  </div>
+                </section>
+
+                @if (showBrokenLinksModal()) {
+                  <app-broken-links-modal
+                    [brokenLinks]="brokenLinks()"
+                    (cancel)="showBrokenLinksModal.set(false)"
+                    (confirmed)="onBrokenLinksConfirmed($event)"
+                  />
+                }
+
+                <footer class="version-footer">
+                  Frontend: v{{ frontendVersion }} &nbsp;|&nbsp; Backend: v{{ backendVersion() }}
+                </footer>
+
+              </div>
+            </p-tabpanel>
+
+            <p-tabpanel value="prompts">
+              <div class="tab-sections">
+                <section class="settings-section">
+                  <h2>Prompts del LLM</h2>
+                  <p class="section-desc">
+                    Textos que se envían como instrucciones de sistema al modelo de lenguaje. Los cambios son efectivos de
+                    inmediato.
+                  </p>
+
+                  @if (loading()) {
+                    <p class="loading-msg">Cargando prompts…</p>
+                  } @else if (prompts().length === 0) {
+                    <p class="empty-msg">No hay prompts configurados.</p>
+                  } @else {
+                    <div class="prompts-list">
+                      @for (prompt of prompts(); track prompt.key) {
+                        <div class="prompt-card">
+                          <div class="prompt-header">
+                            <label [for]="prompt.key" class="prompt-name">{{ prompt.name }}</label>
+                            <span class="prompt-key">{{ prompt.key }}</span>
+                          </div>
+                          <textarea
+                            [id]="prompt.key"
+                            class="prompt-textarea"
+                            [(ngModel)]="prompt.text"
+                            rows="5"
+                            [disabled]="prompt.saving"
+                          ></textarea>
+                          <div class="prompt-footer">
+                            @if (prompt.saved) {
+                              <span class="feedback success">Guardado correctamente</span>
+                            }
+                            @if (prompt.error) {
+                              <span class="feedback error">{{ prompt.error }}</span>
+                            }
+                            <p-button label="Guardar" size="small" [loading]="prompt.saving" (onClick)="save(prompt)" />
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+                </section>
+              </div>
+            </p-tabpanel>
+          </p-tabpanels>
+        </p-tabs>
+
       </section>
     </main>
   `,
@@ -282,12 +302,15 @@ interface PromptState extends Prompt {
         width: min(900px, calc(100vw - 32px));
         margin: 0 auto;
         padding: 20px 0 40px;
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
       }
       .page-head {
         margin-bottom: 4px;
+      }
+      .tab-sections {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        padding-top: 20px;
       }
       h1 {
         margin: 0;

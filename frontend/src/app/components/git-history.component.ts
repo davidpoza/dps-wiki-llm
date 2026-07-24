@@ -24,7 +24,6 @@ const FIRST_PAGE = 0;
           <button class="sync-btn" [disabled]="syncing()" (click)="sync()">
             {{ syncing() ? ('sync.syncing' | transloco) : ('sync.button' | transloco) }}
           </button>
-          <button class="refresh-btn" (click)="load()">{{ 'git.refresh' | transloco }}</button>
         </div>
       </div>
 
@@ -185,8 +184,7 @@ const FIRST_PAGE = 0;
         display: flex;
         gap: 0.5rem;
       }
-      .sync-btn,
-      .refresh-btn {
+      .sync-btn {
         padding: 0.25rem 0.75rem;
         cursor: pointer;
         border: 1px solid var(--app-border-strong);

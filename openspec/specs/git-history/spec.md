@@ -34,7 +34,7 @@ El sistema SHALL exponer un endpoint `POST /api/git/reset` que ejecute `git rese
 - **THEN** el sistema responde 401
 
 ### Requirement: Pantalla de historial git en el frontend
-El sistema SHALL mostrar una pantalla de historial git accesible desde la navegación principal, que liste los commits con sus estadísticas y permita revertir a cualquier commit seleccionado.
+El sistema SHALL mostrar una pantalla de historial git accesible desde la navegación principal, que liste los commits con sus estadísticas y permita revertir a cualquier commit seleccionado. La pantalla SHALL actualizar su contenido automáticamente sin requerir acción manual del usuario.
 
 #### Scenario: Visualización del historial
 - **WHEN** el usuario navega a la pantalla de historial git
