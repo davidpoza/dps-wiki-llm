@@ -279,7 +279,9 @@ class WebDavSyncServiceTests {
     @Test
     void resolveUnknownConflictThrows() {
         assertThatThrownBy(
-                        () -> service.resolveConflict("missing.md", WebDavSyncService.KEEP_LOCAL, null))
+                        () ->
+                                service.resolveConflict(
+                                        "missing.md", WebDavSyncService.KEEP_LOCAL, null))
                 .isInstanceOf(java.util.NoSuchElementException.class);
     }
 

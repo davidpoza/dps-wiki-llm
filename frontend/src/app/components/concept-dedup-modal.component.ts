@@ -1,13 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  OnDestroy,
-  OnInit,
-  output,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnDestroy, OnInit, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { Checkbox } from 'primeng/checkbox';
@@ -71,8 +62,8 @@ interface GroupItem extends ConceptDedupGroup {
             <p class="empty-msg">No se encontraron conceptos duplicados.</p>
           } @else {
             <p class="results-desc">
-              Se encontraron <strong>{{ groups().length }}</strong> grupo(s) candidato(s) a fusionar.
-              Selecciona los que deseas aplicar.
+              Se encontraron <strong>{{ groups().length }}</strong> grupo(s) candidato(s) a fusionar. Selecciona los que
+              deseas aplicar.
             </p>
             <div class="groups-list">
               @for (group of groups(); track group.canonicalFilename) {
@@ -102,7 +93,8 @@ interface GroupItem extends ConceptDedupGroup {
                           class="canonical-chip"
                           title="Haz clic para editar"
                           (click)="group.editingCanonical = true; groups.update((gs) => [...gs])"
-                        >{{ group.editedCanonical }}</span>
+                          >{{ group.editedCanonical }}</span
+                        >
                       }
                     </div>
                   </div>

@@ -21,9 +21,7 @@ export function createClipboardImagePlugin(options: ClipboardImageOptions) {
               const items = clipboardEvent.clipboardData?.items;
               if (!items) return false;
 
-              const imageItem = Array.from(items).find((item) =>
-                item.type.startsWith('image/'),
-              );
+              const imageItem = Array.from(items).find((item) => item.type.startsWith('image/'));
               if (!imageItem) return false;
 
               const file = imageItem.getAsFile();

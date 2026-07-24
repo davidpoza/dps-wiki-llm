@@ -105,7 +105,9 @@ const FIRST_PAGE = 0;
       <ng-template pTemplate="header">
         <div class="conflicts-dialog-header">
           <span>{{ 'sync.conflictsHeader' | transloco }}</span>
-          <span class="resolved-counter">{{ 'sync.resolvedCounter' | transloco: { resolved: resolvedCount(), total: totalConflicts() } }}</span>
+          <span class="resolved-counter">{{
+            'sync.resolvedCounter' | transloco: { resolved: resolvedCount(), total: totalConflicts() }
+          }}</span>
         </div>
       </ng-template>
 
@@ -123,13 +125,28 @@ const FIRST_PAGE = 0;
       @for (conflict of conflicts(); track conflict.path) {
         <div class="conflict">
           <div class="conflict-row" (click)="toggleExpand(conflict.path)">
-            <i class="pi" [ngClass]="expandedConflicts().has(conflict.path) ? 'pi-chevron-down' : 'pi-chevron-right'"></i>
+            <i
+              class="pi"
+              [ngClass]="expandedConflicts().has(conflict.path) ? 'pi-chevron-down' : 'pi-chevron-right'"
+            ></i>
             <span class="conflict-path">{{ conflict.path }}</span>
             <div class="conflict-actions" (click)="$event.stopPropagation()">
-              <button class="keep-btn" (click)="resolve(conflict.path, 'LOCAL')">{{ 'sync.localVersion' | transloco }}</button>
-              <button class="keep-btn" (click)="resolve(conflict.path, 'REMOTE')">{{ 'sync.remoteVersion' | transloco }}</button>
-              <button class="skip-btn" [title]="'sync.skipTooltip' | transloco" (click)="resolve(conflict.path, 'SKIP')">{{ 'sync.skipConflict' | transloco }}</button>
-              <button class="manual-btn" (click)="openMergeEditor(conflict)">{{ 'sync.manualResolve' | transloco }}</button>
+              <button class="keep-btn" (click)="resolve(conflict.path, 'LOCAL')">
+                {{ 'sync.localVersion' | transloco }}
+              </button>
+              <button class="keep-btn" (click)="resolve(conflict.path, 'REMOTE')">
+                {{ 'sync.remoteVersion' | transloco }}
+              </button>
+              <button
+                class="skip-btn"
+                [title]="'sync.skipTooltip' | transloco"
+                (click)="resolve(conflict.path, 'SKIP')"
+              >
+                {{ 'sync.skipConflict' | transloco }}
+              </button>
+              <button class="manual-btn" (click)="openMergeEditor(conflict)">
+                {{ 'sync.manualResolve' | transloco }}
+              </button>
             </div>
           </div>
 

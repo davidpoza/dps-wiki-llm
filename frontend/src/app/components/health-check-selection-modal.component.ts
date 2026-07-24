@@ -1,12 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  OnInit,
-  output,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { Checkbox } from 'primeng/checkbox';
@@ -46,8 +38,8 @@ type Phase = 'loading' | 'ready' | 'error' | 'running' | 'done' | 'run-error';
 
         @if (phase() === 'ready') {
           <p class="section-hint">
-            Selecciona las notas sobre las que ejecutar la fase de descubrimiento de conexiones.
-            Los embeddings se regenerarán sobre todo el vault de forma incremental.
+            Selecciona las notas sobre las que ejecutar la fase de descubrimiento de conexiones. Los embeddings se
+            regenerarán sobre todo el vault de forma incremental.
           </p>
           <div class="toolbar-row">
             <input
@@ -57,8 +49,20 @@ type Phase = 'loading' | 'ready' | 'error' | 'running' | 'done' | 'run-error';
               [(ngModel)]="searchTerm"
               (ngModelChange)="onSearchChange()"
             />
-            <p-button label="Seleccionar todo" severity="secondary" size="small" [text]="true" (onClick)="selectAll()" />
-            <p-button label="Deseleccionar todo" severity="secondary" size="small" [text]="true" (onClick)="deselectAll()" />
+            <p-button
+              label="Seleccionar todo"
+              severity="secondary"
+              size="small"
+              [text]="true"
+              (onClick)="selectAll()"
+            />
+            <p-button
+              label="Deseleccionar todo"
+              severity="secondary"
+              size="small"
+              [text]="true"
+              (onClick)="deselectAll()"
+            />
           </div>
 
           @if (filteredNotes().length === 0) {
@@ -93,9 +97,7 @@ type Phase = 'loading' | 'ready' | 'error' | 'running' | 'done' | 'run-error';
                 Buscando conexiones {{ hcProcessed() }}/{{ hcTotal() }} ({{ hcPercent() }}%)
               }
             </p>
-            <p class="running-counters">
-              Embeddings: {{ hcEmbeddings() }} · Conexiones: {{ hcConnections() }}
-            </p>
+            <p class="running-counters">Embeddings: {{ hcEmbeddings() }} · Conexiones: {{ hcConnections() }}</p>
           </div>
         }
 
@@ -103,8 +105,8 @@ type Phase = 'loading' | 'ready' | 'error' | 'running' | 'done' | 'run-error';
           <div class="done-phase">
             <p class="success-msg">Health Check parcial completado.</p>
             <p class="done-detail">
-              Embeddings construidos: <strong>{{ hcEmbeddings() }}</strong>
-              &nbsp;·&nbsp; Conexiones encontradas: <strong>{{ hcConnections() }}</strong>
+              Embeddings construidos: <strong>{{ hcEmbeddings() }}</strong> &nbsp;·&nbsp; Conexiones encontradas:
+              <strong>{{ hcConnections() }}</strong>
             </p>
           </div>
         }
@@ -118,12 +120,7 @@ type Phase = 'loading' | 'ready' | 'error' | 'running' | 'done' | 'run-error';
         <div class="modal-footer">
           <p-button label="Cerrar" severity="secondary" size="small" (onClick)="cancel.emit()" />
           @if (phase() === 'ready') {
-            <p-button
-              [label]="confirmLabel()"
-              [disabled]="selectedCount() === 0"
-              size="small"
-              (onClick)="submit()"
-            />
+            <p-button [label]="confirmLabel()" [disabled]="selectedCount() === 0" size="small" (onClick)="submit()" />
           }
         </div>
       </ng-template>

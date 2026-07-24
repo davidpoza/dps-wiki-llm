@@ -447,7 +447,13 @@ public class WebDavSyncService {
             snapshotService.finalizeSnapshot(snapshot, null);
             upsertBaseline(normalized, sha256(remoteContent), null, true, false, null);
         } else if (KEEP_SKIP.equalsIgnoreCase(keep)) {
-            upsertBaseline(normalized, baseline.getSyncedHash(), baseline.getRemoteEtag(), baseline.isReplicated(), false, null);
+            upsertBaseline(
+                    normalized,
+                    baseline.getSyncedHash(),
+                    baseline.getRemoteEtag(),
+                    baseline.isReplicated(),
+                    false,
+                    null);
         } else if (KEEP_MANUAL.equalsIgnoreCase(keep)) {
             if (content == null || content.isBlank()) {
                 throw new IllegalArgumentException("content is required for MANUAL resolution");

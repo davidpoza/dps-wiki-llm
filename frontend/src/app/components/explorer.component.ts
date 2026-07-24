@@ -176,7 +176,11 @@ import { FormsModule } from '@angular/forms';
                   <span
                     class="embedding-status-icon"
                     [class.embedding-status-icon--has]="es.hasEmbedding"
-                    [title]="es.hasEmbedding && es.lastUpdated ? ('Embedding: ' + formatDate(es.lastUpdated)) : 'Sin embedding calculado'"
+                    [title]="
+                      es.hasEmbedding && es.lastUpdated
+                        ? 'Embedding: ' + formatDate(es.lastUpdated)
+                        : 'Sin embedding calculado'
+                    "
                   >
                     <i [class]="es.hasEmbedding ? 'pi pi-circle-fill' : 'pi pi-circle'"></i>
                   </span>
@@ -332,7 +336,11 @@ import { FormsModule } from '@angular/forms';
               </div>
             }
           }
-          <div #editorContainer class="milkdown-container" [class.hidden]="!selectedPath() || editorMode() === 'raw'"></div>
+          <div
+            #editorContainer
+            class="milkdown-container"
+            [class.hidden]="!selectedPath() || editorMode() === 'raw'"
+          ></div>
           @if (selectedPath() && editorMode() === 'raw') {
             <textarea
               class="raw-textarea"
@@ -2341,7 +2349,9 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     const fullContent =
       this.editorMode() === 'raw'
         ? this.rawModeText()
-        : Object.keys(fm).length > 0 ? this.stringifyWithFrontmatter(this.currentMarkdown, fm) : this.currentMarkdown;
+        : Object.keys(fm).length > 0
+          ? this.stringifyWithFrontmatter(this.currentMarkdown, fm)
+          : this.currentMarkdown;
     this.fileService.saveContent(path, fullContent).subscribe({
       next: () => {
         this.isDirty.set(false);

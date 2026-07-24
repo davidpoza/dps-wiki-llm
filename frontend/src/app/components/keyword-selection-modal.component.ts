@@ -1,12 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  OnInit,
-  output,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
@@ -54,8 +46,20 @@ type Phase = 'loading' | 'ready' | 'error' | 'submitting' | 'done';
               [(ngModel)]="searchTerm"
               (ngModelChange)="onSearchChange()"
             />
-            <p-button label="Seleccionar todo" severity="secondary" size="small" [text]="true" (onClick)="selectAll()" />
-            <p-button label="Deseleccionar todo" severity="secondary" size="small" [text]="true" (onClick)="deselectAll()" />
+            <p-button
+              label="Seleccionar todo"
+              severity="secondary"
+              size="small"
+              [text]="true"
+              (onClick)="selectAll()"
+            />
+            <p-button
+              label="Deseleccionar todo"
+              severity="secondary"
+              size="small"
+              [text]="true"
+              (onClick)="deselectAll()"
+            />
           </div>
 
           @if (filteredNotes().length === 0) {
@@ -103,12 +107,7 @@ type Phase = 'loading' | 'ready' | 'error' | 'submitting' | 'done';
           }
           <p-button label="Cerrar" severity="secondary" size="small" (onClick)="cancel.emit()" />
           @if (phase() === 'ready') {
-            <p-button
-              [label]="confirmLabel()"
-              [disabled]="selectedCount() === 0"
-              size="small"
-              (onClick)="submit()"
-            />
+            <p-button [label]="confirmLabel()" [disabled]="selectedCount() === 0" size="small" (onClick)="submit()" />
           }
         </div>
       </ng-template>

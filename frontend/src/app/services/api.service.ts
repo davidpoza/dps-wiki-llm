@@ -142,10 +142,7 @@ export interface ConceptDedupScanResult {
   groups: ConceptDedupGroup[];
 }
 
-export type ConceptDedupScanEvent =
-  | ConceptDedupScanProgress
-  | ConceptDedupScanWarning
-  | ConceptDedupScanResult;
+export type ConceptDedupScanEvent = ConceptDedupScanProgress | ConceptDedupScanWarning | ConceptDedupScanResult;
 
 export interface EmbeddingStatus {
   hasEmbedding: boolean;
@@ -283,7 +280,11 @@ export class ApiService {
   }
 
   resolveConflict(path: string, keep: 'LOCAL' | 'REMOTE' | 'SKIP' | 'MANUAL', content?: string): Observable<void> {
-    return this.http.post<void>('/api/webdav/conflicts/resolve', { path, keep, ...(content !== undefined ? { content } : {}) });
+    return this.http.post<void>('/api/webdav/conflicts/resolve', {
+      path,
+      keep,
+      ...(content !== undefined ? { content } : {}),
+    });
   }
 
   getPrompts(): Observable<Prompt[]> {
@@ -524,9 +525,7 @@ export class ApiService {
   scanConceptDeduplications(): Observable<ConceptDedupScanEvent> {
     return new Observable((observer: Observer<ConceptDedupScanEvent>) => {
       const token = this.auth.token();
-      const url = token
-        ? `/api/concept-dedup/scan?token=${encodeURIComponent(token)}`
-        : '/api/concept-dedup/scan';
+      const url = token ? `/api/concept-dedup/scan?token=${encodeURIComponent(token)}` : '/api/concept-dedup/scan';
       const es = new EventSource(url);
       let completed = false;
 

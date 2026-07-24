@@ -12,7 +12,7 @@ import { Conflict } from '../types';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <p-dialog
-      [header]="('sync.mergeEditorTitle' | transloco: { path: conflict.path })"
+      [header]="'sync.mergeEditorTitle' | transloco: { path: conflict.path }"
       [visible]="true"
       [modal]="true"
       [draggable]="false"
@@ -63,124 +63,126 @@ import { Conflict } from '../types';
       </ng-template>
     </p-dialog>
   `,
-  styles: [`
-    .merge-layout {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      overflow: hidden;
-    }
-    .source-panes {
-      display: flex;
-      flex: 1;
-      min-height: 0;
-      gap: 0;
-      border-bottom: 2px solid var(--app-border-strong);
-    }
-    .source-pane {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      overflow: hidden;
-    }
-    .source-pane:first-child {
-      border-right: 1px solid var(--app-border);
-    }
-    .source-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.4rem 0.75rem;
-      background: var(--app-surface-muted);
-      border-bottom: 1px solid var(--app-border);
-      font-size: 0.8rem;
-      font-weight: 600;
-      flex-shrink: 0;
-    }
-    .source-body {
-      flex: 1;
-      overflow-y: auto;
-      margin: 0;
-      padding: 0.5rem 0.75rem;
-      font-size: 0.78rem;
-      line-height: 1.5;
-      white-space: pre-wrap;
-      word-break: break-word;
-      background: var(--app-surface);
-      color: var(--app-text);
-    }
-    .result-pane {
-      display: flex;
-      flex-direction: column;
-      flex: 0 0 35%;
-      min-height: 0;
-    }
-    .result-header {
-      padding: 0.4rem 0.75rem;
-      background: var(--app-surface-muted);
-      border-bottom: 1px solid var(--app-border);
-      font-size: 0.8rem;
-      font-weight: 600;
-      flex-shrink: 0;
-    }
-    .result-body {
-      flex: 1;
-      resize: none;
-      border: none;
-      outline: none;
-      padding: 0.5rem 0.75rem;
-      font-family: monospace;
-      font-size: 0.78rem;
-      line-height: 1.5;
-      background: var(--app-surface);
-      color: var(--app-text);
-      min-height: 200px;
-    }
-    .take-btn {
-      padding: 0.15rem 0.5rem;
-      font-size: 0.75rem;
-      cursor: pointer;
-      border: 1px solid var(--app-border-strong);
-      border-radius: 4px;
-      background: var(--app-surface);
-      color: var(--app-text);
-    }
-    .take-btn:hover {
-      background: var(--app-primary-soft);
-      color: var(--app-primary);
-    }
-    .footer-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.5rem;
-    }
-    .cancel-btn {
-      padding: 0.35rem 1rem;
-      cursor: pointer;
-      border: 1px solid var(--app-border-strong);
-      border-radius: 4px;
-      background: var(--app-surface-muted);
-      color: var(--app-text);
-    }
-    .resolve-btn {
-      padding: 0.35rem 1rem;
-      cursor: pointer;
-      border: 1px solid var(--app-primary);
-      border-radius: 4px;
-      background: var(--app-primary);
-      color: #fff;
-      font-weight: 600;
-    }
-    .resolve-btn:disabled {
-      opacity: 0.5;
-      cursor: default;
-    }
-    :host ::ng-deep .line-changed {
-      background: color-mix(in srgb, var(--app-warning, #f59e0b) 18%, transparent);
-      display: block;
-    }
-  `],
+  styles: [
+    `
+      .merge-layout {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+      }
+      .source-panes {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+        gap: 0;
+        border-bottom: 2px solid var(--app-border-strong);
+      }
+      .source-pane {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .source-pane:first-child {
+        border-right: 1px solid var(--app-border);
+      }
+      .source-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.4rem 0.75rem;
+        background: var(--app-surface-muted);
+        border-bottom: 1px solid var(--app-border);
+        font-size: 0.8rem;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+      .source-body {
+        flex: 1;
+        overflow-y: auto;
+        margin: 0;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.78rem;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: var(--app-surface);
+        color: var(--app-text);
+      }
+      .result-pane {
+        display: flex;
+        flex-direction: column;
+        flex: 0 0 35%;
+        min-height: 0;
+      }
+      .result-header {
+        padding: 0.4rem 0.75rem;
+        background: var(--app-surface-muted);
+        border-bottom: 1px solid var(--app-border);
+        font-size: 0.8rem;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+      .result-body {
+        flex: 1;
+        resize: none;
+        border: none;
+        outline: none;
+        padding: 0.5rem 0.75rem;
+        font-family: monospace;
+        font-size: 0.78rem;
+        line-height: 1.5;
+        background: var(--app-surface);
+        color: var(--app-text);
+        min-height: 200px;
+      }
+      .take-btn {
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+        cursor: pointer;
+        border: 1px solid var(--app-border-strong);
+        border-radius: 4px;
+        background: var(--app-surface);
+        color: var(--app-text);
+      }
+      .take-btn:hover {
+        background: var(--app-primary-soft);
+        color: var(--app-primary);
+      }
+      .footer-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+      }
+      .cancel-btn {
+        padding: 0.35rem 1rem;
+        cursor: pointer;
+        border: 1px solid var(--app-border-strong);
+        border-radius: 4px;
+        background: var(--app-surface-muted);
+        color: var(--app-text);
+      }
+      .resolve-btn {
+        padding: 0.35rem 1rem;
+        cursor: pointer;
+        border: 1px solid var(--app-primary);
+        border-radius: 4px;
+        background: var(--app-primary);
+        color: #fff;
+        font-weight: 600;
+      }
+      .resolve-btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      :host ::ng-deep .line-changed {
+        background: color-mix(in srgb, var(--app-warning, #f59e0b) 18%, transparent);
+        display: block;
+      }
+    `,
+  ],
 })
 export class ConflictMergeEditorComponent {
   @Input() conflict!: Conflict;

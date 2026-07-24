@@ -21,7 +21,17 @@ interface PromptState extends Prompt {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [FormsModule, ButtonModule, SelectButtonModule, TabsModule, NavComponent, BrokenLinksModalComponent, ConceptDedupModalComponent, KeywordSelectionModalComponent, HealthCheckSelectionModalComponent],
+  imports: [
+    FormsModule,
+    ButtonModule,
+    SelectButtonModule,
+    TabsModule,
+    NavComponent,
+    BrokenLinksModalComponent,
+    ConceptDedupModalComponent,
+    KeywordSelectionModalComponent,
+    HealthCheckSelectionModalComponent,
+  ],
   template: `
     <main class="app-shell">
       <app-nav />
@@ -39,7 +49,6 @@ interface PromptState extends Prompt {
           <p-tabpanels>
             <p-tabpanel value="data">
               <div class="tab-sections">
-
                 <section class="settings-section">
                   <h2>Apariencia</h2>
                   <p class="section-desc">Elige el tema claro u oscuro de la interfaz.</p>
@@ -56,8 +65,8 @@ interface PromptState extends Prompt {
                 <section class="settings-section reindex-section">
                   <h2>Índice del Vault</h2>
                   <p class="section-desc">
-                    Regenera el índice de documentos del vault. Úsalo si los ficheros han cambiado externamente y la búsqueda no
-                    refleja los cambios.
+                    Regenera el índice de documentos del vault. Úsalo si los ficheros han cambiado externamente y la
+                    búsqueda no refleja los cambios.
                   </p>
                   <div class="reindex-row">
                     <p-button
@@ -68,7 +77,9 @@ interface PromptState extends Prompt {
                       (onClick)="startReindex()"
                     />
                     @if (reindexing()) {
-                      <span class="reindex-progress"> Ficheros procesados {{ reindexProcessed() }}/{{ reindexTotal() }} </span>
+                      <span class="reindex-progress">
+                        Ficheros procesados {{ reindexProcessed() }}/{{ reindexTotal() }}
+                      </span>
                     }
                     @if (reindexDone()) {
                       <span class="feedback success">Reindexación completada ({{ reindexTotal() }} ficheros)</span>
@@ -82,16 +93,12 @@ interface PromptState extends Prompt {
                 <section class="settings-section">
                   <h2>Keywords</h2>
                   <p class="section-desc">
-                    Regenera el campo <code>keywords</code> (siempre en inglés) en el frontmatter de las notas seleccionadas de
-                    <code>wiki/concepts</code> y <code>wiki/sources</code>. Permite sobreescribir keywords existentes. El proceso
-                    se encola como job asíncrono reversible en el historial.
+                    Regenera el campo <code>keywords</code> (siempre en inglés) en el frontmatter de las notas
+                    seleccionadas de <code>wiki/concepts</code> y <code>wiki/sources</code>. Permite sobreescribir
+                    keywords existentes. El proceso se encola como job asíncrono reversible en el historial.
                   </p>
                   <div class="reindex-row">
-                    <p-button
-                      label="Seleccionar notas…"
-                      size="small"
-                      (onClick)="showKeywordModal.set(true)"
-                    />
+                    <p-button label="Seleccionar notas…" size="small" (onClick)="showKeywordModal.set(true)" />
                   </div>
                 </section>
 
@@ -104,9 +111,9 @@ interface PromptState extends Prompt {
                   <p class="section-desc">
                     Reconcilia todo el vault: genera los embeddings que falten en <code>wiki/topics</code>,
                     <code>wiki/concepts</code> y <code>wiki/sources</code>, y descubre conexiones nuevas entre notas de
-                    <code>wiki/concepts</code> y <code>wiki/sources</code> añadiendo los enlaces y sus backlinks en la sección
-                    «Related». Es el mismo proceso de descubrimiento del ingest, aplicado a todo el vault. Los cambios son
-                    reversibles desde el historial.
+                    <code>wiki/concepts</code> y <code>wiki/sources</code> añadiendo los enlaces y sus backlinks en la
+                    sección «Related». Es el mismo proceso de descubrimiento del ingest, aplicado a todo el vault. Los
+                    cambios son reversibles desde el historial.
                   </p>
                   <div class="reindex-row">
                     <p-button
@@ -135,8 +142,8 @@ interface PromptState extends Prompt {
                     }
                     @if (hcDone()) {
                       <span class="feedback success"
-                        >Health Check completado · embeddings construidos: {{ hcEmbeddings() }} · conexiones encontradas:
-                        {{ hcConnections() }}</span
+                        >Health Check completado · embeddings construidos: {{ hcEmbeddings() }} · conexiones
+                        encontradas: {{ hcConnections() }}</span
                       >
                     }
                     @if (hcError()) {
@@ -165,7 +172,12 @@ interface PromptState extends Prompt {
                       [disabled]="resourceSaving()"
                       placeholder="attachments"
                     />
-                    <p-button label="Guardar" size="small" [loading]="resourceSaving()" (onClick)="saveResourceSettings()" />
+                    <p-button
+                      label="Guardar"
+                      size="small"
+                      [loading]="resourceSaving()"
+                      (onClick)="saveResourceSettings()"
+                    />
                   </div>
                   @if (resourceSaved()) {
                     <span class="feedback success">Recursos guardados correctamente</span>
@@ -178,8 +190,9 @@ interface PromptState extends Prompt {
                 <section class="settings-section">
                   <h2>Mantenimiento</h2>
                   <p class="section-desc">
-                    Busca conceptos duplicados en la wiki (por ejemplo, el mismo concepto en español e inglés) y fusiónalos
-                    en un único fichero canónico (singular, kebab-case, inglés). Los cambios son reversibles desde el historial.
+                    Busca conceptos duplicados en la wiki (por ejemplo, el mismo concepto en español e inglés) y
+                    fusiónalos en un único fichero canónico (singular, kebab-case, inglés). Los cambios son reversibles
+                    desde el historial.
                   </p>
                   <div class="reindex-row">
                     <p-button
@@ -199,8 +212,8 @@ interface PromptState extends Prompt {
                 <section class="settings-section">
                   <h2>Enlaces rotos</h2>
                   <p class="section-desc">
-                    Busca enlaces wiki <code>[[slug]]</code> en la sección «Related» de todas las notas que apuntan a ficheros
-                    inexistentes. Al terminar puedes seleccionar cuáles eliminar.
+                    Busca enlaces wiki <code>[[slug]]</code> en la sección «Related» de todas las notas que apuntan a
+                    ficheros inexistentes. Al terminar puedes seleccionar cuáles eliminar.
                   </p>
                   <div class="reindex-row">
                     <p-button
@@ -236,7 +249,6 @@ interface PromptState extends Prompt {
                 <footer class="version-footer">
                   Frontend: v{{ frontendVersion }} &nbsp;|&nbsp; Backend: v{{ backendVersion() }}
                 </footer>
-
               </div>
             </p-tabpanel>
 
@@ -245,8 +257,8 @@ interface PromptState extends Prompt {
                 <section class="settings-section">
                   <h2>Prompts del LLM</h2>
                   <p class="section-desc">
-                    Textos que se envían como instrucciones de sistema al modelo de lenguaje. Los cambios son efectivos de
-                    inmediato.
+                    Textos que se envían como instrucciones de sistema al modelo de lenguaje. Los cambios son efectivos
+                    de inmediato.
                   </p>
 
                   @if (loading()) {
@@ -286,7 +298,6 @@ interface PromptState extends Prompt {
             </p-tabpanel>
           </p-tabpanels>
         </p-tabs>
-
       </section>
     </main>
   `,
@@ -507,9 +518,7 @@ export class SettingsComponent implements OnInit {
 
     this.api.getActiveJobs().subscribe({
       next: (jobs: JobSummary[]) => {
-        const mergeRunning = jobs.some(
-          (j) => j.type === 'MERGE' && (j.status === 'QUEUED' || j.status === 'STARTED'),
-        );
+        const mergeRunning = jobs.some((j) => j.type === 'MERGE' && (j.status === 'QUEUED' || j.status === 'STARTED'));
         this.dedupMergeRunning.set(mergeRunning);
       },
       error: () => {},
