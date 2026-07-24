@@ -2230,6 +2230,12 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     if (this.isDirty()) this.save();
   }
 
+  @HostListener('document:keydown.control.shift.s', ['$event'])
+  onCtrlShiftS(event: Event): void {
+    event.preventDefault();
+    this.sync();
+  }
+
   @HostListener('window:beforeunload', ['$event'])
   onBeforeUnload(event: BeforeUnloadEvent): void {
     if (!this.isDirty()) return;
