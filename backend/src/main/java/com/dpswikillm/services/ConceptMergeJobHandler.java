@@ -6,7 +6,6 @@ import com.dpswikillm.domain.Snapshot;
 import com.dpswikillm.dto.ConceptDedupGroup;
 import com.dpswikillm.dto.ConceptMergeRequest;
 import com.dpswikillm.repositories.JobRepository;
-import com.dpswikillm.services.MarkdownDocument;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -79,10 +78,11 @@ public class ConceptMergeJobHandler {
 
             for (ConceptDedupGroup group : groups) {
                 String canonicalPath = "wiki/concepts/" + group.canonicalFilename() + ".md";
-                List<String> secondaryPaths = group.files().stream()
-                        .filter(slug -> !slug.equals(group.canonicalFilename()))
-                        .map(slug -> "wiki/concepts/" + slug + ".md")
-                        .toList();
+                List<String> secondaryPaths =
+                        group.files().stream()
+                                .filter(slug -> !slug.equals(group.canonicalFilename()))
+                                .map(slug -> "wiki/concepts/" + slug + ".md")
+                                .toList();
 
                 snapshotService.captureFile(snapshot, canonicalPath);
                 for (String secondary : secondaryPaths) {
@@ -124,9 +124,8 @@ public class ConceptMergeJobHandler {
             job.setAffectedPaths(objectMapper.writeValueAsString(allAffectedPaths));
             jobRepository.save(job);
 
-            List<String> canonicals = groups.stream()
-                    .map(ConceptDedupGroup::canonicalFilename)
-                    .toList();
+            List<String> canonicals =
+                    groups.stream().map(ConceptDedupGroup::canonicalFilename).toList();
             lifecycleService.transition(
                     job.getId(),
                     JobStatus.COMPLETED,
@@ -176,11 +175,12 @@ public class ConceptMergeJobHandler {
             }
         }
 
-        String merged = markdownService.mergeAndRender(
-                canonicalContent,
-                canonicalSlug,
-                frontmatterUpdates.isEmpty() ? null : frontmatterUpdates,
-                sectionUpdates.isEmpty() ? null : sectionUpdates);
+        String merged =
+                markdownService.mergeAndRender(
+                        canonicalContent,
+                        canonicalSlug,
+                        frontmatterUpdates.isEmpty() ? null : frontmatterUpdates,
+                        sectionUpdates.isEmpty() ? null : sectionUpdates);
 
         Files.createDirectories(canonicalAbsPath.getParent());
         Files.writeString(canonicalAbsPath, merged, StandardCharsets.UTF_8);
@@ -196,13 +196,13 @@ public class ConceptMergeJobHandler {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> buildAliasUpdate(
-            MarkdownDocument doc, List<String> newAliases) {
+    private Map<String, Object> buildAliasUpdate(MarkdownDocument doc, List<String> newAliases) {
         if (newAliases.isEmpty()) return Map.of();
         Object existing = doc.frontmatter().get("aliases");
-        List<String> aliases = existing instanceof List<?> list
-                ? new ArrayList<>((List<String>) list)
-                : new ArrayList<>();
+        List<String> aliases =
+                existing instanceof List<?> list
+                        ? new ArrayList<>((List<String>) list)
+                        : new ArrayList<>();
         for (String alias : newAliases) {
             if (!aliases.contains(alias)) aliases.add(alias);
         }
@@ -220,16 +220,15 @@ public class ConceptMergeJobHandler {
         for (ConceptDedupGroup group : groups) {
             for (String slug : group.files()) {
                 if (!slug.equals(group.canonicalFilename())) {
-                    replacements.add(new String[]{slug, group.canonicalFilename()});
+                    replacements.add(new String[] {slug, group.canonicalFilename()});
                 }
             }
         }
         if (replacements.isEmpty()) return;
 
         try (Stream<Path> walk = Files.walk(vaultRoot)) {
-            List<Path> mdFiles = walk
-                    .filter(p -> p.getFileName().toString().endsWith(".md"))
-                    .toList();
+            List<Path> mdFiles =
+                    walk.filter(p -> p.getFileName().toString().endsWith(".md")).toList();
 
             for (Path mdFile : mdFiles) {
                 String rel = vaultRoot.relativize(mdFile).toString().replace('\\', '/');
@@ -252,14 +251,20 @@ public class ConceptMergeJobHandler {
         for (String[] replacement : replacements) {
             String from = replacement[0];
             String to = replacement[1];
-            Pattern withAlias = Pattern.compile(
-                    "\\[\\[" + Pattern.quote(from) + "\\|([^\\]]+)\\]\\]");
-            Pattern plain = Pattern.compile(
-                    "\\[\\[" + Pattern.quote(from) + "\\]\\]");
-            result = new StringBuilder(applyPattern(result.toString(), withAlias,
-                    m -> "[[" + to + "|" + m.group(1) + "]]", codeRanges));
-            result = new StringBuilder(applyPattern(result.toString(), plain,
-                    m -> "[[" + to + "]]", codeRanges));
+            Pattern withAlias =
+                    Pattern.compile("\\[\\[" + Pattern.quote(from) + "\\|([^\\]]+)\\]\\]");
+            Pattern plain = Pattern.compile("\\[\\[" + Pattern.quote(from) + "\\]\\]");
+            result =
+                    new StringBuilder(
+                            applyPattern(
+                                    result.toString(),
+                                    withAlias,
+                                    m -> "[[" + to + "|" + m.group(1) + "]]",
+                                    codeRanges));
+            result =
+                    new StringBuilder(
+                            applyPattern(
+                                    result.toString(), plain, m -> "[[" + to + "]]", codeRanges));
         }
         return result.toString();
     }
@@ -286,7 +291,7 @@ public class ConceptMergeJobHandler {
         List<int[]> ranges = new ArrayList<>();
         Matcher m = CODE_BLOCK.matcher(content);
         while (m.find()) {
-            ranges.add(new int[]{m.start(), m.end()});
+            ranges.add(new int[] {m.start(), m.end()});
         }
         return ranges;
     }

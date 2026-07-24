@@ -72,7 +72,7 @@ public class KeywordGenerationService {
         int skipped = 0;
         for (Path path : files) {
             try {
-                if (generateForNote(path)) {
+                if (generateForNote(path, false)) {
                     updated += 1;
                 } else {
                     skipped += 1;
@@ -90,6 +90,11 @@ public class KeywordGenerationService {
             onProgress.accept(result);
         }
         return result;
+    }
+
+    public boolean generateForPath(String vaultRelativePath, boolean overwrite) {
+        Path abs = pathResolver.resolve(vaultRelativePath);
+        return generateForNote(abs, overwrite);
     }
 
     private List<Path> collectNotes() throws IOException {
@@ -112,7 +117,7 @@ public class KeywordGenerationService {
     /**
      * @return true if the note was updated with keywords, false if it was skipped.
      */
-    private boolean generateForNote(Path path) {
+    private boolean generateForNote(Path path, boolean overwrite) {
         String body;
         try {
             body = Files.readString(path, StandardCharsets.UTF_8);
@@ -120,7 +125,7 @@ public class KeywordGenerationService {
             throw new IllegalStateException("Failed to read note: " + path, ex);
         }
         MarkdownDocument document = markdownService.parse(body);
-        if (hasKeywords(document.frontmatter().get("keywords"))) {
+        if (!overwrite && hasKeywords(document.frontmatter().get("keywords"))) {
             return false;
         }
         String inputText = selectSourceText(document);

@@ -100,11 +100,13 @@ class ConceptMergeJobE2ETests {
                 "# AI\n\n## Related\n[[aprendizaje-automatico]]\n",
                 StandardCharsets.UTF_8);
 
-        ConceptMergeRequest request = new ConceptMergeRequest(List.of(
-                new ConceptDedupGroup(
-                        "machine-learning",
-                        List.of("machine-learning", "aprendizaje-automatico"),
-                        0.91)));
+        ConceptMergeRequest request =
+                new ConceptMergeRequest(
+                        List.of(
+                                new ConceptDedupGroup(
+                                        "machine-learning",
+                                        List.of("machine-learning", "aprendizaje-automatico"),
+                                        0.91)));
         String payloadJson = objectMapper.writeValueAsString(request);
 
         Job mergeJob = job(UUID.randomUUID(), JobType.MERGE, JobStatus.STARTED);
@@ -144,11 +146,13 @@ class ConceptMergeJobE2ETests {
                 "# ML\n\n## Summary\nAlias content.\n",
                 StandardCharsets.UTF_8);
 
-        ConceptMergeRequest request = new ConceptMergeRequest(List.of(
-                new ConceptDedupGroup(
-                        "machine-learning",
-                        List.of("machine-learning", "ml"),
-                        0.95)));
+        ConceptMergeRequest request =
+                new ConceptMergeRequest(
+                        List.of(
+                                new ConceptDedupGroup(
+                                        "machine-learning",
+                                        List.of("machine-learning", "ml"),
+                                        0.95)));
         String payloadJson = objectMapper.writeValueAsString(request);
 
         Job mergeJob = job(UUID.randomUUID(), JobType.MERGE, JobStatus.STARTED);
@@ -190,8 +194,13 @@ class ConceptMergeJobE2ETests {
                 "# AI\n\nText [[ml]].\n\n```\nDo not replace [[ml]] here.\n```\n",
                 StandardCharsets.UTF_8);
 
-        ConceptMergeRequest request = new ConceptMergeRequest(List.of(
-                new ConceptDedupGroup("machine-learning", List.of("machine-learning", "ml"), 0.93)));
+        ConceptMergeRequest request =
+                new ConceptMergeRequest(
+                        List.of(
+                                new ConceptDedupGroup(
+                                        "machine-learning",
+                                        List.of("machine-learning", "ml"),
+                                        0.93)));
         Job mergeJob = job(UUID.randomUUID(), JobType.MERGE, JobStatus.STARTED);
         mergeJob.setPayloadRef(objectMapper.writeValueAsString(request));
 
@@ -211,17 +220,20 @@ class ConceptMergeJobE2ETests {
         VaultPathResolver pathResolver = resolver();
         JobRepository jobRepository = mock(JobRepository.class);
         when(jobRepository.save(any(Job.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(jobRepository.findById(any(UUID.class))).thenAnswer(inv -> {
-            if (jobRef != null && inv.getArgument(0).equals(jobRef.getId())) {
-                return Optional.of(jobRef);
-            }
-            return Optional.empty();
-        });
-        JobLifecycleService lifecycleService = new JobLifecycleService(
-                jobRepository, mock(JobEventService.class), objectMapper);
+        when(jobRepository.findById(any(UUID.class)))
+                .thenAnswer(
+                        inv -> {
+                            if (jobRef != null && inv.getArgument(0).equals(jobRef.getId())) {
+                                return Optional.of(jobRef);
+                            }
+                            return Optional.empty();
+                        });
+        JobLifecycleService lifecycleService =
+                new JobLifecycleService(jobRepository, mock(JobEventService.class), objectMapper);
         ReindexService reindexService = new ReindexService(pathResolver, markdownService, docRepo);
-        EmbeddingIndexService embeddingIndexService = new EmbeddingIndexService(
-                docRepo, new StubEmbeddingClient(), properties(), markdownService);
+        EmbeddingIndexService embeddingIndexService =
+                new EmbeddingIndexService(
+                        docRepo, new StubEmbeddingClient(), properties(), markdownService);
         return new ConceptMergeJobHandler(
                 markdownService,
                 pathResolver,
@@ -243,14 +255,15 @@ class ConceptMergeJobE2ETests {
         when(jobRepository.save(any(Job.class))).thenAnswer(inv -> inv.getArgument(0));
         OperationRepository operationRepository = mock(OperationRepository.class);
         when(operationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        JobLifecycleService lifecycleService = new JobLifecycleService(
-                jobRepository, mock(JobEventService.class), objectMapper);
+        JobLifecycleService lifecycleService =
+                new JobLifecycleService(jobRepository, mock(JobEventService.class), objectMapper);
         return new JobRevertService(
                 jobRepository,
                 operationRepository,
                 snapshotService,
                 new ReindexService(resolver(), markdownService, docRepo),
-                new EmbeddingIndexService(docRepo, new StubEmbeddingClient(), properties(), markdownService),
+                new EmbeddingIndexService(
+                        docRepo, new StubEmbeddingClient(), properties(), markdownService),
                 lifecycleService,
                 objectMapper);
     }
@@ -275,18 +288,22 @@ class ConceptMergeJobE2ETests {
                 new AppProperties.Embeddings(
                         "http://embeddings:8080", "test-model", "", 2, Duration.ofSeconds(1), 1),
                 new AppProperties.Llm("http://localhost:11434/v1", "gpt-oss", "test"),
-                null, null, null, null, null);
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     private static class StubEmbeddingClient implements EmbeddingClient {
         @Override
         public List<float[]> embedPassages(List<String> texts) {
-            return texts.stream().map(t -> new float[]{1, 0}).toList();
+            return texts.stream().map(t -> new float[] {1, 0}).toList();
         }
 
         @Override
         public float[] embedQuery(String text) {
-            return new float[]{1, 0};
+            return new float[] {1, 0};
         }
     }
 
@@ -335,7 +352,8 @@ class ConceptMergeJobE2ETests {
         }
 
         @Override
-        public List<SimilarPair> findSimilarPairsByDocType(String model, String docType, double threshold) {
+        public List<SimilarPair> findSimilarPairsByDocType(
+                String model, String docType, double threshold) {
             return List.of();
         }
 

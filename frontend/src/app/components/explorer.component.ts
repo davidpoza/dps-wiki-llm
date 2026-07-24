@@ -207,6 +207,17 @@ import { FormsModule } from '@angular/forms';
                     (onClick)="generatePdf()"
                     [title]="'explorer.generatePdf' | transloco"
                   />
+                  @if (isKeywordEligible()) {
+                    <p-button
+                      icon="pi pi-tag"
+                      size="small"
+                      severity="secondary"
+                      [loading]="regeneratingKeywords()"
+                      [disabled]="regeneratingKeywords()"
+                      (onClick)="regenerateKeywords()"
+                      title="Regenerar keywords"
+                    />
+                  }
                   <p-button
                     icon="pi pi-trash"
                     size="small"
@@ -1343,6 +1354,11 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     return idx === -1 ? { dir: '', name: path } : { dir: path.slice(0, idx + 1), name: path.slice(idx + 1) };
   });
   readonly isDirty = signal(false);
+  readonly regeneratingKeywords = signal(false);
+  readonly isKeywordEligible = computed(() => {
+    const path = this.selectedPath();
+    return !!path && (path.startsWith('wiki/concepts/') || path.startsWith('wiki/sources/'));
+  });
   readonly frontmatter = signal<Record<string, unknown>>({});
   readonly frontmatterEntries = computed(() => Object.entries(this.frontmatter()));
   readonly showFrontmatter = signal(true);
@@ -2560,6 +2576,26 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
           summary: this.t.translate('common.error'),
           detail: this.t.translate('explorer.toastErrorPdf'),
         }),
+    });
+  }
+
+  regenerateKeywords(): void {
+    const path = this.selectedPath();
+    if (!path) return;
+    this.regeneratingKeywords.set(true);
+    this.api.regenerateKeywords([path]).subscribe({
+      next: () => {
+        this.regeneratingKeywords.set(false);
+        this.router.navigate(['/jobs']);
+      },
+      error: () => {
+        this.regeneratingKeywords.set(false);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'No se pudo encolar la regeneración de keywords.',
+        });
+      },
     });
   }
 

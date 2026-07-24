@@ -123,10 +123,8 @@ public class ConceptDedupScanService {
             String root2 = find(parent, pair.path2());
             groups.computeIfAbsent(root1, k -> new ArrayList<>());
             groups.computeIfAbsent(root2, k -> new ArrayList<>());
-            if (!groups.get(root1).contains(pair.path1()))
-                groups.get(root1).add(pair.path1());
-            if (!groups.get(root1).contains(pair.path2()))
-                groups.get(root1).add(pair.path2());
+            if (!groups.get(root1).contains(pair.path1())) groups.get(root1).add(pair.path1());
+            if (!groups.get(root1).contains(pair.path2())) groups.get(root1).add(pair.path2());
         }
 
         List<List<String>> result = new ArrayList<>();
@@ -201,9 +199,10 @@ public class ConceptDedupScanService {
             JsonNode isSame = node.get("isSameConceptGroup");
             if (isSame == null || !isSame.asBoolean()) return null;
             JsonNode canonicalNode = node.get("canonicalFilename");
-            String canonical = canonicalNode != null && !canonicalNode.isNull()
-                    ? canonicalNode.asText().trim()
-                    : null;
+            String canonical =
+                    canonicalNode != null && !canonicalNode.isNull()
+                            ? canonicalNode.asText().trim()
+                            : null;
             canonical = normalizeCanonical(canonical, paths, byPath);
             if (canonical == null) return null;
             List<String> slugs = paths.stream().map(this::slugFromPath).toList();
@@ -220,23 +219,27 @@ public class ConceptDedupScanService {
         if (proposed == null || proposed.isBlank()) {
             return oldestSlug(paths, byPath);
         }
-        String normalized = proposed.toLowerCase().replaceAll("[^a-z0-9-]", "-")
-                .replaceAll("-+", "-").replaceAll("^-|-$", "");
+        String normalized =
+                proposed.toLowerCase()
+                        .replaceAll("[^a-z0-9-]", "-")
+                        .replaceAll("-+", "-")
+                        .replaceAll("^-|-$", "");
         if (normalized.isBlank()) return oldestSlug(paths, byPath);
         return normalized;
     }
 
     private String oldestSlug(List<String> paths, Map<String, DocumentRecord> byPath) {
         return paths.stream()
-                .min((a, b) -> {
-                    DocumentRecord da = byPath.get(a);
-                    DocumentRecord db = byPath.get(b);
-                    if (da == null) return 1;
-                    if (db == null) return -1;
-                    if (da.updatedAt() == null) return 1;
-                    if (db.updatedAt() == null) return -1;
-                    return da.updatedAt().compareTo(db.updatedAt());
-                })
+                .min(
+                        (a, b) -> {
+                            DocumentRecord da = byPath.get(a);
+                            DocumentRecord db = byPath.get(b);
+                            if (da == null) return 1;
+                            if (db == null) return -1;
+                            if (da.updatedAt() == null) return 1;
+                            if (db.updatedAt() == null) return -1;
+                            return da.updatedAt().compareTo(db.updatedAt());
+                        })
                 .map(this::slugFromPath)
                 .orElse(null);
     }
@@ -244,13 +247,14 @@ public class ConceptDedupScanService {
     private double readThreshold() {
         return settingRepository
                 .findById(THRESHOLD_SETTING_KEY)
-                .map(s -> {
-                    try {
-                        return Double.parseDouble(s.getValue());
-                    } catch (NumberFormatException ex) {
-                        return DEFAULT_THRESHOLD;
-                    }
-                })
+                .map(
+                        s -> {
+                            try {
+                                return Double.parseDouble(s.getValue());
+                            } catch (NumberFormatException ex) {
+                                return DEFAULT_THRESHOLD;
+                            }
+                        })
                 .orElse(DEFAULT_THRESHOLD);
     }
 

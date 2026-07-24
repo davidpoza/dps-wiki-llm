@@ -16,6 +16,7 @@ public class JobConsumers {
     private final JobRevertService jobRevertService;
     private final EnrichPipelineService enrichPipelineService;
     private final ConceptMergeJobHandler conceptMergeJobHandler;
+    private final KeywordRegenerationJobHandler keywordRegenerationJobHandler;
     private final JobRepository jobRepository;
 
     public JobConsumers(
@@ -25,6 +26,7 @@ public class JobConsumers {
             JobRevertService jobRevertService,
             EnrichPipelineService enrichPipelineService,
             ConceptMergeJobHandler conceptMergeJobHandler,
+            KeywordRegenerationJobHandler keywordRegenerationJobHandler,
             JobRepository jobRepository) {
         this.lifecycleService = lifecycleService;
         this.ingestPipelineService = ingestPipelineService;
@@ -32,6 +34,7 @@ public class JobConsumers {
         this.jobRevertService = jobRevertService;
         this.enrichPipelineService = enrichPipelineService;
         this.conceptMergeJobHandler = conceptMergeJobHandler;
+        this.keywordRegenerationJobHandler = keywordRegenerationJobHandler;
         this.jobRepository = jobRepository;
     }
 
@@ -59,7 +62,11 @@ public class JobConsumers {
                 return;
             }
             if (message.jobType() == JobType.MERGE) {
-                conceptMergeJobHandler.run(
+                conceptMergeJobHandler.run(jobRepository.findById(message.jobId()).orElseThrow());
+                return;
+            }
+            if (message.jobType() == JobType.REGENERATE_KEYWORDS) {
+                keywordRegenerationJobHandler.run(
                         jobRepository.findById(message.jobId()).orElseThrow());
                 return;
             }

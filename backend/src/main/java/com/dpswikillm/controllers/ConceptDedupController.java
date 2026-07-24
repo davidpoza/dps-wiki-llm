@@ -1,10 +1,10 @@
 package com.dpswikillm.controllers;
 
+import com.dpswikillm.domain.JobMode;
+import com.dpswikillm.domain.JobType;
 import com.dpswikillm.dto.ConceptDedupGroup;
 import com.dpswikillm.dto.ConceptMergeRequest;
 import com.dpswikillm.dto.EnqueueJobResponse;
-import com.dpswikillm.domain.JobMode;
-import com.dpswikillm.domain.JobType;
 import com.dpswikillm.services.ConceptDedupScanService;
 import com.dpswikillm.services.ConceptDedupScanService.ScanProgress;
 import com.dpswikillm.services.JobQueueService;
@@ -50,8 +50,7 @@ public class ConceptDedupController {
                                 scanService.scan(progress -> emitProgress(emitter, progress));
                         String resultJson =
                                 objectMapper.writeValueAsString(Map.of("groups", groups));
-                        emitter.send(
-                                SseEmitter.event().name("completed").data(resultJson));
+                        emitter.send(SseEmitter.event().name("completed").data(resultJson));
                         emitter.complete();
                     } catch (Exception ex) {
                         try {
@@ -77,15 +76,17 @@ public class ConceptDedupController {
 
     private void emitProgress(SseEmitter emitter, ScanProgress progress) {
         try {
-            String resultJson = objectMapper.writeValueAsString(
-                    Map.of("current", progress.current(), "total", progress.total()));
+            String resultJson =
+                    objectMapper.writeValueAsString(
+                            Map.of("current", progress.current(), "total", progress.total()));
             emitter.send(
                     SseEmitter.event()
                             .name("progress")
-                            .data(Map.of(
-                                    "step", progress.step(),
-                                    "message", progress.message(),
-                                    "result", resultJson)));
+                            .data(
+                                    Map.of(
+                                            "step", progress.step(),
+                                            "message", progress.message(),
+                                            "result", resultJson)));
         } catch (IOException | IllegalStateException ex) {
             throw new IllegalStateException("SSE send failed", ex);
         }

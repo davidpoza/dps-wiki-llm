@@ -770,7 +770,8 @@ class IngestPipelineServicesTests {
         }
 
         @Override
-        public List<SimilarPair> findSimilarPairsByDocType(String model, String docType, double threshold) {
+        public List<SimilarPair> findSimilarPairsByDocType(
+                String model, String docType, double threshold) {
             return List.of();
         }
 

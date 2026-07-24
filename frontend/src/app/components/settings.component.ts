@@ -8,6 +8,7 @@ import { ThemeService } from '../services/theme.service';
 import { APP_VERSION } from '../version';
 import { BrokenLinksModalComponent } from './broken-links-modal.component';
 import { ConceptDedupModalComponent } from './concept-dedup-modal.component';
+import { KeywordSelectionModalComponent } from './keyword-selection-modal.component';
 
 interface PromptState extends Prompt {
   saving: boolean;
@@ -18,7 +19,7 @@ interface PromptState extends Prompt {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [FormsModule, ButtonModule, SelectButtonModule, NavComponent, BrokenLinksModalComponent, ConceptDedupModalComponent],
+  imports: [FormsModule, ButtonModule, SelectButtonModule, NavComponent, BrokenLinksModalComponent, ConceptDedupModalComponent, KeywordSelectionModalComponent],
   template: `
     <main class="app-shell">
       <app-nav />
@@ -70,34 +71,22 @@ interface PromptState extends Prompt {
         <section class="settings-section">
           <h2>Keywords</h2>
           <p class="section-desc">
-            Genera el campo <code>keywords</code> (siempre en inglés) en el frontmatter de las notas de
-            <code>wiki/concepts</code> y <code>wiki/sources</code> que aún no lo tienen. Usa la sección «Summary» y, si
-            no existe, el resto del texto excluyendo «Sources», «Related» y «Links».
+            Regenera el campo <code>keywords</code> (siempre en inglés) en el frontmatter de las notas seleccionadas de
+            <code>wiki/concepts</code> y <code>wiki/sources</code>. Permite sobreescribir keywords existentes. El proceso
+            se encola como job asíncrono reversible en el historial.
           </p>
           <div class="reindex-row">
             <p-button
-              label="Generar keywords"
+              label="Seleccionar notas…"
               size="small"
-              [loading]="generatingKeywords()"
-              [disabled]="generatingKeywords()"
-              (onClick)="startKeywordGeneration()"
+              (onClick)="showKeywordModal.set(true)"
             />
-            @if (generatingKeywords()) {
-              <span class="reindex-progress">
-                Notas procesadas {{ keywordsProcessed() }}/{{ keywordsTotal() }} &nbsp;·&nbsp; actualizadas
-                {{ keywordsUpdated() }} · omitidas {{ keywordsSkipped() }}
-              </span>
-            }
-            @if (keywordsDone()) {
-              <span class="feedback success"
-                >Keywords generadas ({{ keywordsUpdated() }} actualizadas, {{ keywordsSkipped() }} omitidas)</span
-              >
-            }
-            @if (keywordsError()) {
-              <span class="feedback error">Error al generar keywords</span>
-            }
           </div>
         </section>
+
+        @if (showKeywordModal()) {
+          <app-keyword-selection-modal (cancel)="showKeywordModal.set(false)" />
+        }
 
         <section class="settings-section">
           <h2>Health Check</h2>
@@ -443,13 +432,7 @@ export class SettingsComponent implements OnInit {
   readonly reindexDone = signal(false);
   readonly reindexError = signal<string | null>(null);
 
-  readonly generatingKeywords = signal(false);
-  readonly keywordsProcessed = signal(0);
-  readonly keywordsTotal = signal(0);
-  readonly keywordsUpdated = signal(0);
-  readonly keywordsSkipped = signal(0);
-  readonly keywordsDone = signal(false);
-  readonly keywordsError = signal<string | null>(null);
+  readonly showKeywordModal = signal(false);
   readonly healthChecking = signal(false);
   readonly hcPhase = signal<'embeddings' | 'connections' | 'done'>('embeddings');
   readonly hcProcessed = signal(0);
@@ -555,34 +538,6 @@ export class SettingsComponent implements OnInit {
       error: (err: Error) => {
         this.reindexing.set(false);
         this.reindexError.set(err.message ?? 'Error desconocido');
-      },
-    });
-  }
-
-  startKeywordGeneration(): void {
-    this.generatingKeywords.set(true);
-    this.keywordsDone.set(false);
-    this.keywordsError.set(null);
-    this.keywordsProcessed.set(0);
-    this.keywordsTotal.set(0);
-    this.keywordsUpdated.set(0);
-    this.keywordsSkipped.set(0);
-
-    this.api.generateKeywords().subscribe({
-      next: (progress) => {
-        this.keywordsProcessed.set(progress.processed);
-        this.keywordsTotal.set(progress.total);
-        this.keywordsUpdated.set(progress.updated);
-        this.keywordsSkipped.set(progress.skipped);
-      },
-      complete: () => {
-        this.generatingKeywords.set(false);
-        this.keywordsDone.set(true);
-        setTimeout(() => this.keywordsDone.set(false), 5000);
-      },
-      error: (err: Error) => {
-        this.generatingKeywords.set(false);
-        this.keywordsError.set(err.message ?? 'Error desconocido');
       },
     });
   }

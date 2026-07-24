@@ -102,12 +102,42 @@ public class MarkdownService {
         if (content.startsWith("---\n")) {
             int end = content.indexOf("\n---\n", 4);
             if (end >= 0) {
-                String before = content.substring(0, end); // "---\n<frontmatter>"
+                String fmBody = content.substring(4, end); // raw frontmatter lines
+                String cleanedFm = removeFrontmatterKey(fmBody, key);
                 String after = content.substring(end); // "\n---\n<body>"
-                return before + "\n" + insertion.stripTrailing() + after;
+                String separator = cleanedFm.isEmpty() ? "" : "\n";
+                return "---\n" + cleanedFm + separator + insertion.stripTrailing() + after;
             }
         }
         return "---\n" + insertion + "---\n\n" + content;
+    }
+
+    /**
+     * Removes a YAML key (and its indented list items) from a raw frontmatter string. Handles both
+     * scalar ({@code key: value}) and list ({@code key:\n - item}) forms.
+     */
+    private String removeFrontmatterKey(String fmBody, String key) {
+        String[] lines = fmBody.split("\n", -1);
+        StringBuilder result = new StringBuilder();
+        boolean skipping = false;
+        for (String line : lines) {
+            if (line.equals(key + ":") || line.startsWith(key + ": ")) {
+                skipping = true;
+                continue;
+            }
+            if (skipping) {
+                // List continuation lines start with whitespace
+                if (line.startsWith(" ") || line.startsWith("\t")) {
+                    continue;
+                }
+                skipping = false;
+            }
+            if (result.length() > 0) {
+                result.append('\n');
+            }
+            result.append(line);
+        }
+        return result.toString();
     }
 
     private String render(

@@ -9,6 +9,12 @@ export interface EnqueueResponse {
   queuePosition: number;
 }
 
+export interface NoteEntry {
+  path: string;
+  title: string;
+  hasKeywords: boolean;
+}
+
 export interface ReviewCandidateDecision {
   candidateId: string;
   decision: 'accepted' | 'rejected';
@@ -521,5 +527,14 @@ export class ApiService {
 
   getActiveJobs(): Observable<import('../services/api.service').JobSummary[]> {
     return this.http.get<JobSummary[]>('/api/jobs');
+  }
+
+  regenerateKeywords(paths: string[]): Observable<EnqueueResponse> {
+    return this.http.post<EnqueueResponse>('/api/keywords/regenerate', { paths });
+  }
+
+  listNotes(folders: string[]): Observable<NoteEntry[]> {
+    const params = folders.map((f) => `folders=${encodeURIComponent(f)}`).join('&');
+    return this.http.get<NoteEntry[]>(`/api/notes/list?${params}`);
   }
 }
