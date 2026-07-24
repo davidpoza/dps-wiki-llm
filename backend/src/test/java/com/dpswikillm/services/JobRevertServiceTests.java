@@ -279,5 +279,10 @@ class JobRevertServiceTests {
         public List<DocumentRecord> findDocumentsByDocType(String docType) {
             return documents.stream().filter(d -> docType.equals(d.docType())).toList();
         }
+
+        @Override
+        public Optional<Instant> findEmbeddingStatus(String path) {
+            return Optional.empty();
+        }
     }
 }

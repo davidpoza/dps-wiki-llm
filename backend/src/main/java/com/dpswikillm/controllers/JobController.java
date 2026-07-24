@@ -14,6 +14,7 @@ import com.dpswikillm.dto.JobSummary;
 import com.dpswikillm.dto.ReviewRequest;
 import com.dpswikillm.repositories.JobRepository;
 import com.dpswikillm.services.FileLookupService;
+import com.dpswikillm.services.FileService;
 import com.dpswikillm.services.GuidedReviewService;
 import com.dpswikillm.services.JobEventService;
 import com.dpswikillm.services.JobLifecycleService;
@@ -53,6 +54,7 @@ public class JobController {
     private final LinkDiscoveryService linkDiscoveryService;
     private final SnapshotService snapshotService;
     private final ObjectMapper objectMapper;
+    private final FileService fileService;
 
     public JobController(
             JobEventService eventService,
@@ -64,7 +66,8 @@ public class JobController {
             FileLookupService fileLookupService,
             LinkDiscoveryService linkDiscoveryService,
             SnapshotService snapshotService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            FileService fileService) {
         this.eventService = eventService;
         this.queueService = queueService;
         this.lifecycleService = lifecycleService;
@@ -75,6 +78,7 @@ public class JobController {
         this.linkDiscoveryService = linkDiscoveryService;
         this.snapshotService = snapshotService;
         this.objectMapper = objectMapper;
+        this.fileService = fileService;
     }
 
     @GetMapping("/jobs/events")
@@ -194,6 +198,24 @@ public class JobController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     public EnqueueJobResponse enqueueEnrich(@RequestParam("path") String path) {
         return queueService.enqueue(JobType.ENRICH, JobMode.unattended, path);
+    }
+
+    @PostMapping("/jobs/rename")
+    public org.springframework.http.ResponseEntity<EnqueueJobResponse> enqueueRename(
+            @RequestParam("path") String path, @RequestParam("newName") String newName)
+            throws com.fasterxml.jackson.core.JsonProcessingException {
+        try {
+            fileService.validateRenameTarget(path, newName);
+        } catch (FileService.NoSuchFileException e) {
+            return org.springframework.http.ResponseEntity.notFound().build();
+        } catch (FileService.FileAlreadyExistsException e) {
+            return org.springframework.http.ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        String payload =
+                objectMapper.writeValueAsString(java.util.Map.of("path", path, "newName", newName));
+        EnqueueJobResponse response =
+                queueService.enqueue(JobType.RENAME, JobMode.unattended, payload);
+        return org.springframework.http.ResponseEntity.accepted().body(response);
     }
 
     @GetMapping("/jobs/{id}/review")

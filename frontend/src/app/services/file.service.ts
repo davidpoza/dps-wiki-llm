@@ -4,6 +4,11 @@ import { Observable } from 'rxjs';
 import { TreeNode } from 'primeng/api';
 import { FileVersion } from '../types';
 
+export interface EnqueueJobResponse {
+  jobId: string;
+  queuePosition: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class FileService {
   private readonly http = inject(HttpClient);
@@ -32,6 +37,10 @@ export class FileService {
 
   renameFile(path: string, newName: string): Observable<void> {
     return this.http.post<void>('/api/files/rename', null, { params: { path, newName } });
+  }
+
+  renameJob(path: string, newName: string): Observable<EnqueueJobResponse> {
+    return this.http.post<EnqueueJobResponse>('/api/jobs/rename', null, { params: { path, newName } });
   }
 
   createFile(path: string): Observable<void> {

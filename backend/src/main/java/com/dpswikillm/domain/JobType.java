@@ -6,5 +6,6 @@ public enum JobType {
     REVERT,
     ENRICH,
     MERGE,
-    REGENERATE_KEYWORDS
+    REGENERATE_KEYWORDS,
+    RENAME
 }

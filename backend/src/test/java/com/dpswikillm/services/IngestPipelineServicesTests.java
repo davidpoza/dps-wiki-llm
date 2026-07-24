@@ -36,6 +36,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -778,6 +779,11 @@ class IngestPipelineServicesTests {
         @Override
         public List<DocumentRecord> findDocumentsByDocType(String docType) {
             return documents.stream().filter(d -> docType.equals(d.docType())).toList();
+        }
+
+        @Override
+        public Optional<Instant> findEmbeddingStatus(String path) {
+            return Optional.empty();
         }
     }
 

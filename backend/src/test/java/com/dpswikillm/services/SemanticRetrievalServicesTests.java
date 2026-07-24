@@ -15,6 +15,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -271,6 +272,11 @@ class SemanticRetrievalServicesTests {
         @Override
         public List<DocumentRecord> findDocumentsByDocType(String docType) {
             return documents.stream().filter(d -> docType.equals(d.docType())).toList();
+        }
+
+        @Override
+        public Optional<Instant> findEmbeddingStatus(String path) {
+            return Optional.empty();
         }
     }
 }

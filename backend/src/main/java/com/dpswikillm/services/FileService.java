@@ -147,6 +147,26 @@ public class FileService {
         webDavSyncService.pushDeleted(relativePath);
     }
 
+    public void validateRenameTarget(String relativePath, String newName) {
+        if (newName == null || newName.isBlank()) {
+            throw new IllegalArgumentException("New name is required");
+        }
+        if (newName.contains("/") || newName.contains("\\")) {
+            throw new IllegalArgumentException("New name must not contain path separators");
+        }
+        Path resolved = resolveAndValidate(relativePath);
+        if (!Files.exists(resolved)) {
+            throw new NoSuchFileException(relativePath);
+        }
+        Path target = resolved.resolveSibling(newName).normalize();
+        if (!target.startsWith(pathResolver.vaultRoot())) {
+            throw new IllegalArgumentException("Target path escapes vault root");
+        }
+        if (Files.exists(target)) {
+            throw new FileAlreadyExistsException(newName);
+        }
+    }
+
     public void renameFile(String relativePath, String newName) {
         if (newName == null || newName.isBlank()) {
             throw new IllegalArgumentException("New name is required");

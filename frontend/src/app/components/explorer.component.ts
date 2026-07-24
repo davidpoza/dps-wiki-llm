@@ -158,6 +158,14 @@ import { FormsModule } from '@angular/forms';
                 @if (isDirty()) {
                   <span class="dirty-dot" title="Unsaved changes">●</span>
                 }
+                <p-button
+                  icon="pi pi-pencil"
+                  size="small"
+                  severity="secondary"
+                  [text]="true"
+                  (onClick)="openRenameDialogFromHeader()"
+                  title="Rename file"
+                />
               </div>
               <div class="editor-actions">
                 <div class="toolbar-group">
@@ -1563,29 +1571,23 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     this.showRenameDialog.set(true);
   }
 
+  openRenameDialogFromHeader(): void {
+    const path = this.selectedPath();
+    if (!path) return;
+    const name = path.includes('/') ? path.substring(path.lastIndexOf('/') + 1) : path;
+    this.contextMenuNode.set({ label: name, data: path });
+    this.renameValue.set(name);
+    this.showRenameDialog.set(true);
+  }
+
   confirmRename(): void {
     const node = this.contextMenuNode();
     const newName = this.renameValue().trim();
     if (!node || !newName) return;
     this.showRenameDialog.set(false);
-    this.fileService.renameFile(node.data as string, newName).subscribe({
+    this.fileService.renameJob(node.data as string, newName).subscribe({
       next: () => {
-        if (this.selectedPath() === (node.data as string)) {
-          const dir = (node.data as string).includes('/')
-            ? (node.data as string).substring(0, (node.data as string).lastIndexOf('/') + 1)
-            : '';
-          const newPath = dir + newName;
-          this.selectedPath.set(newPath);
-          this.selectedLabel.set(newName);
-          const segments = newPath.split('/');
-          this.router.navigate(['explorer', ...segments]);
-        }
-        this.reloadTree();
-        this.messageService.add({
-          severity: 'success',
-          summary: this.t.translate('explorer.toastSummaryRenamed'),
-          detail: this.t.translate('explorer.toastSuccessRenamed', { name: newName }),
-        });
+        this.router.navigate(['/jobs']);
       },
       error: (err) => {
         const msg =

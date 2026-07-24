@@ -18,7 +18,7 @@
 
 ## 4. Verificación
 
-- [ ] 4.1 Verificar que al abrir un documento con embedding el icono aparece en estado activo con la fecha en el tooltip
-- [ ] 4.2 Verificar que al abrir un documento sin embedding el icono aparece en estado inactivo con mensaje apropiado
-- [ ] 4.3 Verificar que al cambiar de documento el indicador se actualiza correctamente
-- [ ] 4.4 Verificar que un fallo del endpoint no rompe el editor (icono simplemente no aparece)
+- [x] 4.1 Verificar que al abrir un documento con embedding el icono aparece en estado activo con la fecha en el tooltip
+- [x] 4.2 Verificar que al abrir un documento sin embedding el icono aparece en estado inactivo con mensaje apropiado
+- [x] 4.3 Verificar que al cambiar de documento el indicador se actualiza correctamente
+- [x] 4.4 Verificar que un fallo del endpoint no rompe el editor (icono simplemente no aparece)
