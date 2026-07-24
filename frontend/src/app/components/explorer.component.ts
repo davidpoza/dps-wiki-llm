@@ -56,6 +56,8 @@ import { FileVersion } from '../types';
 import { ProgressBarModule } from 'primeng/progressbar';
 import { Checkbox } from 'primeng/checkbox';
 import { FormsModule } from '@angular/forms';
+import { GraphViewComponent } from './graph-view.component';
+import { GraphSettingsComponent, GraphSettings, DEFAULT_GRAPH_SETTINGS } from './graph-settings.component';
 
 @Component({
   selector: 'app-explorer',
@@ -76,6 +78,8 @@ import { FormsModule } from '@angular/forms';
     NavComponent,
     Checkbox,
     FormsModule,
+    GraphViewComponent,
+    GraphSettingsComponent,
   ],
   providers: [MessageService, ConfirmationService],
   template: `
@@ -113,6 +117,15 @@ import { FormsModule } from '@angular/forms';
             title="Tabla de contenido"
             [class.sidebar-btn-active]="sidebarPanel() === 'toc'"
             (onClick)="toggleSidebarPanel('toc')"
+          />
+          <p-button
+            icon="pi pi-share-alt"
+            [text]="true"
+            severity="secondary"
+            size="small"
+            [title]="'explorer.graphView' | transloco"
+            [class.sidebar-btn-active]="sidebarPanel() === 'graph'"
+            (onClick)="toggleSidebarPanel('graph')"
           />
         </nav>
 
@@ -163,196 +176,205 @@ import { FormsModule } from '@angular/forms';
                 </p-tree>
               }
             </div>
+          } @else if (sidebarPanel() === 'graph') {
+            <app-graph-settings [settings]="graphSettings()" (settingsChange)="onGraphSettingsChange($event)" />
           }
         </aside>
 
         <div class="resizer" [class.active]="isResizing" (mousedown)="onResizerMouseDown($event)"></div>
 
         <section class="editor-panel">
-          @if (selectedPath()) {
-            <div class="editor-header">
-              <div class="editor-title" [title]="selectedPath()">
-                @if (embeddingStatus(); as es) {
-                  <span
-                    class="embedding-status-icon"
-                    [class.embedding-status-icon--has]="es.hasEmbedding"
-                    [title]="
-                      es.hasEmbedding && es.lastUpdated
-                        ? 'Embedding: ' + formatDate(es.lastUpdated)
-                        : 'Sin embedding calculado'
-                    "
-                  >
-                    <i [class]="es.hasEmbedding ? 'pi pi-circle-fill' : 'pi pi-circle'"></i>
-                  </span>
-                }
-                @if (selectedPathParts(); as parts) {
-                  <span class="file-path">
-                    @if (parts.dir) {
-                      <span class="file-path-dir">{{ parts.dir }}</span>
-                    }
-                    <span class="file-title">{{ parts.name }}</span>
-                  </span>
-                }
-                @if (isDirty()) {
-                  <span class="dirty-dot" title="Unsaved changes">●</span>
-                }
-                <p-button
-                  icon="pi pi-pencil"
-                  size="small"
-                  severity="secondary"
-                  [text]="true"
-                  (onClick)="openRenameDialogFromHeader()"
-                  title="Rename file"
-                />
-              </div>
-              <div class="editor-actions">
-                <div class="toolbar-group">
+          @if (sidebarPanel() === 'graph') {
+            <app-graph-view [settings]="graphSettings()" [activePath]="selectedPath()" />
+          }
+          <div [hidden]="sidebarPanel() === 'graph'">
+            @if (selectedPath()) {
+              <div class="editor-header">
+                <div class="editor-title" [title]="selectedPath()">
+                  @if (embeddingStatus(); as es) {
+                    <span
+                      class="embedding-status-icon"
+                      [class.embedding-status-icon--has]="es.hasEmbedding"
+                      [title]="
+                        es.hasEmbedding && es.lastUpdated
+                          ? 'Embedding: ' + formatDate(es.lastUpdated)
+                          : 'Sin embedding calculado'
+                      "
+                    >
+                      <i [class]="es.hasEmbedding ? 'pi pi-circle-fill' : 'pi pi-circle'"></i>
+                    </span>
+                  }
+                  @if (selectedPathParts(); as parts) {
+                    <span class="file-path">
+                      @if (parts.dir) {
+                        <span class="file-path-dir">{{ parts.dir }}</span>
+                      }
+                      <span class="file-title">{{ parts.name }}</span>
+                    </span>
+                  }
+                  @if (isDirty()) {
+                    <span class="dirty-dot" title="Unsaved changes">●</span>
+                  }
                   <p-button
-                    icon="pi pi-table"
+                    icon="pi pi-pencil"
                     size="small"
                     severity="secondary"
                     [text]="true"
-                    (onClick)="insertTable()"
-                    title="Insertar tabla"
-                    [disabled]="editorMode() === 'raw'"
-                  />
-                  <p-button
-                    icon="pi pi-cloud-download"
-                    size="small"
-                    severity="secondary"
-                    [text]="true"
-                    [loading]="syncing()"
-                    (onClick)="sync()"
-                    [title]="'sync.button' | transloco"
-                  />
-                  <p-button
-                    icon="pi pi-code"
-                    size="small"
-                    severity="secondary"
-                    [text]="true"
-                    title="Modo raw"
-                    [class.sidebar-btn-active]="editorMode() === 'raw'"
-                    [disabled]="!selectedPath()"
-                    (onClick)="toggleEditorMode()"
+                    (onClick)="openRenameDialogFromHeader()"
+                    title="Rename file"
                   />
                 </div>
-                <div class="actions-divider"></div>
-                <div class="doc-actions">
-                  <p-button
-                    icon="pi pi-save"
-                    size="small"
-                    [disabled]="!isDirty()"
-                    (onClick)="save()"
-                    [title]="'explorer.save' | transloco"
-                  />
-                  <p-button
-                    icon="pi pi-sparkles"
-                    size="small"
-                    severity="secondary"
-                    [disabled]="editorMode() === 'raw'"
-                    (onClick)="enrich()"
-                    [title]="'explorer.enrichButton' | transloco"
-                  />
-                  <p-button
-                    icon="pi pi-sitemap"
-                    size="small"
-                    severity="secondary"
-                    (onClick)="openLinkDiscovery()"
-                    [title]="'explorer.discoverLinks' | transloco"
-                  />
-                  <p-button
-                    icon="pi pi-history"
-                    size="small"
-                    severity="secondary"
-                    (onClick)="openVersions()"
-                    [title]="'versions.button' | transloco"
-                  />
-                  <p-button
-                    icon="pi pi-file-pdf"
-                    size="small"
-                    severity="secondary"
-                    (onClick)="generatePdf()"
-                    [title]="'explorer.generatePdf' | transloco"
-                  />
-                  @if (isKeywordEligible()) {
+                <div class="editor-actions">
+                  <div class="toolbar-group">
                     <p-button
-                      icon="pi pi-tag"
+                      icon="pi pi-table"
                       size="small"
                       severity="secondary"
-                      [loading]="regeneratingKeywords()"
-                      [disabled]="regeneratingKeywords()"
-                      (onClick)="regenerateKeywords()"
-                      title="Regenerar keywords"
+                      [text]="true"
+                      (onClick)="insertTable()"
+                      title="Insertar tabla"
+                      [disabled]="editorMode() === 'raw'"
                     />
-                  }
-                  <p-button
-                    icon="pi pi-trash"
-                    size="small"
-                    severity="danger"
-                    (onClick)="deleteCurrentFile()"
-                    [title]="'explorer.contextMenuDelete' | transloco"
-                  />
-                </div>
-              </div>
-            </div>
-            @if (frontmatterEntries().length > 0) {
-              <div class="frontmatter-panel">
-                <div class="frontmatter-header">
-                  <span class="frontmatter-title">{{ 'explorer.metadata' | transloco }}</span>
-                  <div class="fm-actions">
-                    <button class="fm-toggle" (click)="toggleFrontmatterEdit()" [class.active]="editingFrontmatter()">
-                      {{ editingFrontmatter() ? ('explorer.editView' | transloco) : ('explorer.editEdit' | transloco) }}
-                    </button>
-                    <button class="fm-toggle" (click)="toggleFrontmatter()">
-                      {{ showFrontmatter() ? '▲' : '▼' }}
-                    </button>
+                    <p-button
+                      icon="pi pi-cloud-download"
+                      size="small"
+                      severity="secondary"
+                      [text]="true"
+                      [loading]="syncing()"
+                      (onClick)="sync()"
+                      [title]="'sync.button' | transloco"
+                    />
+                    <p-button
+                      icon="pi pi-code"
+                      size="small"
+                      severity="secondary"
+                      [text]="true"
+                      title="Modo raw"
+                      [class.sidebar-btn-active]="editorMode() === 'raw'"
+                      [disabled]="!selectedPath()"
+                      (onClick)="toggleEditorMode()"
+                    />
+                  </div>
+                  <div class="actions-divider"></div>
+                  <div class="doc-actions">
+                    <p-button
+                      icon="pi pi-save"
+                      size="small"
+                      [disabled]="!isDirty()"
+                      (onClick)="save()"
+                      [title]="'explorer.save' | transloco"
+                    />
+                    <p-button
+                      icon="pi pi-sparkles"
+                      size="small"
+                      severity="secondary"
+                      [disabled]="editorMode() === 'raw'"
+                      (onClick)="enrich()"
+                      [title]="'explorer.enrichButton' | transloco"
+                    />
+                    <p-button
+                      icon="pi pi-sitemap"
+                      size="small"
+                      severity="secondary"
+                      (onClick)="openLinkDiscovery()"
+                      [title]="'explorer.discoverLinks' | transloco"
+                    />
+                    <p-button
+                      icon="pi pi-history"
+                      size="small"
+                      severity="secondary"
+                      (onClick)="openVersions()"
+                      [title]="'versions.button' | transloco"
+                    />
+                    <p-button
+                      icon="pi pi-file-pdf"
+                      size="small"
+                      severity="secondary"
+                      (onClick)="generatePdf()"
+                      [title]="'explorer.generatePdf' | transloco"
+                    />
+                    @if (isKeywordEligible()) {
+                      <p-button
+                        icon="pi pi-tag"
+                        size="small"
+                        severity="secondary"
+                        [loading]="regeneratingKeywords()"
+                        [disabled]="regeneratingKeywords()"
+                        (onClick)="regenerateKeywords()"
+                        title="Regenerar keywords"
+                      />
+                    }
+                    <p-button
+                      icon="pi pi-trash"
+                      size="small"
+                      severity="danger"
+                      (onClick)="deleteCurrentFile()"
+                      [title]="'explorer.contextMenuDelete' | transloco"
+                    />
                   </div>
                 </div>
-                @if (showFrontmatter()) {
-                  @if (editingFrontmatter()) {
-                    <div class="fm-editor">
-                      <textarea
-                        class="fm-yaml-textarea"
-                        [class.error]="frontmatterYamlError()"
-                        [value]="frontmatterRawYaml()"
-                        (input)="onFrontmatterYamlChange($any($event.target).value)"
-                        spellcheck="false"
-                      ></textarea>
-                      @if (frontmatterYamlError()) {
-                        <span class="fm-yaml-error">{{ 'explorer.yamlInvalid' | transloco }}</span>
-                      }
-                    </div>
-                  } @else {
-                    <div class="frontmatter-entries">
-                      @for (entry of frontmatterEntries(); track entry[0]) {
-                        <div class="fm-entry">
-                          <span class="fm-key">{{ entry[0] }}</span>
-                          <span class="fm-value">{{ formatFmValue(entry[1]) }}</span>
-                        </div>
-                      }
-                    </div>
-                  }
-                }
               </div>
+              @if (frontmatterEntries().length > 0) {
+                <div class="frontmatter-panel">
+                  <div class="frontmatter-header">
+                    <span class="frontmatter-title">{{ 'explorer.metadata' | transloco }}</span>
+                    <div class="fm-actions">
+                      <button class="fm-toggle" (click)="toggleFrontmatterEdit()" [class.active]="editingFrontmatter()">
+                        {{
+                          editingFrontmatter() ? ('explorer.editView' | transloco) : ('explorer.editEdit' | transloco)
+                        }}
+                      </button>
+                      <button class="fm-toggle" (click)="toggleFrontmatter()">
+                        {{ showFrontmatter() ? '▲' : '▼' }}
+                      </button>
+                    </div>
+                  </div>
+                  @if (showFrontmatter()) {
+                    @if (editingFrontmatter()) {
+                      <div class="fm-editor">
+                        <textarea
+                          class="fm-yaml-textarea"
+                          [class.error]="frontmatterYamlError()"
+                          [value]="frontmatterRawYaml()"
+                          (input)="onFrontmatterYamlChange($any($event.target).value)"
+                          spellcheck="false"
+                        ></textarea>
+                        @if (frontmatterYamlError()) {
+                          <span class="fm-yaml-error">{{ 'explorer.yamlInvalid' | transloco }}</span>
+                        }
+                      </div>
+                    } @else {
+                      <div class="frontmatter-entries">
+                        @for (entry of frontmatterEntries(); track entry[0]) {
+                          <div class="fm-entry">
+                            <span class="fm-key">{{ entry[0] }}</span>
+                            <span class="fm-value">{{ formatFmValue(entry[1]) }}</span>
+                          </div>
+                        }
+                      </div>
+                    }
+                  }
+                </div>
+              }
             }
-          }
-          <div
-            #editorContainer
-            class="milkdown-container"
-            [class.hidden]="!selectedPath() || editorMode() === 'raw'"
-          ></div>
-          @if (selectedPath() && editorMode() === 'raw') {
-            <textarea
-              class="raw-textarea"
-              [value]="rawModeText()"
-              (input)="rawModeText.set($any($event.target).value); isDirty.set(true)"
-              spellcheck="false"
-              autocomplete="off"
-            ></textarea>
-          }
-          @if (!selectedPath()) {
-            <div class="placeholder">{{ 'explorer.selectFile' | transloco }}</div>
-          }
+            <div
+              #editorContainer
+              class="milkdown-container"
+              [class.hidden]="!selectedPath() || editorMode() === 'raw'"
+            ></div>
+            @if (selectedPath() && editorMode() === 'raw') {
+              <textarea
+                class="raw-textarea"
+                [value]="rawModeText()"
+                (input)="rawModeText.set($any($event.target).value); isDirty.set(true)"
+                spellcheck="false"
+                autocomplete="off"
+              ></textarea>
+            }
+            @if (!selectedPath()) {
+              <div class="placeholder">{{ 'explorer.selectFile' | transloco }}</div>
+            }
+          </div>
         </section>
       </div>
     </main>
@@ -1450,8 +1472,11 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly frontmatterRawYaml = signal('');
   readonly frontmatterYamlError = signal(false);
   readonly treePanelWidth = signal(280);
-  readonly sidebarPanel = signal<'collapsed' | 'files' | 'toc'>(window.innerWidth < 768 ? 'collapsed' : 'files');
+  readonly sidebarPanel = signal<'collapsed' | 'files' | 'toc' | 'graph'>(
+    window.innerWidth < 768 ? 'collapsed' : 'files',
+  );
   readonly treePanelCollapsed = computed(() => this.sidebarPanel() === 'collapsed');
+  readonly graphSettings = signal<GraphSettings>({ ...DEFAULT_GRAPH_SETTINGS });
   readonly contextMenuItems = signal<MenuItem[]>([]);
   readonly contextMenuNode = signal<TreeNode | null>(null);
   readonly showRenameDialog = signal(false);
@@ -2168,8 +2193,12 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     return String(value ?? '');
   }
 
-  toggleSidebarPanel(mode: 'files' | 'toc'): void {
+  toggleSidebarPanel(mode: 'files' | 'toc' | 'graph'): void {
     this.sidebarPanel.set(this.sidebarPanel() === mode ? 'collapsed' : mode);
+  }
+
+  onGraphSettingsChange(settings: GraphSettings): void {
+    this.graphSettings.set(settings);
   }
 
   toggleEditorMode(): void {

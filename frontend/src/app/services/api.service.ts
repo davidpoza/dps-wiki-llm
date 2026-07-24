@@ -184,6 +184,21 @@ export interface SyncDone {
 
 export type SyncEvent = SyncProgress | SyncDone;
 
+export interface GraphNode {
+  id: string;
+  label: string;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+}
+
+export interface GraphResponse {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
@@ -580,5 +595,9 @@ export class ApiService {
     return this.http.get<EmbeddingStatus>('/api/documents/embedding-status', {
       params: { path },
     });
+  }
+
+  getGraph(): Observable<GraphResponse> {
+    return this.http.get<GraphResponse>('/api/graph');
   }
 }

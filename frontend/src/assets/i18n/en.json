@@ -209,7 +209,20 @@
     "linkDiscoveryScore": "Relevance",
     "linkDiscoveryClose": "Close",
     "linkDiscoveryError": "Error discovering links",
-    "linkDiscoveryNoKeywords": "This document has no keywords in its frontmatter. Ingest it first to generate them."
+    "linkDiscoveryNoKeywords": "This document has no keywords in its frontmatter. Ingest it first to generate them.",
+    "graphView": "Graph view"
+  },
+  "graph": {
+    "filterPlaceholder": "Filter notes...",
+    "showOrphans": "Show orphans",
+    "nodeSize": "Node size",
+    "lineThickness": "Line thickness",
+    "centerForce": "Center force",
+    "repelForce": "Repel force",
+    "linkForce": "Link force",
+    "linkDistance": "Link distance",
+    "loading": "Loading graph...",
+    "error": "Could not load graph"
   },
   "viewer": {
     "delete": "Delete",

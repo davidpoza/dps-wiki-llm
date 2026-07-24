@@ -209,7 +209,20 @@
     "linkDiscoveryScore": "Relevancia",
     "linkDiscoveryClose": "Cerrar",
     "linkDiscoveryError": "Error al buscar enlaces",
-    "linkDiscoveryNoKeywords": "Este documento no tiene keywords en el frontmatter. Ingéstalo primero para generarlos."
+    "linkDiscoveryNoKeywords": "Este documento no tiene keywords en el frontmatter. Ingéstalo primero para generarlos.",
+    "graphView": "Vista de grafo"
+  },
+  "graph": {
+    "filterPlaceholder": "Filtrar notas...",
+    "showOrphans": "Mostrar huérfanos",
+    "nodeSize": "Tamaño de nodo",
+    "lineThickness": "Grosor de línea",
+    "centerForce": "Fuerza central",
+    "repelForce": "Fuerza de repulsión",
+    "linkForce": "Fuerza de enlace",
+    "linkDistance": "Distancia de enlace",
+    "loading": "Cargando grafo...",
+    "error": "No se pudo cargar el grafo"
   },
   "viewer": {
     "delete": "Eliminar",

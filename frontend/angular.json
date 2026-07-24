@@ -23,6 +23,7 @@
             "polyfills": ["zone.js"],
             "tsConfig": "tsconfig.app.json",
             "styles": ["src/styles.scss"],
+            "allowedCommonJsDependencies": ["cytoscape-fcose"],
             "assets": [
               {
                 "glob": "**/*",
