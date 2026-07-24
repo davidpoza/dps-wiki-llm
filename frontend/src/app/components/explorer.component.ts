@@ -5,6 +5,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   ElementRef,
   HostListener,
   inject,
@@ -47,6 +48,7 @@ import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { ApiService, DiscoveredLink, EmbeddingStatus } from '../services/api.service';
 import { AuthService } from '../services/auth.service';
 import { FileService } from '../services/file.service';
+import { GlobalSearchService } from '../services/global-search.service';
 import { NavComponent } from './nav.component';
 import { UnsavedChangesAware } from '../unsaved-changes.guard';
 import { FileVersion } from '../types';
@@ -91,7 +93,7 @@ import { FormsModule } from '@angular/forms';
             severity="secondary"
             size="small"
             [title]="'explorer.searchFile' | transloco"
-            (onClick)="openSearch()"
+            (onClick)="globalSearchService.open()"
           />
           <p-button
             [icon]="treePanelCollapsed() ? 'pi pi-chevron-right' : 'pi pi-chevron-left'"
@@ -315,44 +317,6 @@ import { FormsModule } from '@angular/forms';
         }
       </div>
     }
-
-    <p-dialog
-      [header]="'explorer.searchFile' | transloco"
-      [(visible)]="showSearch"
-      [modal]="true"
-      [draggable]="false"
-      [style]="{ width: '480px' }"
-      (onShow)="searchInput.focus()"
-    >
-      <div class="search-box">
-        <input
-          #searchInput
-          pInputText
-          type="text"
-          [placeholder]="'explorer.searchPlaceholder' | transloco"
-          class="w-full"
-          [value]="searchQuery()"
-          (input)="onSearchInput($any($event.target).value)"
-          (keydown)="onSearchKeyDown($event)"
-        />
-      </div>
-      <div class="search-results">
-        @if (filteredFiles().length === 0) {
-          <p class="search-empty">{{ 'explorer.noResults' | transloco }}</p>
-        }
-        @for (file of filteredFiles(); track file.data; let i = $index) {
-          <div class="search-result" [class.is-active]="searchHighlightIndex() === i" (click)="selectFromSearch(file)">
-            <i class="pi pi-file"></i>
-            <span class="search-result-info">
-              <span [innerHTML]="file.label"></span>
-              @if (searchResultPath(file); as dir) {
-                <span class="search-result-path">{{ dir }}</span>
-              }
-            </span>
-          </div>
-        }
-      </div>
-    </p-dialog>
 
     <p-dialog
       [header]="'explorer.dialogRenameHeader' | transloco"
@@ -719,52 +683,6 @@ import { FormsModule } from '@angular/forms';
       }
       .search-box input {
         width: 100%;
-      }
-      .search-results {
-        max-height: 360px;
-        overflow-y: auto;
-      }
-      .search-result {
-        display: flex;
-        align-items: flex-start;
-        gap: 8px;
-        padding: 8px 10px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.875rem;
-        color: var(--app-text);
-        transition: background 0.1s;
-      }
-      .search-result:hover {
-        background: var(--app-surface-subtle);
-      }
-      .search-result.is-active {
-        background: var(--app-primary-soft);
-        color: var(--app-primary);
-      }
-      .search-result .pi {
-        color: var(--app-text-muted);
-        font-size: 0.8rem;
-        flex-shrink: 0;
-      }
-      .search-result-info {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-        flex: 1;
-      }
-      .search-result-path {
-        font-size: 0.75rem;
-        color: var(--app-text-muted);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .search-empty {
-        text-align: center;
-        color: var(--app-text-muted);
-        font-size: 0.875rem;
-        padding: 24px 0;
       }
       .tree-label {
         display: block;
@@ -1371,6 +1289,31 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   private readonly confirmationService = inject(ConfirmationService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly t = inject(TranslocoService);
+  protected readonly globalSearchService = inject(GlobalSearchService);
+
+  constructor() {
+    effect(() => {
+      const path = this.globalSearchService.pendingNavigation();
+      if (path === null) return;
+      this.globalSearchService.clearNavigation();
+      const node = this.allFiles().find((n) => n.data === path);
+      if (!node) {
+        this.router.navigate(['explorer', ...path.split('/')]);
+        return;
+      }
+      if (this.isDirty()) {
+        this.confirmationService.confirm({
+          message: this.t.translate('explorer.confirmUnsavedMessage'),
+          header: this.t.translate('explorer.confirmUnsavedHeader'),
+          icon: 'pi pi-exclamation-triangle',
+          accept: () => this.openFile(node),
+          reject: () => {},
+        });
+      } else {
+        this.openFile(node);
+      }
+    });
+  }
 
   readonly treeNodes = signal<TreeNode[]>([]);
   readonly selectedPath = signal<string | null>(null);
@@ -1396,9 +1339,6 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly frontmatterYamlError = signal(false);
   readonly treePanelWidth = signal(280);
   readonly treePanelCollapsed = signal(window.innerWidth < 768);
-  readonly showSearch = signal(false);
-  readonly searchQuery = signal('');
-  readonly searchHighlightIndex = signal<number>(-1);
   readonly contextMenuItems = signal<MenuItem[]>([]);
   readonly contextMenuNode = signal<TreeNode | null>(null);
   readonly showRenameDialog = signal(false);
@@ -1447,11 +1387,6 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly allFiles = computed(() => {
     const flatten = (nodes: TreeNode[]): TreeNode[] => nodes.flatMap((n) => (n.leaf ? [n] : flatten(n.children ?? [])));
     return flatten(this.treeNodes());
-  });
-
-  readonly filteredFiles = computed(() => {
-    const q = this.searchQuery().toLowerCase().trim();
-    return q ? this.allFiles().filter((n) => (n.data as string).toLowerCase().includes(q)) : this.allFiles();
   });
 
   selectedNode: TreeNode | null = null;
@@ -2105,59 +2040,6 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     this.wikilinkCoords.set(null);
   }
 
-  openSearch(): void {
-    this.searchQuery.set('');
-    this.searchHighlightIndex.set(-1);
-    this.showSearch.set(true);
-  }
-
-  onSearchInput(value: string): void {
-    this.searchQuery.set(value);
-    this.searchHighlightIndex.set(-1);
-  }
-
-  onSearchKeyDown(event: KeyboardEvent): void {
-    const count = this.filteredFiles().length;
-    if (count === 0) return;
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      this.searchHighlightIndex.update((i) => (i + 1) % count);
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      this.searchHighlightIndex.update((i) => (i <= 0 ? count - 1 : i - 1));
-    } else if (event.key === 'Enter') {
-      this.selectHighlightedResult();
-    }
-  }
-
-  selectHighlightedResult(): void {
-    const idx = this.searchHighlightIndex();
-    if (idx === -1) return;
-    const file = this.filteredFiles()[idx];
-    if (file) this.selectFromSearch(file);
-  }
-
-  searchResultPath(node: TreeNode): string {
-    const path = node.data as string;
-    const idx = path.lastIndexOf('/');
-    return idx === -1 ? '' : path.slice(0, idx + 1);
-  }
-
-  selectFromSearch(node: TreeNode): void {
-    this.showSearch.set(false);
-    if (this.isDirty()) {
-      this.confirmationService.confirm({
-        message: this.t.translate('explorer.confirmUnsavedMessage'),
-        header: this.t.translate('explorer.confirmUnsavedHeader'),
-        icon: 'pi pi-exclamation-triangle',
-        accept: () => this.openFile(node),
-        reject: () => {},
-      });
-    } else {
-      this.openFile(node);
-    }
-  }
-
   onResizerMouseDown(event: MouseEvent): void {
     if (this.treePanelCollapsed()) return;
     this.isResizing = true;
@@ -2195,12 +2077,6 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   onCtrlS(event: Event): void {
     event.preventDefault();
     if (this.isDirty()) this.save();
-  }
-
-  @HostListener('document:keydown.control.p', ['$event'])
-  onCtrlP(event: Event): void {
-    event.preventDefault();
-    this.openSearch();
   }
 
   @HostListener('window:beforeunload', ['$event'])

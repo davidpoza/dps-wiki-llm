@@ -2,14 +2,16 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { LoadingService } from './services/loading.service';
+import { GlobalSearchModalComponent } from './components/global-search-modal.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, ProgressSpinnerModule],
+  imports: [RouterOutlet, ProgressSpinnerModule, GlobalSearchModalComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <router-outlet />
+    <app-global-search-modal />
     @if (loading.active()) {
       <div class="global-spinner-overlay">
         <p-progressSpinner strokeWidth="4" />
