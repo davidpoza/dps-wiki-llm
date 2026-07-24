@@ -54,3 +54,28 @@ Cuando el LLM judge confirma una coincidencia, el sistema SHALL añadir el slug 
 - **WHEN** el frontmatter de `machine-learning.md` ya contiene `aliases: [ml]`
 - **THEN** la acción `update` no modifica la lista de aliases
 
+### Requirement: El escaneo de dedup reporta correctamente los concepts sin embedding
+Durante el escaneo de duplicados, el sistema SHALL determinar qué conceptos carecen de embedding consultando directamente la tabla `document_embeddings` (JOIN con `documents` filtrado por `doc_type = "concept"` y el modelo activo). El sistema SHALL emitir un evento `concept-dedup-warning` únicamente para conceptos que no tengan fila en `document_embeddings`. Un concepto que tiene embedding pero no supera el umbral de similitud con ningún otro concepto SHALL ser reportado como `concept-dedup-scan`, no como advertencia.
+
+#### Scenario: Concept con embedding pero sin par similar
+- **WHEN** `wiki/concepts/unique-concept.md` tiene embedding en la tabla pero su similitud con todos los demás conceptos es `< 0.88`
+- **THEN** el scan emite `concept-dedup-scan` para ese concept, no `concept-dedup-warning`
+
+#### Scenario: Concept sin embedding emite advertencia correcta
+- **WHEN** `wiki/concepts/orphan-concept.md` no tiene fila en `document_embeddings`
+- **THEN** el scan emite `concept-dedup-warning` para ese concept
+
+### Requirement: El escaneo de dedup envía heartbeat durante las llamadas al LLM judge
+Antes de invocar al LLM judge para cada grupo de candidatos, el sistema SHALL emitir un evento de progreso `concept-dedup-judge` via SSE con el índice actual del grupo y el total de grupos. Esto mantiene la conexión SSE activa durante la fase de juicio y previene que un proxy cierre la conexión por inactividad.
+
+#### Scenario: Heartbeat emitido antes de cada llamada al judge
+- **WHEN** el scan tiene 3 grupos candidatos a juzgar y empieza el juicio del grupo 2
+- **THEN** se emite un evento de progreso con `step = "concept-dedup-judge"` y `current = 2`, `total = 3` antes de llamar al LLM
+
+### Requirement: Errores de conexión SSE no abortan el escaneo en curso
+Si el cliente SSE se desconecta mientras el escaneo está en progreso (e.g., `IOException: Broken pipe` o `AsyncRequestNotUsableException`), el sistema SHALL continuar el escaneo hasta su finalización sin lanzar excepción. Los intentos de enviar eventos a un cliente desconectado SHALL ser silenciados en el controlador.
+
+#### Scenario: Cliente desconecta durante el escaneo
+- **WHEN** el cliente cierra la conexión SSE cuando el scan ha procesado 50 de 100 conceptos
+- **THEN** el servidor continúa procesando los 50 restantes, el resultado se descarta silenciosamente sin loggear error, y no se lanza excepción que aborte el job
+
