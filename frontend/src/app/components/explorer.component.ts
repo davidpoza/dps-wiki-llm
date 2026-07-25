@@ -58,6 +58,7 @@ import { Checkbox } from 'primeng/checkbox';
 import { FormsModule } from '@angular/forms';
 import { GraphViewComponent } from './graph-view.component';
 import { GraphSettingsComponent, GraphSettings, DEFAULT_GRAPH_SETTINGS } from './graph-settings.component';
+import { LinkExplainModalComponent } from './link-explain-modal.component';
 
 @Component({
   selector: 'app-explorer',
@@ -80,6 +81,7 @@ import { GraphSettingsComponent, GraphSettings, DEFAULT_GRAPH_SETTINGS } from '.
     FormsModule,
     GraphViewComponent,
     GraphSettingsComponent,
+    LinkExplainModalComponent,
   ],
   providers: [MessageService, ConfirmationService],
   template: `
@@ -400,6 +402,25 @@ import { GraphSettingsComponent, GraphSettings, DEFAULT_GRAPH_SETTINGS } from '.
         }
       </div>
     }
+
+    @if (wikilinkContextMenuVisible()) {
+      <div
+        class="wikilink-context-menu"
+        [style.left.px]="wikilinkContextMenuX()"
+        [style.top.px]="wikilinkContextMenuY()"
+      >
+        <div class="wikilink-context-menu-item" (click)="openLinkExplainModal()">
+          <i class="pi pi-info-circle"></i>
+          <span>Explicar enlace</span>
+        </div>
+      </div>
+    }
+
+    <app-link-explain-modal
+      [(visible)]="linkExplainModalVisible"
+      [sourcePath]="selectedPath()"
+      [targetPath]="linkExplainTarget()"
+    />
 
     <p-dialog
       [header]="'explorer.dialogRenameHeader' | transloco"
@@ -768,6 +789,34 @@ import { GraphSettingsComponent, GraphSettings, DEFAULT_GRAPH_SETTINGS } from '.
         padding: 12px 14px;
         font-size: 0.875rem;
         color: var(--app-text-muted);
+      }
+      .wikilink-context-menu {
+        position: fixed;
+        z-index: 9999;
+        background: var(--app-surface);
+        border: 1px solid var(--app-border-strong);
+        border-radius: 6px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        min-width: 180px;
+        padding: 4px 0;
+      }
+      .wikilink-context-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        color: var(--app-text);
+        transition: background 0.1s;
+      }
+      .wikilink-context-menu-item:hover {
+        background: var(--app-surface-subtle);
+      }
+      .wikilink-context-menu-item .pi {
+        color: var(--app-text-muted);
+        font-size: 0.85rem;
+        flex-shrink: 0;
       }
       .search-box {
         margin-bottom: 12px;
@@ -1554,6 +1603,13 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   readonly wikilinkQuery = signal<string | null>(null);
   readonly wikilinkCoords = signal<WikilinkCoords | null>(null);
+
+  readonly wikilinkContextMenuVisible = signal(false);
+  readonly wikilinkContextMenuX = signal(0);
+  readonly wikilinkContextMenuY = signal(0);
+  readonly wikilinkContextMenuTarget = signal<string | null>(null);
+  readonly linkExplainModalVisible = signal(false);
+  readonly linkExplainTarget = signal<string | null>(null);
   readonly wikilinkSuggestions = computed(() => {
     const q = this.wikilinkQuery();
     if (q === null) return [];
@@ -1994,6 +2050,13 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
             this.wikilinkCoords.set(coords);
             this.cdr.markForCheck();
           },
+          onContextMenu: (target, x, y) => {
+            this.wikilinkContextMenuTarget.set(target);
+            this.wikilinkContextMenuX.set(x);
+            this.wikilinkContextMenuY.set(y);
+            this.wikilinkContextMenuVisible.set(true);
+            this.cdr.markForCheck();
+          },
         }),
       )
       .create()
@@ -2341,6 +2404,18 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   @HostListener('document:keydown.escape')
   onEscape(): void {
     if (this.wikilinkQuery() !== null) this.closeWikilinkDropdown();
+    if (this.wikilinkContextMenuVisible()) this.wikilinkContextMenuVisible.set(false);
+  }
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    if (this.wikilinkContextMenuVisible()) this.wikilinkContextMenuVisible.set(false);
+  }
+
+  openLinkExplainModal(): void {
+    this.wikilinkContextMenuVisible.set(false);
+    this.linkExplainTarget.set(this.wikilinkContextMenuTarget());
+    this.linkExplainModalVisible.set(true);
   }
 
   @HostListener('document:keydown.control.s', ['$event'])
@@ -2645,7 +2720,14 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         if (event.type === 'progress') {
           this.linkDiscoveryStep.set({ step: event.step, current: event.current, total: event.total });
         } else if (event.type === 'done') {
-          this.linkDiscoveryResults.set(event.links);
+          const wikilinkRe = /\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
+          const existingSlugs = new Set<string>();
+          let m: RegExpExecArray | null;
+          while ((m = wikilinkRe.exec(this.currentMarkdown)) !== null) {
+            existingSlugs.add(m[1].trim());
+          }
+          const filtered = event.links.filter((l) => !existingSlugs.has(this.slugFromPath(l.path)));
+          this.linkDiscoveryResults.set(filtered);
           this.linkDiscoveryRunning.set(false);
         }
         this.cdr.markForCheck();

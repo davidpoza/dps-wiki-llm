@@ -15,6 +15,7 @@ export interface WikilinkCoords {
 export interface WikilinkPluginOptions {
   onNavigate: (target: string) => void;
   onAutocomplete: (query: string | null, coords: WikilinkCoords | null, view: EditorView | null) => void;
+  onContextMenu: (target: string, x: number, y: number) => void;
 }
 
 function buildDecorations(doc: Parameters<typeof DecorationSet.create>[0]): DecorationSet {
@@ -54,6 +55,19 @@ export function createWikilinkPlugin(options: WikilinkPluginOptions) {
             if (!match) return false;
             options.onNavigate(match[1].trim());
             return true;
+          },
+
+          handleDOMEvents: {
+            contextmenu: (_view, event) => {
+              const el = event.target as HTMLElement;
+              if (!el.classList.contains('wikilink-token')) return false;
+              const raw = el.textContent ?? '';
+              const match = /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/.exec(raw);
+              if (!match) return false;
+              event.preventDefault();
+              options.onContextMenu(match[1].trim(), event.clientX, event.clientY);
+              return true;
+            },
           },
         },
 
