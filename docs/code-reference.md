@@ -1,5 +1,12 @@
-# Code Reference
+# Referencia de codigo
 
-This document has been merged into [`docs/architecture.md`](architecture.md).
+La referencia del codigo esta distribuida por area:
 
-See [`docs/architecture.md`](architecture.md) for entry points, shared libraries, module details, indexing model, JSON contracts, and environment variables.
+- [Backend](07-backend/backend-architecture.md)
+- [Servicios backend](07-backend/services.md)
+- [Repositorios](07-backend/repositories.md)
+- [Frontend](06-frontend/frontend-architecture.md)
+- [API](05-api/endpoints.md)
+- [IA](03-ai/ai-architecture.md)
+- [Datos](04-data/data-model.md)
+
