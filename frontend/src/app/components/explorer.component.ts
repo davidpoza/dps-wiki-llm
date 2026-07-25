@@ -2414,8 +2414,24 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   openLinkExplainModal(): void {
     this.wikilinkContextMenuVisible.set(false);
-    this.linkExplainTarget.set(this.wikilinkContextMenuTarget());
+    const rawTarget = this.wikilinkContextMenuTarget();
+    const resolvedPath = rawTarget ? this.resolveWikilinkPath(rawTarget) : null;
+    this.linkExplainTarget.set(resolvedPath);
     this.linkExplainModalVisible.set(true);
+  }
+
+  private resolveWikilinkPath(target: string): string | null {
+    const label = target.toLowerCase();
+    const file =
+      this.allFiles().find(
+        (n) =>
+          ((n.data as string) ?? '').toLowerCase().replace(/\.md$/i, '') === label ||
+          ((n.data as string) ?? '').toLowerCase() === label,
+      ) ??
+      this.allFiles().find(
+        (n) => (n.label ?? '').toLowerCase().replace(/\.md$/i, '') === label || (n.label ?? '').toLowerCase() === label,
+      );
+    return file ? (file.data as string) : null;
   }
 
   @HostListener('document:keydown.control.s', ['$event'])

@@ -98,7 +98,11 @@ export class LinkExplainModalComponent {
   private fetchExplanation(): void {
     const src = this.sourcePath();
     const tgt = this.targetPath();
-    if (!src || !tgt) return;
+    if (!src || !tgt) {
+      this.errorMsg = 'La nota enlazada no existe.';
+      this.cdr.markForCheck();
+      return;
+    }
 
     this.loading = true;
     this.explanation = '';
