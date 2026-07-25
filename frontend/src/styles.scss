@@ -82,3 +82,22 @@ textarea,
 select {
   font: inherit;
 }
+
+/* Thin 3px scrollbars for explorer panels */
+.file-tree-panel .p-virtualscroller::-webkit-scrollbar,
+.milkdown-container::-webkit-scrollbar,
+.raw-textarea::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+.file-tree-panel .p-virtualscroller::-webkit-scrollbar-track,
+.milkdown-container::-webkit-scrollbar-track,
+.raw-textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+.file-tree-panel .p-virtualscroller::-webkit-scrollbar-thumb,
+.milkdown-container::-webkit-scrollbar-thumb,
+.raw-textarea::-webkit-scrollbar-thumb {
+  background: var(--app-border-strong);
+  border-radius: 2px;
+}

@@ -187,7 +187,7 @@ import { GraphSettingsComponent, GraphSettings, DEFAULT_GRAPH_SETTINGS } from '.
           @if (sidebarPanel() === 'graph') {
             <app-graph-view [settings]="graphSettings()" [activePath]="selectedPath()" />
           }
-          <div [hidden]="sidebarPanel() === 'graph'">
+          <div class="editor-content-wrap" [hidden]="sidebarPanel() === 'graph'">
             @if (selectedPath()) {
               <div class="editor-header">
                 <div class="editor-title" [title]="selectedPath()">
@@ -689,10 +689,13 @@ import { GraphSettingsComponent, GraphSettings, DEFAULT_GRAPH_SETTINGS } from '.
         border-right: none;
         background: var(--app-surface);
         overflow: hidden;
-        padding: 8px;
+        padding: 0;
         transition: width 0.2s ease;
         display: flex;
         flex-direction: column;
+      }
+      :host ::ng-deep .file-tree-panel .p-tree {
+        padding: 0;
       }
       .file-tree-panel.collapsed {
         padding: 0;
@@ -823,6 +826,13 @@ import { GraphSettingsComponent, GraphSettings, DEFAULT_GRAPH_SETTINGS } from '.
         flex-direction: column;
         overflow: hidden;
       }
+      .editor-content-wrap {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
       .editor-header {
         display: flex;
         flex-direction: column;
@@ -905,6 +915,18 @@ import { GraphSettingsComponent, GraphSettings, DEFAULT_GRAPH_SETTINGS } from '.
         overflow-y: auto;
         padding: 16px;
         background: var(--app-surface);
+      }
+      .milkdown-container {
+        scrollbar-width: thin;
+        scrollbar-color: var(--app-border-strong) transparent;
+      }
+      .raw-textarea {
+        scrollbar-width: thin;
+        scrollbar-color: var(--app-border-strong) transparent;
+      }
+      :host ::ng-deep .file-tree-panel .p-virtualscroller {
+        scrollbar-width: thin;
+        scrollbar-color: var(--app-border-strong) transparent;
       }
       .milkdown-container.hidden {
         display: none;
