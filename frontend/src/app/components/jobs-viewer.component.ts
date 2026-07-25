@@ -50,6 +50,16 @@ const PAGE_SIZE = 10;
                   (click)="cancel(job.id)"
                 ></button>
               }
+              @if (canAbandon(job)) {
+                <button
+                  pButton
+                  type="button"
+                  [label]="'common.abandon' | transloco"
+                  severity="danger"
+                  size="small"
+                  (click)="abandon(job.id)"
+                ></button>
+              }
             </div>
             <div class="job-id">{{ job.id }}</div>
 
@@ -411,6 +421,14 @@ export class JobsViewerComponent {
 
   cancel(jobId: string): void {
     this.api.cancelJob(jobId).subscribe({ error: (err) => console.error('Cancel failed', err) });
+  }
+
+  canAbandon(job: JobState): boolean {
+    return job.status === 'PROGRESS' || job.status === 'STARTED';
+  }
+
+  abandon(jobId: string): void {
+    this.api.abandonJob(jobId).subscribe({ error: (err) => console.error('Abandon failed', err) });
   }
 
   openFile(path: string): void {

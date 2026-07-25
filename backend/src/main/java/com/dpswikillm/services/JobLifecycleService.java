@@ -135,6 +135,19 @@ public class JobLifecycleService {
     }
 
     @Transactional
+    public void abandonJob(UUID jobId) {
+        Job job =
+                jobRepository
+                        .findById(jobId)
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (job.getStatus() != JobStatus.PROGRESS && job.getStatus() != JobStatus.STARTED) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Job cannot be abandoned in its current state");
+        }
+        transition(jobId, JobStatus.FAILED, "abandoned", "Abandoned by user");
+    }
+
+    @Transactional
     public void cancelJob(UUID jobId) {
         Job job =
                 jobRepository

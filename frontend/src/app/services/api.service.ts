@@ -247,6 +247,10 @@ export class ApiService {
     return this.http.delete<void>(`/api/jobs/${jobId}`);
   }
 
+  abandonJob(jobId: string): Observable<void> {
+    return this.http.post<void>(`/api/jobs/${jobId}/abandon`, {});
+  }
+
   lookupFiles(q: string, limit = 10): Observable<FileSearchResult[]> {
     return this.http.get<FileSearchResult[]>('/api/files/lookup', { params: { q, limit: String(limit) } });
   }
@@ -322,6 +326,10 @@ export class ApiService {
 
   updateResourceSettings(resourceFolder: string): Observable<ResourceSettings> {
     return this.http.put<ResourceSettings>('/api/settings/resources', { resourceFolder });
+  }
+
+  explainLink(sourcePath: string, targetPath: string): Observable<{ explanation: string }> {
+    return this.http.post<{ explanation: string }>('/api/notes/explain-link', { sourcePath, targetPath });
   }
 
   reindex(): Observable<ReindexProgress> {

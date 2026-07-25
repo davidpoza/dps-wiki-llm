@@ -146,6 +146,12 @@ public class JobController {
         lifecycleService.cancelJob(id);
     }
 
+    @PostMapping("/jobs/{id}/abandon")
+    @ResponseStatus(HttpStatus.OK)
+    public void abandonJob(@PathVariable UUID id) {
+        lifecycleService.abandonJob(id);
+    }
+
     @PostMapping("/ingest")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public EnqueueJobResponse enqueueIngest(@Valid @RequestBody EnqueueJobRequest request)

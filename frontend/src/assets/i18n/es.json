@@ -1,6 +1,7 @@
 {
   "common": {
     "cancel": "Cancelar",
+    "abandon": "Abandonar",
     "error": "Error",
     "save": "Guardar",
     "signOut": "Cerrar sesión",
