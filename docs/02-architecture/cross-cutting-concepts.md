@@ -26,9 +26,9 @@ Fuente: `MutationApplier.java`.
 
 ## Progreso en tiempo real
 
-El backend publica eventos SSE desde `JobEventService`. Los endpoints SSE incluyen jobs, reindex, keywords, health-check, WebDAV sync, deduplicacion y discovery de enlaces. El frontend usa `EventSource`; para SSE el token puede viajar en query string.
+El backend publica eventos SSE desde `JobEventService` para los procesos encolados. Health Check usa este canal global porque se ejecuta como job `HEALTH_CHECK`. Otros endpoints SSE directos siguen existiendo para tareas manuales como reindex, keywords faltantes, enlaces rotos, WebDAV sync, deduplicacion y discovery de enlaces. El frontend usa `EventSource`; para SSE el token puede viajar en query string.
 
-Fuente: `JobEventService.java`, `SettingsController.java`, `WebDavController.java`, `frontend/src/app/services/api.service.ts`, `JwtAuthFilter.java`.
+Fuente: `JobEventService.java`, `HealthCheckJobController.java`, `HealthCheckJobHandler.java`, `SettingsController.java`, `WebDavController.java`, `frontend/src/app/services/api.service.ts`, `JwtAuthFilter.java`.
 
 ## Observabilidad
 
@@ -41,4 +41,3 @@ Fuente: `application.yml`, `EmbeddingsHealthIndicator.java`, `docker-compose.yml
 `VaultPathResolver` normaliza separadores, rechaza rutas absolutas y evita traversal verificando que el path resuelto siga bajo el vault root.
 
 Fuente: `VaultPathResolver.java`, `VaultPathResolverTests.java`.
-

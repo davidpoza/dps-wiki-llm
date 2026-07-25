@@ -14,7 +14,6 @@
 | Snapshot | Registro en PostgreSQL de contenido antes/despues por archivo para historial y reversión. |
 | TEI | Hugging Face Text Embeddings Inference, ejecutado como sidecar para `multilingual-e5-small`. |
 | HNSW | Indice aproximado de pgvector usado para ordenar por distancia coseno. |
-| SSE | Server-Sent Events usados para progreso de jobs, reindex, health-check y sync. |
+| SSE | Server-Sent Events usados para progreso global de jobs y para tareas manuales como reindex, enlaces rotos y sync. |
 
 Fuente: `AGENTS.md`, `backend/src/main/java/com/dpswikillm/domain/**`, `backend/src/main/resources/db/migration/**`.
-

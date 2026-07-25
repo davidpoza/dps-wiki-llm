@@ -9,9 +9,9 @@ El frontend consume siempre paths bajo `/api`.
 | Familia | Base | Responsabilidad |
 |---|---|---|
 | Auth | `/api/auth/**` | Login, 2FA, usuario actual, cambio de password, registro admin. |
-| Jobs/Ingest/Answer | `/api/jobs/**`, `/api/ingest`, `/api/answer` | Encolado, progreso, revision y reversión. |
+| Jobs/Ingest/Answer | `/api/jobs/**`, `/api/ingest`, `/api/answer` | Encolado, progreso, revision, Health Check y reversión. |
 | Files | `/api/files/**` | Arbol, contenido, versiones, PDF, imagenes. |
-| Settings | `/api/settings/**` | Prompts, recursos, reindex, keywords, health-check, enlaces rotos. |
+| Settings | `/api/settings/**` | Prompts, recursos, reindex, keywords faltantes y enlaces rotos. |
 | WebDAV | `/api/webdav/**` | Sync, conflictos y resolucion. |
 | Chat | `/api/chat/sessions/**` | Conversaciones persistidas y exportacion. |
 | Graph/Notes/Documents | `/api/graph`, `/api/notes/**`, `/api/documents/**` | Grafo, listas, explicacion de links y estado de embeddings. |

@@ -110,6 +110,39 @@ flowchart LR
   embeddings --> prune[prune embeddings obsoletos]
 ```
 
+## Health Check como job
+
+```mermaid
+sequenceDiagram
+  participant UI as Settings UI
+  participant API as HealthCheckJobController
+  participant Q as RabbitMQ
+  participant H as HealthCheckJobHandler
+  participant S as HealthCheckService
+  participant DB as PostgreSQL
+  participant Vault as Vault
+
+  UI->>API: POST /jobs/health-check
+  alt parcial
+    UI->>API: POST /jobs/health-check/partial {paths}
+    API->>Vault: raw/health-check/<uuid>.json
+  end
+  API->>Q: enqueue HEALTH_CHECK
+  Q->>H: consume wiki-write-jobs
+  H->>S: discover(pathFilter)
+  S->>DB: reindex documents + embeddings
+  S->>DB: semantic search general + topic
+  H->>Vault: beginSnapshot(jobId, HEALTH_CHECK)
+  H->>S: applyConnections(computed, snapshot)
+  S->>Vault: reemplazar Related calculado
+  H->>DB: finalizeSnapshot(snapshot, job)
+  H->>UI: progreso por /jobs/events
+```
+
+El endpoint anterior `GET /api/settings/health-check` fue reemplazado por endpoints `POST` bajo `/api/jobs/**`. El frontend solo encola el trabajo y delega el seguimiento al panel global de jobs.
+
+Fuente: `HealthCheckJobController.java`, `HealthCheckJobHandler.java`, `HealthCheckService.java`, `JobConsumers.java`, `frontend/src/app/components/settings.component.ts`, `frontend/src/app/components/health-check-selection-modal.component.ts`.
+
 ## Manejo de errores en jobs
 
 ```mermaid
@@ -126,4 +159,3 @@ flowchart TB
 Nota: `JobConsumers` captura excepciones y marca el job como `FAILED`; el interceptor Rabbit aplica reintentos cuando una excepcion sale del listener.
 
 Fuente: `JobConsumers.java`, `RabbitConfig.java`, `PipelineTx.java`, `SnapshotService.java`.
-

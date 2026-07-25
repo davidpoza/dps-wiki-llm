@@ -32,6 +32,8 @@ Todos los paths incluyen el prefijo `/api` en runtime.
 | `POST` | `/jobs/{id}/revert` | Encolar reversión |
 | `POST` | `/jobs/enrich?path=` | Enriquecer nota existente |
 | `POST` | `/jobs/rename?path=&newName=` | Renombrado como job |
+| `POST` | `/jobs/health-check` | Encolar Health Check completo como `HEALTH_CHECK` |
+| `POST` | `/jobs/health-check/partial` | Encolar Health Check parcial con body `{paths:[...]}` |
 | `GET` | `/jobs/{id}/review` | Candidatos de revision |
 | `POST` | `/jobs/{id}/review` | Decisiones y targets manuales |
 | `GET` | `/files/lookup?q=&limit=` | Lookup lexical |
@@ -66,8 +68,6 @@ Todos los paths incluyen el prefijo `/api` en runtime.
 | `PUT` | `/settings/resources` | Actualizar carpeta recursos |
 | `GET` | `/settings/reindex` | SSE reindex |
 | `GET` | `/settings/keywords/generate` | SSE keywords faltantes |
-| `GET` | `/settings/health-check` | SSE health-check completo |
-| `GET` | `/settings/health-check/partial?paths=` | SSE health-check parcial |
 | `GET` | `/settings/broken-links/scan` | SSE scan de enlaces rotos |
 | `DELETE` | `/settings/broken-links` | Borrar enlaces rotos seleccionados |
 | `POST` | `/keywords/regenerate` | Encolar regeneracion de keywords para paths |
@@ -94,4 +94,3 @@ Todos los paths incluyen el prefijo `/api` en runtime.
 | `GET` | `/platform` | Estado simple de plataforma |
 
 Fuente: `backend/src/main/java/com/dpswikillm/controllers/*.java`, `frontend/src/app/services/api.service.ts`.
-

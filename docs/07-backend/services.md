@@ -21,9 +21,9 @@
 | `FileService` | CRUD del vault, imagenes y PDF. |
 | `SnapshotService` | Historial, versiones, diffs y hard reset. |
 | `WebDavSyncService` | Replica y reconciliacion WebDAV. |
-| `HealthCheckService` | Reindex+embeddings+materializacion de Related por semantic search. |
+| `HealthCheckJobHandler` | Ejecuta jobs `HEALTH_CHECK`, publica progreso global y finaliza snapshot asociado al job. |
+| `HealthCheckService` | Descubre embeddings/conexiones y aplica `Related` calculado por semantic search dentro de un snapshot recibido. |
 | `KeywordGenerationService` | Keywords faltantes en concepts/sources. |
 | `ConceptDedupScanService` | Deteccion batch de conceptos duplicados con LLM. |
 
 Fuente: `backend/src/main/java/com/dpswikillm/services/*.java`.
-

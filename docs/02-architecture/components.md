@@ -38,7 +38,7 @@ flowchart TB
 |---|---|---|
 | API | `controllers/*Controller.java` | Rutas HTTP, validacion superficial y delegacion a servicios. |
 | Seguridad | `SecurityConfig`, `JwtAuthFilter`, `JwtUtil`, `TotpService` | JWT, 2FA, roles y excepciones 401. |
-| Jobs | `JobQueueService`, `JobConsumers`, `JobLifecycleService`, `JobEventService` | Persistencia, encolado, consumo y SSE de estado. |
+| Jobs | `JobQueueService`, `JobConsumers`, `JobLifecycleService`, `JobEventService`, `HealthCheckJobHandler` | Persistencia, encolado, consumo y SSE de estado. |
 | Ingesta | `RawIntakeService`, `SourceNormalizer`, `IngestPipelineService` | Entrada cruda, normalizacion y pipeline de escritura. |
 | IA | `OpenAiCompatibleLlmClient`, `SourceNoteLlmService`, `LlmMutationPlanService`, `KeywordGenerationService` | Llamadas LLM, prompts, parsing y generacion de contenido estructurado. |
 | Busqueda | `ReindexService`, `EmbeddingIndexService`, `SemanticSearchService`, `FileLookupService` | Indice de documentos, embeddings y busqueda. |
@@ -57,7 +57,6 @@ flowchart TB
 | Vault | `ExplorerComponent`, `FileService`, plugins Milkdown |
 | Historial/sync | `GitHistoryComponent`, `ConflictMergeEditorComponent` |
 | Grafo | `GraphViewComponent`, `GraphSettingsComponent` |
-| Configuracion | `SettingsComponent`, modales de keywords, dedup y enlaces rotos |
+| Configuracion | `SettingsComponent`, modales de keywords, health-check parcial, dedup y enlaces rotos |
 
 Fuente: `backend/src/main/java/com/dpswikillm/**`, `frontend/src/app/**`.
-

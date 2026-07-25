@@ -14,4 +14,4 @@ Los ADR registran decisiones arquitectonicas reales o claramente inferibles del 
 | [ADR-0008](adr-0008-snapshot-based-history.md) | Historial y reversión por snapshots |
 | [ADR-0009](adr-0009-browser-web-extractor.md) | Microservicio browser-based para extraccion web |
 | [ADR-0010](adr-0010-prompts-in-database.md) | Prompts editables en base de datos |
-
+| [ADR-0011](adr-0011-health-check-as-job.md) | Health Check ejecutado como job |

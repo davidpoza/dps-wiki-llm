@@ -10,7 +10,6 @@ El frontend usa servicios con `signal`/`computed` para estado local de sesion, j
 | `LoadingService` | Estado global de carga alimentado por `loadingInterceptor`. |
 | `GlobalSearchService` | Seleccion de archivo desde modales/busqueda. |
 
-Las llamadas HTTP funcionales viven principalmente en `ApiService`; las APIs de archivo se separan parcialmente en `FileService`.
+Las llamadas HTTP funcionales viven principalmente en `ApiService`; las APIs de archivo se separan parcialmente en `FileService`. El Health Check se lanza desde `SettingsComponent` y `HealthCheckSelectionModalComponent` mediante `ApiService.enqueueHealthCheck*`; el progreso posterior se observa en el panel de jobs global, no en un SSE propio del modal.
 
 Fuente: `frontend/src/app/services/*.ts`.
-

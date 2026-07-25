@@ -20,6 +20,7 @@
 | MERGE | `/api/concept-dedup/merge` | `wiki-write-jobs` |
 | REGENERATE_KEYWORDS | `/api/keywords/regenerate` | `wiki-write-jobs` |
 | RENAME | `/api/jobs/rename` | `wiki-write-jobs` |
+| HEALTH_CHECK | `/api/jobs/health-check`, `/api/jobs/health-check/partial` | `wiki-write-jobs` |
 
 ## Integraciones externas
 
@@ -34,4 +35,3 @@
 ## Incertidumbres
 
 Ver [preguntas abiertas](open-questions.md).
-
