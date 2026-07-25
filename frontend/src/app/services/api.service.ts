@@ -85,14 +85,6 @@ export interface KeywordGenerationProgress {
   skipped: number;
 }
 
-export interface HealthCheckProgress {
-  phase: 'embeddings' | 'connections' | 'done';
-  processed: number;
-  total: number;
-  embeddingsBuilt: number;
-  connectionsFound: number;
-}
-
 export interface DiscoveredLink {
   path: string;
   title: string;
@@ -398,72 +390,12 @@ export class ApiService {
     });
   }
 
-  runHealthCheck(): Observable<HealthCheckProgress> {
-    return new Observable((observer: Observer<HealthCheckProgress>) => {
-      const token = this.auth.token();
-      const url = token
-        ? `/api/settings/health-check?token=${encodeURIComponent(token)}`
-        : '/api/settings/health-check';
-      const es = new EventSource(url);
-      let completed = false;
-
-      es.addEventListener('progress', (e: MessageEvent) => {
-        observer.next(JSON.parse(e.data) as HealthCheckProgress);
-      });
-      es.addEventListener('done', (e: MessageEvent) => {
-        completed = true;
-        observer.next(JSON.parse(e.data) as HealthCheckProgress);
-        es.close();
-        observer.complete();
-      });
-      es.addEventListener('error', (e: MessageEvent) => {
-        completed = true;
-        const data = e.data ? (JSON.parse(e.data) as { message: string }) : { message: 'Error desconocido' };
-        es.close();
-        observer.error(new Error(data.message));
-      });
-      es.onerror = () => {
-        es.close();
-        if (!completed) {
-          observer.error(new Error('Error de conexión'));
-        }
-      };
-      return () => es.close();
-    });
+  enqueueHealthCheck(): Observable<EnqueueResponse> {
+    return this.http.post<EnqueueResponse>('/api/jobs/health-check', null);
   }
 
-  runHealthCheckPartial(paths: string[]): Observable<HealthCheckProgress> {
-    return new Observable((observer: Observer<HealthCheckProgress>) => {
-      const token = this.auth.token();
-      const pathParams = paths.map((p) => `paths=${encodeURIComponent(p)}`).join('&');
-      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
-      const url = `/api/settings/health-check/partial?${pathParams}${tokenParam}`;
-      const es = new EventSource(url);
-      let completed = false;
-
-      es.addEventListener('progress', (e: MessageEvent) => {
-        observer.next(JSON.parse(e.data) as HealthCheckProgress);
-      });
-      es.addEventListener('done', (e: MessageEvent) => {
-        completed = true;
-        observer.next(JSON.parse(e.data) as HealthCheckProgress);
-        es.close();
-        observer.complete();
-      });
-      es.addEventListener('error', (e: MessageEvent) => {
-        completed = true;
-        const data = e.data ? (JSON.parse(e.data) as { message: string }) : { message: 'Error desconocido' };
-        es.close();
-        observer.error(new Error(data.message));
-      });
-      es.onerror = () => {
-        es.close();
-        if (!completed) {
-          observer.error(new Error('Error de conexión'));
-        }
-      };
-      return () => es.close();
-    });
+  enqueueHealthCheckPartial(paths: string[]): Observable<EnqueueResponse> {
+    return this.http.post<EnqueueResponse>('/api/jobs/health-check/partial', { paths });
   }
 
   scanBrokenLinks(): Observable<BrokenLinkScanEvent> {

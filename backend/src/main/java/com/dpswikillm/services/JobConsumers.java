@@ -18,6 +18,7 @@ public class JobConsumers {
     private final ConceptMergeJobHandler conceptMergeJobHandler;
     private final KeywordRegenerationJobHandler keywordRegenerationJobHandler;
     private final RenameJobService renameJobService;
+    private final HealthCheckJobHandler healthCheckJobHandler;
     private final JobRepository jobRepository;
 
     public JobConsumers(
@@ -29,6 +30,7 @@ public class JobConsumers {
             ConceptMergeJobHandler conceptMergeJobHandler,
             KeywordRegenerationJobHandler keywordRegenerationJobHandler,
             RenameJobService renameJobService,
+            HealthCheckJobHandler healthCheckJobHandler,
             JobRepository jobRepository) {
         this.lifecycleService = lifecycleService;
         this.ingestPipelineService = ingestPipelineService;
@@ -38,6 +40,7 @@ public class JobConsumers {
         this.conceptMergeJobHandler = conceptMergeJobHandler;
         this.keywordRegenerationJobHandler = keywordRegenerationJobHandler;
         this.renameJobService = renameJobService;
+        this.healthCheckJobHandler = healthCheckJobHandler;
         this.jobRepository = jobRepository;
     }
 
@@ -75,6 +78,10 @@ public class JobConsumers {
             }
             if (message.jobType() == JobType.RENAME) {
                 renameJobService.run(jobRepository.findById(message.jobId()).orElseThrow());
+                return;
+            }
+            if (message.jobType() == JobType.HEALTH_CHECK) {
+                healthCheckJobHandler.run(jobRepository.findById(message.jobId()).orElseThrow());
                 return;
             }
             lifecycleService.transition(

@@ -20,7 +20,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -52,7 +51,7 @@ public class HealthCheckService {
     private static final String TOPIC_DOC_TYPE = "topic";
     private static final double TOPIC_THRESHOLD = 0.72;
     private static final int TOPIC_LIMIT = 3;
-    private static final String IDEMPOTENCY_LEDGER = "state/runtime/idempotency-keys.json";
+    public static final String IDEMPOTENCY_LEDGER = "state/runtime/idempotency-keys.json";
 
     private final ReindexService reindexService;
     private final EmbeddingIndexService embeddingIndexService;
@@ -79,22 +78,19 @@ public class HealthCheckService {
         this.repository = repository;
     }
 
-    public HealthCheckProgress run() throws IOException {
-        return run(progress -> {});
-    }
-
-    public HealthCheckProgress run(Consumer<HealthCheckProgress> onProgress) throws IOException {
-        return run(Set.of(), onProgress);
-    }
+    /** Result of the discovery phases (1 + 2) before connections are written to disk. */
+    public record DiscoverResult(
+            int embeddingsBuilt,
+            int connectionsFound,
+            Map<String, LinkedHashSet<String>> computed) {}
 
     /**
-     * Runs the health check with phase 2 restricted to the given paths. An empty set means "all
-     * notes" (same as the full health check). Phase 1 (embeddings) always runs over the whole
-     * vault.
+     * Runs phases 1 (embeddings) and 2 (connection discovery) but does NOT write anything to disk.
+     * The caller is responsible for creating a snapshot, applying the returned computed map via
+     * {@link #applyConnections}, and finalizing the snapshot.
      */
-    public HealthCheckProgress run(Set<String> pathFilter, Consumer<HealthCheckProgress> onProgress)
+    public DiscoverResult discover(Set<String> pathFilter, Consumer<HealthCheckProgress> onProgress)
             throws IOException {
-        // Phase 1: reindex (pick up manual edits) then embed anything missing/changed.
         reindexService.reindexWiki();
         EmbeddingIndexService.EmbedIndexResult embedResult =
                 embeddingIndexService.embedIncremental(
@@ -111,15 +107,6 @@ public class HealthCheckService {
                 new HealthCheckProgress(
                         "embeddings", embeddingsBuilt, embeddingsBuilt, embeddingsBuilt, 0));
 
-        // Phase 2: discover and materialize new connections between concepts/sources notes.
-        int connectionsFound = discoverConnections(embeddingsBuilt, pathFilter, onProgress);
-
-        return new HealthCheckProgress("done", 0, 0, embeddingsBuilt, connectionsFound);
-    }
-
-    private int discoverConnections(
-            int embeddingsBuilt, Set<String> pathFilter, Consumer<HealthCheckProgress> onProgress)
-            throws IOException {
         List<DocumentRecord> all = repository.findAllDocuments();
         List<DocumentRecord> sources =
                 all.stream()
@@ -129,12 +116,6 @@ public class HealthCheckService {
                         .toList();
         int total = sources.size();
 
-        // computed: the FULL desired Related content per note for this run (replace, not append).
-        // knownLinks: tracks which links have already been added to a note's computed set in this
-        // run, ensuring no within-run duplicates regardless of how many search paths produce the
-        // same candidate.
-        // countedPairs: ensures each pair is counted and processed once even when both notes are
-        // in sources and the pair would be encountered from each side.
         Map<String, LinkedHashSet<String>> computed = new LinkedHashMap<>();
         Map<String, Set<String>> knownLinks = new HashMap<>();
         Set<String> countedPairs = new HashSet<>();
@@ -192,66 +173,36 @@ public class HealthCheckService {
                             "connections", 0, 0, embeddingsBuilt, connectionsFound));
         }
 
-        if (!computed.isEmpty()) {
-            applyComputed(computed);
-        }
-        return connectionsFound;
+        return new DiscoverResult(embeddingsBuilt, connectionsFound, computed);
     }
 
     /**
-     * Replaces the Related section of each note with the fully computed set of links for this run.
-     * Using sectionReplacements (not sections/merge) ensures old auto-links are overwritten rather
-     * than accumulated.
+     * Applies the computed connection map to the vault within the provided snapshot. Captures
+     * before-state, applies mutations, and records after-state, but does NOT finalize the snapshot
+     * (the caller must call {@code snapshotService.finalizeSnapshot(snapshot, job)}).
+     *
+     * @return the mutation result so the caller can invoke {@code recordAfter} on affected paths
      */
-    private void applyComputed(Map<String, LinkedHashSet<String>> computed) throws IOException {
-        Snapshot snapshot =
-                snapshotService.beginSnapshot(
-                        UUID.randomUUID().toString(),
-                        "health-check",
-                        "Health Check",
-                        "HEALTH_CHECK");
-        try {
-            for (String path : computed.keySet()) {
-                snapshotService.captureFile(snapshot, path);
-            }
-            snapshotService.captureFile(snapshot, IDEMPOTENCY_LEDGER);
-
-            List<MutationAction> actions = new ArrayList<>();
-            for (Map.Entry<String, LinkedHashSet<String>> entry : computed.entrySet()) {
-                actions.add(
-                        new MutationAction(
-                                MutationActionType.update,
-                                entry.getKey(),
-                                null,
-                                Map.of(),
-                                null,
-                                "health-check:" + snapshot.getId() + ":" + entry.getKey(),
-                                Map.of("Related", new ArrayList<>(entry.getValue()))));
-            }
-            MutationResult result =
-                    mutationApplier.apply(
-                            new MutationPlan("health-check-" + snapshot.getId(), actions));
-
-            for (String path : result.created()) {
-                snapshotService.recordAfter(snapshot, path);
-            }
-            for (String path : result.updated()) {
-                snapshotService.recordAfter(snapshot, path);
-            }
-            snapshotService.recordAfter(snapshot, IDEMPOTENCY_LEDGER);
-            snapshotService.finalizeSnapshot(snapshot, null);
-        } catch (IOException | RuntimeException ex) {
-            // Leave no dangling snapshot behind on failure.
-            try {
-                snapshotService.deleteSnapshot(snapshot.getId());
-            } catch (RuntimeException cleanupEx) {
-                log.warn(
-                        "Failed to clean up health-check snapshot {}: {}",
-                        snapshot.getId(),
-                        cleanupEx.getMessage());
-            }
-            throw ex;
+    public MutationResult applyConnections(
+            Map<String, LinkedHashSet<String>> computed, Snapshot snapshot) throws IOException {
+        for (String path : computed.keySet()) {
+            snapshotService.captureFile(snapshot, path);
         }
+        snapshotService.captureFile(snapshot, IDEMPOTENCY_LEDGER);
+
+        List<MutationAction> actions = new ArrayList<>();
+        for (Map.Entry<String, LinkedHashSet<String>> entry : computed.entrySet()) {
+            actions.add(
+                    new MutationAction(
+                            MutationActionType.update,
+                            entry.getKey(),
+                            null,
+                            Map.of(),
+                            null,
+                            "health-check:" + snapshot.getId() + ":" + entry.getKey(),
+                            Map.of("Related", new ArrayList<>(entry.getValue()))));
+        }
+        return mutationApplier.apply(new MutationPlan("health-check-" + snapshot.getId(), actions));
     }
 
     private String buildQuery(DocumentRecord doc) {

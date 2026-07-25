@@ -3,13 +3,13 @@ import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { Checkbox } from 'primeng/checkbox';
 import { DialogModule } from 'primeng/dialog';
-import { ApiService, HealthCheckProgress, NoteEntry } from '../services/api.service';
+import { ApiService, NoteEntry } from '../services/api.service';
 
 interface NoteItem extends NoteEntry {
   selected: boolean;
 }
 
-type Phase = 'loading' | 'ready' | 'error' | 'running' | 'done' | 'run-error';
+type Phase = 'loading' | 'ready' | 'error' | 'enqueued' | 'enqueue-error';
 
 @Component({
   selector: 'app-health-check-selection-modal',
@@ -88,31 +88,15 @@ type Phase = 'loading' | 'ready' | 'error' | 'running' | 'done' | 'run-error';
           }
         }
 
-        @if (phase() === 'running') {
-          <div class="running-phase">
-            <p class="running-label">
-              @if (hcPhase() === 'embeddings') {
-                Generando embeddings {{ hcProcessed() }}/{{ hcTotal() }} ({{ hcPercent() }}%)
-              } @else {
-                Buscando conexiones {{ hcProcessed() }}/{{ hcTotal() }} ({{ hcPercent() }}%)
-              }
-            </p>
-            <p class="running-counters">Embeddings: {{ hcEmbeddings() }} · Conexiones: {{ hcConnections() }}</p>
+        @if (phase() === 'enqueued') {
+          <div class="enqueued-phase">
+            <p class="success-msg">Job encolado.</p>
+            <p class="enqueued-detail">Sigue el progreso en el panel de jobs.</p>
           </div>
         }
 
-        @if (phase() === 'done') {
-          <div class="done-phase">
-            <p class="success-msg">Health Check parcial completado.</p>
-            <p class="done-detail">
-              Embeddings construidos: <strong>{{ hcEmbeddings() }}</strong> &nbsp;·&nbsp; Conexiones encontradas:
-              <strong>{{ hcConnections() }}</strong>
-            </p>
-          </div>
-        }
-
-        @if (phase() === 'run-error') {
-          <p class="error-msg">Error durante el Health Check. Inténtalo de nuevo.</p>
+        @if (phase() === 'enqueue-error') {
+          <p class="error-msg">Error al encolar el Health Check. Inténtalo de nuevo.</p>
         }
       </div>
 
@@ -121,6 +105,9 @@ type Phase = 'loading' | 'ready' | 'error' | 'running' | 'done' | 'run-error';
           <p-button label="Cerrar" severity="secondary" size="small" (onClick)="cancel.emit()" />
           @if (phase() === 'ready') {
             <p-button [label]="confirmLabel()" [disabled]="selectedCount() === 0" size="small" (onClick)="submit()" />
+          }
+          @if (phase() === 'enqueue-error') {
+            <p-button label="Reintentar" size="small" (onClick)="retry()" />
           }
         </div>
       </ng-template>
@@ -214,22 +201,7 @@ type Phase = 'loading' | 'ready' | 'error' | 'running' | 'done' | 'run-error';
         color: var(--app-text-muted);
         font-size: 0.875rem;
       }
-      .running-phase {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-      .running-label {
-        color: var(--app-text);
-        font-size: 0.875rem;
-        margin: 0;
-      }
-      .running-counters {
-        color: var(--app-text-subtle);
-        font-size: 0.8rem;
-        margin: 0;
-      }
-      .done-phase {
+      .enqueued-phase {
         display: flex;
         flex-direction: column;
         gap: 6px;
@@ -240,7 +212,7 @@ type Phase = 'loading' | 'ready' | 'error' | 'running' | 'done' | 'run-error';
         font-size: 0.9rem;
         font-weight: 600;
       }
-      .done-detail {
+      .enqueued-detail {
         color: var(--app-text-subtle);
         font-size: 0.875rem;
         margin: 0;
@@ -264,17 +236,8 @@ export class HealthCheckSelectionModalComponent implements OnInit {
   readonly notes = signal<NoteItem[]>([]);
   readonly loadError = signal('Error al cargar las notas. Inténtalo de nuevo.');
 
-  readonly hcPhase = signal<'embeddings' | 'connections' | 'done'>('embeddings');
-  readonly hcProcessed = signal(0);
-  readonly hcTotal = signal(0);
-  readonly hcEmbeddings = signal(0);
-  readonly hcConnections = signal(0);
-  readonly hcPercent = computed(() => {
-    const total = this.hcTotal();
-    return total > 0 ? Math.round((this.hcProcessed() / total) * 100) : 100;
-  });
-
   searchTerm = '';
+  private lastSelectedPaths: string[] = [];
 
   readonly filteredNotes = computed(() => {
     const term = this.searchTerm.toLowerCase();
@@ -342,27 +305,21 @@ export class HealthCheckSelectionModalComponent implements OnInit {
       .filter((n) => n.selected)
       .map((n) => n.path);
     if (selected.length === 0) return;
+    this.lastSelectedPaths = selected;
+    this.enqueue(selected);
+  }
 
-    this.hcPhase.set('embeddings');
-    this.hcProcessed.set(0);
-    this.hcTotal.set(0);
-    this.hcEmbeddings.set(0);
-    this.hcConnections.set(0);
-    this.phase.set('running');
+  retry(): void {
+    this.enqueue(this.lastSelectedPaths);
+  }
 
-    this.api.runHealthCheckPartial(selected).subscribe({
-      next: (progress: HealthCheckProgress) => {
-        this.hcPhase.set(progress.phase as 'embeddings' | 'connections' | 'done');
-        this.hcProcessed.set(progress.processed);
-        this.hcTotal.set(progress.total);
-        this.hcEmbeddings.set(progress.embeddingsBuilt);
-        this.hcConnections.set(progress.connectionsFound);
-      },
-      complete: () => {
-        this.phase.set('done');
+  private enqueue(paths: string[]): void {
+    this.api.enqueueHealthCheckPartial(paths).subscribe({
+      next: () => {
+        this.phase.set('enqueued');
       },
       error: () => {
-        this.phase.set('run-error');
+        this.phase.set('enqueue-error');
       },
     });
   }

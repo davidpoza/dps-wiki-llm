@@ -1,12 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  ChangeDetectorRef,
-  Component,
-  effect,
-  inject,
-  input,
-  model,
-} from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, inject, input, model } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -42,27 +34,29 @@ import { ApiService } from '../services/api.service';
       </div>
     </p-dialog>
   `,
-  styles: [`
-    .link-explain-body {
-      min-height: 80px;
-      padding: 0.5rem 0;
-    }
-    .link-explain-spinner {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 1rem 0;
-    }
-    .link-explain-text {
-      white-space: pre-wrap;
-      line-height: 1.6;
-      margin: 0;
-    }
-    .link-explain-error {
-      color: var(--red-500, #ef4444);
-      margin: 0;
-    }
-  `],
+  styles: [
+    `
+      .link-explain-body {
+        min-height: 80px;
+        padding: 0.5rem 0;
+      }
+      .link-explain-spinner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 1rem 0;
+      }
+      .link-explain-text {
+        white-space: pre-wrap;
+        line-height: 1.6;
+        margin: 0;
+      }
+      .link-explain-error {
+        color: var(--red-500, #ef4444);
+        margin: 0;
+      }
+    `,
+  ],
 })
 export class LinkExplainModalComponent {
   readonly visible = model<boolean>(false);
@@ -117,9 +111,7 @@ export class LinkExplainModalComponent {
       },
       error: (err: HttpErrorResponse) => {
         this.errorMsg =
-          err.status === 404
-            ? 'La nota enlazada no existe.'
-            : 'No se pudo obtener la explicación. Inténtalo de nuevo.';
+          err.status === 404 ? 'La nota enlazada no existe.' : 'No se pudo obtener la explicación. Inténtalo de nuevo.';
         this.loading = false;
         this.cdr.markForCheck();
       },

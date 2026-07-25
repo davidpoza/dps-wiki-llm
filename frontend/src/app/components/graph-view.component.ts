@@ -136,7 +136,7 @@ export class GraphViewComponent implements AfterViewInit, OnChanges, OnDestroy {
           data: { id: `e${i}`, source: e.source, target: e.target },
         })),
       ],
-       
+
       style: [
         {
           selector: 'node',
