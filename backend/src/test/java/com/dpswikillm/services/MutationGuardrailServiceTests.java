@@ -39,7 +39,7 @@ class MutationGuardrailServiceTests {
     }
 
     private MutationAction conceptAction(String path) {
-        return new MutationAction(
+        return MutationAction.merge(
                 MutationActionType.create,
                 path,
                 "Title",
@@ -106,7 +106,7 @@ class MutationGuardrailServiceTests {
     @Test
     void nonConceptPathNotAffectedBySlugNormalization() {
         MutationAction action =
-                new MutationAction(
+                MutationAction.merge(
                         MutationActionType.create,
                         "wiki/analyses/2024-report.md",
                         "Report",

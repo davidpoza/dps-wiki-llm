@@ -113,7 +113,7 @@ class IngestPipelineServicesTests {
                 new MutationPlan(
                         "p1",
                         List.of(
-                                new MutationAction(
+                                MutationAction.merge(
                                         MutationActionType.create,
                                         "wiki/topics/generated.md",
                                         "Generated",

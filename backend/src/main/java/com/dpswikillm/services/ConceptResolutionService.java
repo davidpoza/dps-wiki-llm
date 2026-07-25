@@ -190,7 +190,7 @@ public class ConceptResolutionService {
 
     private MutationAction buildUpdateAction(MutationAction original, String targetPath) {
         Map<String, Object> frontmatter = mergeAliases(original, targetPath);
-        return new MutationAction(
+        return MutationAction.merge(
                 MutationActionType.update,
                 targetPath,
                 original.title(),

@@ -45,6 +45,34 @@ class MarkdownServiceTests {
     }
 
     @Test
+    void sectionReplacementOverwritesExistingLinks() {
+        String existing = "# Note\n\n## Related\n- [[old.md]]\n- [[also-old.md]]\n";
+
+        String result =
+                markdownService.mergeAndRender(
+                        existing, "Note", null, null, Map.of("Related", List.of("[[new.md]]")));
+
+        assertThat(result).contains("## Related\n- [[new.md]]");
+        assertThat(result).doesNotContain("old.md");
+    }
+
+    @Test
+    void sectionReplacementLeavesManualLinksUntouched() {
+        String existing =
+                "# Note\n\n"
+                        + "## Related\n- [[old.md]]\n\n"
+                        + "## Manual Links\n- [[manual.md]]\n";
+
+        String result =
+                markdownService.mergeAndRender(
+                        existing, "Note", null, null, Map.of("Related", List.of("[[new.md]]")));
+
+        assertThat(result).contains("## Related\n- [[new.md]]");
+        assertThat(result).doesNotContain("old.md");
+        assertThat(result).contains("## Manual Links\n- [[manual.md]]");
+    }
+
+    @Test
     void injectFrontmatterListPreservesBodyAndAddsOnlyKeywords() {
         String original =
                 "---\n"

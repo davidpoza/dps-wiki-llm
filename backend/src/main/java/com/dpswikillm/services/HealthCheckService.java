@@ -22,8 +22,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,10 +35,10 @@ import org.springframework.stereotype.Service;
  *   <li><b>Phase 1 (embeddings):</b> reindex the wiki and embed every note under {@code
  *       wiki/topics}, {@code wiki/concepts} and {@code wiki/sources} that is missing an embedding
  *       (delegated to {@link EmbeddingIndexService#embedIncremental}).
- *   <li><b>Phase 2 (connections):</b> for each note under {@code wiki/concepts} and {@code
- *       wiki/sources}, find semantic neighbours (general search plus a dedicated {@code topic}
- *       search) and materialize the new links bidirectionally in the {@code Related} section of
- *       both notes, deduping against existing links.
+ *   <li><b>Phase 2 (connections):</b> for each note under {@code wiki/}, find semantic neighbours
+ *       (general search plus a dedicated {@code topic} search) and materialize the new links
+ *       bidirectionally in the {@code Related} section of both notes, replacing the section on
+ *       every run so results are idempotent.
  * </ol>
  *
  * Phase-2 writes are wrapped in a revertible {@link Snapshot} with {@code source = "HEALTH_CHECK"}.
@@ -55,7 +53,6 @@ public class HealthCheckService {
     private static final double TOPIC_THRESHOLD = 0.72;
     private static final int TOPIC_LIMIT = 3;
     private static final String IDEMPOTENCY_LEDGER = "state/runtime/idempotency-keys.json";
-    private static final Pattern WIKILINK = Pattern.compile("\\[\\[([^\\]]+)\\]\\]");
 
     private final ReindexService reindexService;
     private final EmbeddingIndexService embeddingIndexService;
@@ -124,25 +121,21 @@ public class HealthCheckService {
             int embeddingsBuilt, Set<String> pathFilter, Consumer<HealthCheckProgress> onProgress)
             throws IOException {
         List<DocumentRecord> all = repository.findAllDocuments();
-        Map<String, DocumentRecord> byPath = new HashMap<>();
-        for (DocumentRecord doc : all) {
-            byPath.put(doc.path(), doc);
-        }
         List<DocumentRecord> sources =
                 all.stream()
-                        .filter(
-                                doc ->
-                                        doc.path().startsWith("wiki/concepts/")
-                                                || doc.path().startsWith("wiki/sources/"))
+                        .filter(doc -> doc.path().startsWith("wiki/"))
                         .filter(doc -> pathFilter.isEmpty() || pathFilter.contains(doc.path()))
                         .sorted(Comparator.comparing(DocumentRecord::path))
                         .toList();
         int total = sources.size();
 
-        // Per-note Related additions (literal "[[path]]") and the set of link keys already known
-        // for a
-        // note (existing links plus ones we have decided to add), so we never add duplicates.
-        Map<String, LinkedHashSet<String>> additions = new LinkedHashMap<>();
+        // computed: the FULL desired Related content per note for this run (replace, not append).
+        // knownLinks: tracks which links have already been added to a note's computed set in this
+        // run, ensuring no within-run duplicates regardless of how many search paths produce the
+        // same candidate.
+        // countedPairs: ensures each pair is counted and processed once even when both notes are
+        // in sources and the pair would be encountered from each side.
+        Map<String, LinkedHashSet<String>> computed = new LinkedHashMap<>();
         Map<String, Set<String>> knownLinks = new HashMap<>();
         Set<String> countedPairs = new HashSet<>();
         int connectionsFound = 0;
@@ -171,23 +164,16 @@ public class HealthCheckService {
                     continue;
                 }
                 Set<String> sourceKnown =
-                        knownLinks.computeIfAbsent(sourcePath, k -> existingLinks(byPath.get(k)));
+                        knownLinks.computeIfAbsent(sourcePath, k -> new HashSet<>());
                 Set<String> targetKnown =
-                        knownLinks.computeIfAbsent(targetPath, k -> existingLinks(byPath.get(k)));
-                boolean forwardMissing = !sourceKnown.contains(linkKey(targetPath));
-                boolean backMissing = !targetKnown.contains(linkKey(sourcePath));
-                if (!forwardMissing && !backMissing) {
-                    continue; // already fully linked in both directions
-                }
-                if (forwardMissing) {
-                    additions
-                            .computeIfAbsent(sourcePath, k -> new LinkedHashSet<>())
+                        knownLinks.computeIfAbsent(targetPath, k -> new HashSet<>());
+                if (!sourceKnown.contains(linkKey(targetPath))) {
+                    computed.computeIfAbsent(sourcePath, k -> new LinkedHashSet<>())
                             .add("[[" + targetPath + "]]");
                     sourceKnown.add(linkKey(targetPath));
                 }
-                if (backMissing) {
-                    additions
-                            .computeIfAbsent(targetPath, k -> new LinkedHashSet<>())
+                if (!targetKnown.contains(linkKey(sourcePath))) {
+                    computed.computeIfAbsent(targetPath, k -> new LinkedHashSet<>())
                             .add("[[" + sourcePath + "]]");
                     targetKnown.add(linkKey(sourcePath));
                 }
@@ -206,14 +192,18 @@ public class HealthCheckService {
                             "connections", 0, 0, embeddingsBuilt, connectionsFound));
         }
 
-        if (!additions.isEmpty()) {
-            applyAdditions(additions);
+        if (!computed.isEmpty()) {
+            applyComputed(computed);
         }
         return connectionsFound;
     }
 
-    /** Applies the accumulated Related additions in a single revertible HEALTH_CHECK snapshot. */
-    private void applyAdditions(Map<String, LinkedHashSet<String>> additions) throws IOException {
+    /**
+     * Replaces the Related section of each note with the fully computed set of links for this run.
+     * Using sectionReplacements (not sections/merge) ensures old auto-links are overwritten rather
+     * than accumulated.
+     */
+    private void applyComputed(Map<String, LinkedHashSet<String>> computed) throws IOException {
         Snapshot snapshot =
                 snapshotService.beginSnapshot(
                         UUID.randomUUID().toString(),
@@ -221,21 +211,22 @@ public class HealthCheckService {
                         "Health Check",
                         "HEALTH_CHECK");
         try {
-            for (String path : additions.keySet()) {
+            for (String path : computed.keySet()) {
                 snapshotService.captureFile(snapshot, path);
             }
             snapshotService.captureFile(snapshot, IDEMPOTENCY_LEDGER);
 
             List<MutationAction> actions = new ArrayList<>();
-            for (Map.Entry<String, LinkedHashSet<String>> entry : additions.entrySet()) {
+            for (Map.Entry<String, LinkedHashSet<String>> entry : computed.entrySet()) {
                 actions.add(
                         new MutationAction(
                                 MutationActionType.update,
                                 entry.getKey(),
                                 null,
                                 Map.of(),
-                                Map.of("Related", new ArrayList<>(entry.getValue())),
-                                "health-check:" + snapshot.getId() + ":" + entry.getKey()));
+                                null,
+                                "health-check:" + snapshot.getId() + ":" + entry.getKey(),
+                                Map.of("Related", new ArrayList<>(entry.getValue()))));
             }
             MutationResult result =
                     mutationApplier.apply(
@@ -269,22 +260,6 @@ public class HealthCheckService {
             return keywords.stream().map(Object::toString).collect(Collectors.joining(" "));
         }
         return doc.title();
-    }
-
-    private Set<String> existingLinks(DocumentRecord doc) {
-        Set<String> links = new HashSet<>();
-        if (doc == null) {
-            return links;
-        }
-        String related = markdownService.parse(doc.body()).sections().get("Related");
-        if (related == null || related.isBlank()) {
-            return links;
-        }
-        Matcher matcher = WIKILINK.matcher(related);
-        while (matcher.find()) {
-            links.add(linkKey(matcher.group(1)));
-        }
-        return links;
     }
 
     /** Normalizes a wikilink target (dropping any {@code |alias}) to a case-insensitive key. */

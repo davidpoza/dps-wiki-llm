@@ -18,6 +18,7 @@ public class MarkdownService {
                     "Interpretation",
                     "Relationships",
                     "Related",
+                    "Manual Links",
                     "Sources",
                     "Open Questions");
 
@@ -67,6 +68,22 @@ public class MarkdownService {
             String fallbackTitle,
             Map<String, Object> frontmatterUpdates,
             Map<String, List<String>> sectionUpdates) {
+        return mergeAndRender(
+                existingMarkdown, fallbackTitle, frontmatterUpdates, sectionUpdates, null);
+    }
+
+    /**
+     * Like {@link #mergeAndRender} but supports section replacements in addition to merges.
+     * Sections listed in {@code sectionReplacements} are overwritten entirely with the provided
+     * items; sections listed in {@code sectionUpdates} are deduplicated-appended as usual.
+     * Replacements are applied first, then merges.
+     */
+    public String mergeAndRender(
+            String existingMarkdown,
+            String fallbackTitle,
+            Map<String, Object> frontmatterUpdates,
+            Map<String, List<String>> sectionUpdates,
+            Map<String, List<String>> sectionReplacements) {
         MarkdownDocument existing = parse(existingMarkdown);
         Map<String, Object> frontmatter = new LinkedHashMap<>(existing.frontmatter());
         if (frontmatterUpdates != null) {
@@ -76,6 +93,19 @@ public class MarkdownService {
 
         String title = existing.title().isBlank() ? fallbackTitle : existing.title();
         Map<String, String> sections = new LinkedHashMap<>(existing.sections());
+
+        if (sectionReplacements != null) {
+            for (Map.Entry<String, List<String>> entry : sectionReplacements.entrySet()) {
+                String section = entry.getKey();
+                List<String> items = entry.getValue();
+                if (items == null || items.isEmpty()) {
+                    sections.remove(section);
+                } else {
+                    sections.put(section, renderSectionItems(items));
+                }
+            }
+        }
+
         if (sectionUpdates != null) {
             for (Map.Entry<String, List<String>> entry : sectionUpdates.entrySet()) {
                 String section = entry.getKey();
@@ -166,6 +196,18 @@ public class MarkdownService {
         out.append(String.join("\n\n", rendered));
         out.append("\n");
         return out.toString();
+    }
+
+    /** Renders a list of items into section content, normalizing each to `- item` form. */
+    private String renderSectionItems(List<String> items) {
+        List<String> lines = new ArrayList<>();
+        for (String item : items) {
+            String normalized = normalizeAddition(item);
+            if (!normalized.isBlank()) {
+                lines.add(normalized);
+            }
+        }
+        return String.join("\n", lines).trim();
     }
 
     private String mergeSection(String existingContent, List<String> additions) {

@@ -26,7 +26,7 @@ class MutationApplierTests {
                 new MutationPlan(
                         "plan-1",
                         List.of(
-                                new MutationAction(
+                                MutationAction.merge(
                                         MutationActionType.create,
                                         "wiki/concepts/demo.md",
                                         "Demo",
@@ -48,7 +48,7 @@ class MutationApplierTests {
                 new MutationPlan(
                         "plan-1",
                         List.of(
-                                new MutationAction(
+                                MutationAction.merge(
                                         MutationActionType.create,
                                         "wiki/topics/generated.md",
                                         "Generated",

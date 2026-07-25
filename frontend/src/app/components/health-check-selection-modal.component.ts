@@ -308,7 +308,7 @@ export class HealthCheckSelectionModalComponent implements OnInit {
 
   load(): void {
     this.phase.set('loading');
-    this.api.listNotes(['wiki/concepts', 'wiki/sources']).subscribe({
+    this.api.listNotes(['wiki']).subscribe({
       next: (entries) => {
         this.notes.set(entries.map((e) => ({ ...e, selected: false })));
         this.phase.set('ready');

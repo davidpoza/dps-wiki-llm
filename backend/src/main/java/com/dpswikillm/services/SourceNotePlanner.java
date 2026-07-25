@@ -48,7 +48,7 @@ public class SourceNotePlanner {
         return new MutationPlan(
                 "ingest-" + payload.sourceId().replace(":", "-"),
                 List.of(
-                        new MutationAction(
+                        MutationAction.merge(
                                 MutationActionType.create,
                                 path,
                                 payload.title(),

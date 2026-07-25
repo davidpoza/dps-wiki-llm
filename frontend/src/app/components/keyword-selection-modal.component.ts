@@ -76,7 +76,7 @@ type Phase = 'loading' | 'ready' | 'error' | 'submitting' | 'done';
                         [binary]="true"
                         (onChange)="notes.update((ns) => [...ns])"
                       />
-                      <span class="note-title">{{ note.title }}</span>
+                      <span class="note-title">{{ note.path }}</span>
                       @if (note.hasKeywords) {
                         <span class="kw-badge" title="Ya tiene keywords">✓</span>
                       }
@@ -279,7 +279,7 @@ export class KeywordSelectionModalComponent implements OnInit {
   load(): void {
     this.phase.set('loading');
     this.errorMessage.set('Error al cargar las notas. Inténtalo de nuevo.');
-    this.api.listNotes(['wiki/concepts', 'wiki/sources']).subscribe({
+    this.api.listNotes(['wiki']).subscribe({
       next: (entries) => {
         this.notes.set(entries.map((e) => ({ ...e, selected: false })));
         this.phase.set('ready');

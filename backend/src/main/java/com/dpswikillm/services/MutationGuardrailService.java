@@ -51,7 +51,7 @@ public class MutationGuardrailService {
             } else {
                 rejections.add(normalized.path() + ": " + rejection);
                 safe.add(
-                        new MutationAction(
+                        MutationAction.merge(
                                 MutationActionType.noop,
                                 normalized.path(),
                                 normalized.title(),
@@ -81,7 +81,7 @@ public class MutationGuardrailService {
         }
         if (!singularized.equals(filename)) {
             log.info("Concept slug normalized from '{}' to '{}'", filename, singularized);
-            return new MutationAction(
+            return MutationAction.merge(
                     action.action(),
                     "wiki/concepts/" + singularized + ".md",
                     action.title(),

@@ -128,7 +128,7 @@ public class GuidedReviewService {
         List<MutationAction> actions = new ArrayList<>();
         for (JobConnectionCandidate candidate : accepted) {
             actions.add(
-                    new MutationAction(
+                    MutationAction.merge(
                             MutationActionType.update,
                             candidate.getTargetPath(),
                             null,
@@ -161,7 +161,7 @@ public class GuidedReviewService {
         }
         for (Map.Entry<String, LinkedHashSet<String>> entry : forwardLinksBySource.entrySet()) {
             actions.add(
-                    new MutationAction(
+                    MutationAction.merge(
                             MutationActionType.update,
                             entry.getKey(),
                             null,

@@ -81,7 +81,11 @@ public class MutationApplier {
         String existing = exists ? Files.readString(absolutePath, StandardCharsets.UTF_8) : "";
         String rendered =
                 markdownService.mergeAndRender(
-                        existing, action.title(), action.frontmatter(), action.sections());
+                        existing,
+                        action.title(),
+                        action.frontmatter(),
+                        action.sections(),
+                        action.sectionReplacements());
         Files.writeString(absolutePath, rendered, StandardCharsets.UTF_8);
 
         if (exists) {

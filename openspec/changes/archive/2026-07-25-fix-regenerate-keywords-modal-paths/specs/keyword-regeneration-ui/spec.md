@@ -1,9 +1,5 @@
-# keyword-regeneration-ui Specification
+## MODIFIED Requirements
 
-## Purpose
-UI controls for regenerating keywords: a toolbar button in the markdown editor and a note-selection modal in Settings.
-
-## Requirements
 ### Requirement: Note selection modal in Settings
 
 The Settings screen SHALL display a button "Seleccionar notas…" in the Keywords section that opens a modal listing all `.md` notes from the entire `wiki/` subtree (all subdirectories) with checkboxes, a text search input, and select-all / deselect-all controls.
@@ -45,27 +41,3 @@ The Settings screen SHALL display a button "Seleccionar notas…" in the Keyword
 
 - **WHEN** the enqueue request fails
 - **THEN** the modal shows an inline error message and remains open for the user to retry
-
-### Requirement: Regenerate keywords button in editor toolbar
-
-The markdown editor toolbar SHALL display a "Regenerar keywords" action button (visible only when the open note is anywhere under `wiki/`) that enqueues a `REGENERATE_KEYWORDS` job for the current note and navigates to `/jobs`.
-
-#### Scenario: Button visible for eligible notes
-
-- **WHEN** a note under `wiki/` (any subfolder) is open in the editor
-- **THEN** a "Regenerar keywords" button (or icon with tooltip) is visible in the editor toolbar
-
-#### Scenario: Button hidden for non-eligible notes
-
-- **WHEN** a note outside `wiki/` is open in the editor
-- **THEN** the "Regenerar keywords" button is not visible
-
-#### Scenario: Button triggers job and navigates to /jobs
-
-- **WHEN** the user clicks the "Regenerar keywords" button in the editor toolbar
-- **THEN** the frontend calls `POST /api/keywords/regenerate` with `{"paths": ["<current-note-path>"]}`, and on success navigates to `/jobs`
-
-#### Scenario: Button disabled during in-flight request
-
-- **WHEN** the regenerate request is in flight
-- **THEN** the button enters a loading/disabled state until the response is received

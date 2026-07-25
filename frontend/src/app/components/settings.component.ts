@@ -94,8 +94,8 @@ interface PromptState extends Prompt {
                   <h2>Keywords</h2>
                   <p class="section-desc">
                     Regenera el campo <code>keywords</code> (siempre en inglés) en el frontmatter de las notas
-                    seleccionadas de <code>wiki/concepts</code> y <code>wiki/sources</code>. Permite sobreescribir
-                    keywords existentes. El proceso se encola como job asíncrono reversible en el historial.
+                    seleccionadas de cualquier subdirectorio de <code>wiki/</code>. Permite sobreescribir keywords
+                    existentes. El proceso se encola como job asíncrono reversible en el historial.
                   </p>
                   <div class="reindex-row">
                     <p-button label="Seleccionar notas…" size="small" (onClick)="showKeywordModal.set(true)" />
@@ -114,6 +114,11 @@ interface PromptState extends Prompt {
                     <code>wiki/concepts</code> y <code>wiki/sources</code> añadiendo los enlaces y sus backlinks en la
                     sección «Related». Es el mismo proceso de descubrimiento del ingest, aplicado a todo el vault. Los
                     cambios son reversibles desde el historial.
+                  </p>
+                  <p class="section-desc">
+                    <strong>Nota:</strong> cada ejecución <em>reemplaza</em> los enlaces de la sección «Related» con los
+                    recalculados. Los enlaces que quieras conservar manualmente deben ir en la sección
+                    <code>## Manual Links</code> de cada nota, que el Health Check nunca modifica.
                   </p>
                   <div class="reindex-row">
                     <p-button

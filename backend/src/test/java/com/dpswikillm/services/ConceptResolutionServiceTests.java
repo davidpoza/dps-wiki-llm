@@ -77,7 +77,7 @@ class ConceptResolutionServiceTests {
     @Test
     void synonymDetected_createRewrittenToUpdate() {
         MutationAction action =
-                new MutationAction(
+                MutationAction.merge(
                         MutationActionType.create,
                         "wiki/concepts/ml.md",
                         "ML",
@@ -111,7 +111,7 @@ class ConceptResolutionServiceTests {
     @Test
     void noSimilarConcepts_createKept() {
         MutationAction action =
-                new MutationAction(
+                MutationAction.merge(
                         MutationActionType.create,
                         "wiki/concepts/vector-clock.md",
                         "Vector Clock",
@@ -136,7 +136,7 @@ class ConceptResolutionServiceTests {
     void guardrailRejectedNoop_stillGeneratesProposal() {
         // Simulates a concept create that the guardrail converted to noop
         MutationAction action =
-                new MutationAction(
+                MutationAction.merge(
                         MutationActionType.noop,
                         "wiki/concepts/vector-clock.md",
                         "Vector Clock",
@@ -160,7 +160,7 @@ class ConceptResolutionServiceTests {
     @Test
     void judgeSaysNoMatch_createKept() {
         MutationAction action =
-                new MutationAction(
+                MutationAction.merge(
                         MutationActionType.create,
                         "wiki/concepts/consistency.md",
                         "Consistency",
@@ -189,7 +189,7 @@ class ConceptResolutionServiceTests {
     @Test
     void judgeTimeout_createKeptAsOpenFallback() throws Exception {
         MutationAction action =
-                new MutationAction(
+                MutationAction.merge(
                         MutationActionType.create,
                         "wiki/concepts/idempotency.md",
                         "Idempotency",
@@ -239,7 +239,7 @@ class ConceptResolutionServiceTests {
                 StandardCharsets.UTF_8);
 
         MutationAction action =
-                new MutationAction(
+                MutationAction.merge(
                         MutationActionType.create,
                         "wiki/concepts/ml.md",
                         "ML",
@@ -287,7 +287,7 @@ class ConceptResolutionServiceTests {
                 StandardCharsets.UTF_8);
 
         MutationAction action =
-                new MutationAction(
+                MutationAction.merge(
                         MutationActionType.create,
                         "wiki/concepts/ml.md",
                         "ML",
@@ -346,7 +346,7 @@ class ConceptResolutionServiceTests {
                         new ObjectMapper());
 
         MutationAction action =
-                new MutationAction(
+                MutationAction.merge(
                         MutationActionType.create,
                         "wiki/concepts/ml.md",
                         "ML",

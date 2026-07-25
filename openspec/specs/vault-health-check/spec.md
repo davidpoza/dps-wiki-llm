@@ -43,13 +43,13 @@ During phase 1 the system SHALL ensure that every note under `wiki/topics`, `wik
 
 ### Requirement: New connections are discovered and materialized bidirectionally
 
-During phase 2 the system SHALL iterate over every note under `wiki/concepts` and `wiki/sources`, find semantically similar notes using embeddings (general neighbor search plus a dedicated `topic` search), and for each accepted new connection add the forward link to the source note's `Related` section and the inverse backlink to the target note's `Related` section.
+During phase 2 the system SHALL iterate over every note under `wiki/concepts` and `wiki/sources`, find semantically similar notes using embeddings (general neighbor search plus a dedicated `topic` search), compute the full desired set of Related links for each note, and **replace** (not append to) each note's `Related` section with that computed set. The inverse backlink is likewise replaced in the target note's `Related` section.
 
 #### Scenario: New semantic connection found
 
 - **WHEN** phase 2 evaluates a source note and finds a target note whose similarity score meets the connection threshold and is not the source itself
-- **THEN** the system adds `[[<target>]]` to the source note's `Related` section
-- **AND** adds `[[<source>]]` to the target note's `Related` section
+- **THEN** the system includes `[[<target>]]` in the source note's new `Related` section content
+- **AND** includes `[[<source>]]` in the target note's new `Related` section content
 - **AND** counts the connection towards the "connections found" total
 
 #### Scenario: Connection to a curated topic
@@ -60,17 +60,16 @@ During phase 2 the system SHALL iterate over every note under `wiki/concepts` an
 #### Scenario: No candidates above threshold
 
 - **WHEN** phase 2 evaluates a source note and no candidate meets the threshold
-- **THEN** the source note is left unchanged
+- **THEN** the source note is left unchanged (only notes with computed links are rewritten)
 
 ### Requirement: Only new links are added without duplication
 
-The system SHALL add only links that do not already exist in the target `Related` section, and SHALL never create duplicate links in either the source or target note.
+The system SHALL NOT produce duplicate links within the computed `Related` section of a single health check run. A link discovered via multiple search paths (general semantic + topic) SHALL appear at most once in the resulting section.
 
-#### Scenario: Connection already present
+#### Scenario: Same target discovered via two search paths
 
-- **WHEN** phase 2 would add a link that already exists in the note's `Related` section
-- **THEN** the system does not add a duplicate entry
-- **AND** does not count it towards the "connections found" total
+- **WHEN** a target note appears in both the general semantic results and the topic search results for the same source note
+- **THEN** the source note's `Related` section contains the link to that target exactly once
 
 #### Scenario: Same pair discovered from both directions
 
