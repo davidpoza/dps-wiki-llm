@@ -50,6 +50,7 @@ export interface FileVersion {
 export interface SyncResult {
   pulled: string[];
   deleted: string[];
+  pushed: string[];
   conflicts: string[];
 }
 

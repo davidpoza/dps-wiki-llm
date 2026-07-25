@@ -234,6 +234,7 @@ public class WebDavSyncService {
 
         List<String> pulled = new ArrayList<>();
         List<String> deleted = new ArrayList<>();
+        List<String> pushed = new ArrayList<>();
         List<String> conflicts = new ArrayList<>();
         Snapshot pullSnapshot = null;
 
@@ -327,19 +328,35 @@ public class WebDavSyncService {
                 }
                 applyRemote(pullSnapshot, path, remoteContent, remote, remoteHash, pulled, deleted);
             } else if (localChanged && !remoteChanged) {
-                // Local-only change. If it is a brand-new local file never pushed, push it now.
-                if (remote == null && syncedHash == null && localContent != null) {
+                // Local changed, remote is at the last synced baseline — push the local version.
+                // This covers: new files, job-applied mutations (health check, enrich, keywords,
+                // etc.) that write directly to disk bypassing the per-save WebDAV push.
+                if (localContent != null) {
                     try {
                         webDavClient.put(path, localContent);
-                        upsertBaseline(path, localHash, null, true, false, null);
+                        String newEtag = null;
+                        try {
+                            newEtag = webDavClient.getEtag(path);
+                        } catch (IOException ignored) {
+                        }
+                        upsertBaseline(path, localHash, newEtag, true, false, null);
+                        pushed.add(path);
+                    } catch (IOException e) {
+                        log.warn("WebDAV sync: failed to push {} to remote: {}", path, e.getMessage());
+                    }
+                } else {
+                    // File deleted locally but still present on remote — replicate the delete.
+                    try {
+                        webDavClient.delete(path);
+                        baselineRepository.deleteById(path);
+                        pushed.add(path);
                     } catch (IOException e) {
                         log.warn(
-                                "Failed to push local-only file {} during sync: {}",
+                                "WebDAV sync: failed to delete {} from remote: {}",
                                 path,
                                 e.getMessage());
                     }
                 }
-                // Otherwise it was already pushed on save; nothing to do.
             } else {
                 // Both sides changed since the last sync -> conflict; do not overwrite either side.
                 // Ensure we have remote content to store in the conflict record.
@@ -352,15 +369,16 @@ public class WebDavSyncService {
         }
 
         log.info(
-                "WebDAV sync: loop done in {}ms — {} pulled, {} deleted, {} conflicts",
+                "WebDAV sync: loop done in {}ms — {} pulled, {} deleted, {} pushed, {} conflicts",
                 System.currentTimeMillis() - tLoop,
                 pulled.size(),
                 deleted.size(),
+                pushed.size(),
                 conflicts.size());
         if (pullSnapshot != null) {
             snapshotService.finalizeSnapshot(pullSnapshot, null);
         }
-        return new SyncResultDto(pulled, deleted, conflicts);
+        return new SyncResultDto(pulled, deleted, pushed, conflicts);
     }
 
     private void applyRemote(

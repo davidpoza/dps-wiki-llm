@@ -104,7 +104,7 @@
   "sync": {
     "button": "Sync",
     "syncing": "Syncing…",
-    "summary": "Sync complete: {{ pulled }} pulled, {{ deleted }} deleted, {{ conflicts }} conflict(s).",
+    "summary": "Sync complete: {{ pulled }} pulled, {{ pushed }} pushed, {{ deleted }} deleted, {{ conflicts }} conflict(s).",
     "notConfigured": "WebDAV is not configured.",
     "error": "Sync failed.",
     "resolveError": "Could not resolve conflict.",

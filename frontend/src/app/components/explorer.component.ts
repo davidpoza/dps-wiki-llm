@@ -2694,17 +2694,18 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     this.api.syncWebdav().subscribe({
       next: (event) => {
         if (event.type === 'done') {
-          const { pulled, deleted, conflicts } = event.result;
+          const { pulled, deleted, pushed, conflicts } = event.result;
           this.messageService.add({
             severity: conflicts.length > 0 ? 'warn' : 'success',
             summary: this.t.translate('sync.button'),
             detail: this.t.translate('sync.summary', {
               pulled: pulled.length,
+              pushed: (pushed ?? []).length,
               deleted: deleted.length,
               conflicts: conflicts.length,
             }),
           });
-          if (pulled.length > 0 || deleted.length > 0) this.reloadTree();
+          if (pulled.length > 0 || deleted.length > 0 || (pushed ?? []).length > 0) this.reloadTree();
         }
       },
       complete: () => {

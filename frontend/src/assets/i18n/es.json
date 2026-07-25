@@ -104,7 +104,7 @@
   "sync": {
     "button": "Sincronizar",
     "syncing": "Sincronizando…",
-    "summary": "Sincronización completada: {{ pulled }} descargados, {{ deleted }} eliminados, {{ conflicts }} conflicto(s).",
+    "summary": "Sincronización completada: {{ pulled }} descargados, {{ pushed }} subidos, {{ deleted }} eliminados, {{ conflicts }} conflicto(s).",
     "notConfigured": "WebDAV no está configurado.",
     "error": "La sincronización falló.",
     "resolveError": "No se pudo resolver el conflicto.",

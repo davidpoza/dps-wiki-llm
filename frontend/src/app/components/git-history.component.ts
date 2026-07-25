@@ -643,6 +643,7 @@ export class GitHistoryComponent implements OnInit {
           this.syncMessage.set(
             this.t.translate('sync.summary', {
               pulled: result.pulled.length,
+              pushed: (result.pushed ?? []).length,
               deleted: result.deleted.length,
               conflicts: result.conflicts.length,
             }),
