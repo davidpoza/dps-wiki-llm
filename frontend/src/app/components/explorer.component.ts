@@ -1463,7 +1463,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly regeneratingKeywords = signal(false);
   readonly isKeywordEligible = computed(() => {
     const path = this.selectedPath();
-    return !!path && (path.startsWith('wiki/concepts/') || path.startsWith('wiki/sources/'));
+    return !!path && path.startsWith('wiki/');
   });
   readonly frontmatter = signal<Record<string, unknown>>({});
   readonly frontmatterEntries = computed(() => Object.entries(this.frontmatter()));

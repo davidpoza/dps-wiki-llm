@@ -79,9 +79,10 @@ public class GraphService {
             String target = resolveSlug(raw, slugIndex);
             if (target != null && !target.equals(sourceRelPath)) {
                 // Normalize key so A→B and B→A produce the same key
-                String key = sourceRelPath.compareTo(target) < 0
-                        ? sourceRelPath + "\0" + target
-                        : target + "\0" + sourceRelPath;
+                String key =
+                        sourceRelPath.compareTo(target) < 0
+                                ? sourceRelPath + "\0" + target
+                                : target + "\0" + sourceRelPath;
                 if (edgeKeys.add(key)) {
                     edges.add(new GraphEdgeDto(sourceRelPath, target));
                 }
