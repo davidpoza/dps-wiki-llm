@@ -2046,11 +2046,14 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
           onNavigate: (target) => this.navigateToWikilink(target),
           onAutocomplete: (query, coords, view) => {
             this.editorView = view;
+            if (this.wikilinkContextMenuVisible()) return;
             this.wikilinkQuery.set(query);
             this.wikilinkCoords.set(coords);
             this.cdr.markForCheck();
           },
           onContextMenu: (target, x, y) => {
+            this.wikilinkQuery.set(null);
+            this.wikilinkCoords.set(null);
             this.wikilinkContextMenuTarget.set(target);
             this.wikilinkContextMenuX.set(x);
             this.wikilinkContextMenuY.set(y);

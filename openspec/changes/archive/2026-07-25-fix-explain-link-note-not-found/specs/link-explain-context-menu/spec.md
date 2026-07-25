@@ -1,8 +1,5 @@
-# link-explain-context-menu Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change internal-link-explain-modal. Update Purpose after archive.
-## Requirements
 ### Requirement: Clic derecho sobre wikilink muestra menú contextual con opción "Explicar enlace"
 
 El plugin de wikilinks SHALL interceptar el evento `contextmenu` sobre elementos con clase `wikilink-token`, suprimir el menú nativo del navegador y emitir un callback con el target del wikilink y las coordenadas del evento. El componente editor SHALL mostrar un menú contextual flotante con la opción "Explicar enlace" en la posición del cursor.
