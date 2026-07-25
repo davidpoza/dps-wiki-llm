@@ -25,7 +25,7 @@ const PAGE_SIZE = 10;
         @for (job of page(); track job.id) {
           <div class="job-card">
             <div class="job-header">
-              <span class="job-type">{{ job.type }}</span>
+              <span class="job-type">{{ jobTypeLabel(job.type) }}</span>
               <p-tag [value]="job.status" [severity]="severity(job.status)" />
               @if (job.createdAt) {
                 <span class="job-date">{{ job.createdAt | date: 'dd/MM/yyyy HH:mm' }}</span>
@@ -407,8 +407,10 @@ export class JobsViewerComponent {
     }
   }
 
+  private readonly REVERTIBLE_TYPES: ReadonlySet<string> = new Set(['INGEST', 'HEALTH_CHECK']);
+
   canRevert(job: JobState): boolean {
-    return job.status === 'COMPLETED' && job.type === 'INGEST';
+    return job.status === 'COMPLETED' && this.REVERTIBLE_TYPES.has(job.type);
   }
 
   revert(jobId: string): void {
@@ -429,6 +431,20 @@ export class JobsViewerComponent {
 
   abandon(jobId: string): void {
     this.api.abandonJob(jobId).subscribe({ error: (err) => console.error('Abandon failed', err) });
+  }
+
+  jobTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+      INGEST: 'Ingest',
+      ANSWER: 'Answer',
+      REVERT: 'Revert',
+      ENRICH: 'Enrich',
+      MERGE: 'Merge',
+      REGENERATE_KEYWORDS: 'Regenerar keywords',
+      RENAME: 'Renombrar',
+      HEALTH_CHECK: 'Health Check',
+    };
+    return labels[type] ?? type;
   }
 
   openFile(path: string): void {

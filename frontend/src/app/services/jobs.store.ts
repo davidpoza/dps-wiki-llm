@@ -113,6 +113,20 @@ export class JobsStore implements OnDestroy {
         } catch {
           // ignore malformed proposal
         }
+      } else if (event.jobType === 'HEALTH_CHECK' && (event.step === 'embeddings' || event.step === 'connections')) {
+        try {
+          const prog = JSON.parse(event.result ?? '{}') as {
+            processed?: number;
+            total?: number;
+            embeddingsBuilt?: number;
+            connectionsFound?: number;
+          };
+          const percent = prog.total ? Math.round(((prog.processed ?? 0) / prog.total) * 100) : 0;
+          const label = event.step === 'embeddings' ? 'Embeddings' : 'Conexiones';
+          next.currentActivity = { label, percent };
+        } catch {
+          // ignore malformed progress
+        }
       } else if (event.step?.endsWith('-scan') && event.message) {
         const isEmbedding = event.step === 'embedding-scan';
         const label = isEmbedding ? 'embeddings' : 'scanning';
