@@ -48,6 +48,7 @@ export function createWikilinkPlugin(options: WikilinkPluginOptions) {
           decorations: (state) => key.getState(state),
 
           handleClick: (view, _pos, event) => {
+            if (event.button !== 0) return false;
             const el = event.target as HTMLElement;
             if (!el.classList.contains('wikilink-token')) return false;
             const raw = el.textContent ?? '';
