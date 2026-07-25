@@ -60,10 +60,15 @@ Al confirmar, el sistema SHALL añadir los enlaces seleccionados como wikilinks 
 - **THEN** se crea la sección `## Related` antes de `## Sources` si existe, o al final del documento si no existe
 - **AND** los enlaces seleccionados se añaden bajo la nueva sección
 
-#### Scenario: Evitar duplicados
+#### Scenario: Evitar duplicados al insertar en Related
 
 - **WHEN** un enlace seleccionado ya existe en la sección `## Related`
 - **THEN** ese enlace no se añade de nuevo
+
+#### Scenario: Modal no muestra enlaces ya presentes en la nota
+
+- **WHEN** el modal de Link Discovery muestra resultados
+- **THEN** no aparece ningún resultado cuyo slug ya esté presente como wikilink en cualquier parte del contenido de la nota
 
 #### Scenario: Reset de selección al abrir modal
 
