@@ -83,6 +83,9 @@ const PAGE_SIZE = 10;
                   </button>
                 }
                 <span class="scan-percent">({{ job.currentActivity.percent }}%)</span>
+                @if (job.currentActivity.updated !== undefined) {
+                  <span class="scan-counters">{{ job.currentActivity.updated }} act. · {{ job.currentActivity.failed }} err.</span>
+                }
               </div>
             }
 

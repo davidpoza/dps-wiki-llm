@@ -139,8 +139,30 @@ export class JobsStore implements OnDestroy {
           percent = 0;
         }
         next.currentActivity = { label, path, percent };
+      } else if (event.step === 'progress' && event.message) {
+        try {
+          const prog = JSON.parse(event.message) as { processed?: number; total?: number; updated?: number; failed?: number };
+          const percent = prog.total ? Math.round(((prog.processed ?? 0) / prog.total) * 100) : 0;
+          next.currentActivity = { label: 'progress', percent, updated: prog.updated, failed: prog.failed };
+        } catch {
+          const idx = existing.phases.findIndex((p) => p.step === event.step);
+          if (idx >= 0) {
+            const phases = [...existing.phases];
+            phases[idx] = { step: event.step, message: event.message };
+            next.phases = phases;
+          } else {
+            next.phases = [...existing.phases, { step: event.step, message: event.message }];
+          }
+        }
       } else if (event.message) {
-        next.phases = [...existing.phases, { step: event.step, message: event.message }];
+        const idx = existing.phases.findIndex((p) => p.step === event.step);
+        if (idx >= 0) {
+          const phases = [...existing.phases];
+          phases[idx] = { step: event.step, message: event.message };
+          next.phases = phases;
+        } else {
+          next.phases = [...existing.phases, { step: event.step, message: event.message }];
+        }
       }
 
       if (status === 'COMPLETED' || status === 'REVERTED') {

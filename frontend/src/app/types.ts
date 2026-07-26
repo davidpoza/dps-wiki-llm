@@ -96,6 +96,8 @@ export interface ScanActivity {
   label: string;
   path?: string;
   percent: number;
+  updated?: number;
+  failed?: number;
 }
 
 export interface JobState {
