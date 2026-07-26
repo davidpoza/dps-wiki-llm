@@ -63,7 +63,8 @@ public class HealthCheckJobHandler {
                             job.getId().toString(), "health-check", "Health Check", "HEALTH_CHECK");
             try {
                 MutationResult mutationResult =
-                        healthCheckService.applyConnections(discovered.computed(), snapshot);
+                        healthCheckService.applyConnections(
+                                discovered.computed(), discovered.backlinkOnlyPaths(), snapshot);
                 for (String path : mutationResult.created()) {
                     snapshotService.recordAfter(snapshot, path);
                 }

@@ -82,7 +82,8 @@ public class HealthCheckService {
     public record DiscoverResult(
             int embeddingsBuilt,
             int connectionsFound,
-            Map<String, LinkedHashSet<String>> computed) {}
+            Map<String, LinkedHashSet<String>> computed,
+            Set<String> backlinkOnlyPaths) {}
 
     /**
      * Runs phases 1 (embeddings) and 2 (connection discovery) but does NOT write anything to disk.
@@ -173,7 +174,16 @@ public class HealthCheckService {
                             "connections", 0, 0, embeddingsBuilt, connectionsFound));
         }
 
-        return new DiscoverResult(embeddingsBuilt, connectionsFound, computed);
+        Set<String> backlinkOnlyPaths = new HashSet<>();
+        if (!pathFilter.isEmpty()) {
+            for (String path : computed.keySet()) {
+                if (!pathFilter.contains(path)) {
+                    backlinkOnlyPaths.add(path);
+                }
+            }
+        }
+
+        return new DiscoverResult(embeddingsBuilt, connectionsFound, computed, backlinkOnlyPaths);
     }
 
     /**
@@ -184,7 +194,10 @@ public class HealthCheckService {
      * @return the mutation result so the caller can invoke {@code recordAfter} on affected paths
      */
     public MutationResult applyConnections(
-            Map<String, LinkedHashSet<String>> computed, Snapshot snapshot) throws IOException {
+            Map<String, LinkedHashSet<String>> computed,
+            Set<String> backlinkOnlyPaths,
+            Snapshot snapshot)
+            throws IOException {
         for (String path : computed.keySet()) {
             snapshotService.captureFile(snapshot, path);
         }
@@ -192,15 +205,32 @@ public class HealthCheckService {
 
         List<MutationAction> actions = new ArrayList<>();
         for (Map.Entry<String, LinkedHashSet<String>> entry : computed.entrySet()) {
-            actions.add(
-                    new MutationAction(
-                            MutationActionType.update,
-                            entry.getKey(),
-                            null,
-                            Map.of(),
-                            null,
-                            "health-check:" + snapshot.getId() + ":" + entry.getKey(),
-                            Map.of("Related", new ArrayList<>(entry.getValue()))));
+            String path = entry.getKey();
+            List<String> links = new ArrayList<>(entry.getValue());
+            String idempotencyKey = "health-check:" + snapshot.getId() + ":" + path;
+            MutationAction action;
+            if (backlinkOnlyPaths.contains(path)) {
+                // Append-only: preserve existing Related content, add missing links
+                action = new MutationAction(
+                        MutationActionType.update,
+                        path,
+                        null,
+                        Map.of(),
+                        Map.of("Related", links),
+                        idempotencyKey,
+                        null);
+            } else {
+                // Replace: fully overwrite Related section with the computed set
+                action = new MutationAction(
+                        MutationActionType.update,
+                        path,
+                        null,
+                        Map.of(),
+                        null,
+                        idempotencyKey,
+                        Map.of("Related", links));
+            }
+            actions.add(action);
         }
         return mutationApplier.apply(new MutationPlan("health-check-" + snapshot.getId(), actions));
     }
