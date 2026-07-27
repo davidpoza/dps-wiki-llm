@@ -40,4 +40,6 @@ public interface DocumentIndexRepository {
     Set<String> findEmbeddedPathsByDocType(String model, String docType);
 
     Optional<Instant> findEmbeddingStatus(String path);
+
+    Optional<Double> computeScore(String srcPath, String tgtPath);
 }

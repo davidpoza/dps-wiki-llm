@@ -1,5 +1,6 @@
 package com.dpswikillm.controllers;
 
+import com.dpswikillm.domain.AppSetting;
 import com.dpswikillm.dto.BrokenLinkDeleteRequest;
 import com.dpswikillm.dto.BrokenLinkDeleteResult;
 import com.dpswikillm.dto.BrokenLinkScanProgress;
@@ -7,6 +8,7 @@ import com.dpswikillm.dto.BrokenLinkScanResult;
 import com.dpswikillm.dto.KeywordGenerationProgress;
 import com.dpswikillm.dto.ReindexProgress;
 import com.dpswikillm.dto.ResourceSettingsDto;
+import com.dpswikillm.repositories.AppSettingRepository;
 import com.dpswikillm.services.BrokenLinkScanService;
 import com.dpswikillm.services.KeywordGenerationService;
 import com.dpswikillm.services.ReindexService;
@@ -29,20 +31,26 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RequestMapping("/settings")
 public class SettingsController {
 
+    private static final String LINK_THRESHOLD_KEY = "link.similarity-threshold";
+    private static final double LINK_THRESHOLD_DEFAULT = 0.72;
+
     private final ReindexService reindexService;
     private final ResourceSettingsService resourceSettingsService;
     private final KeywordGenerationService keywordGenerationService;
     private final BrokenLinkScanService brokenLinkScanService;
+    private final AppSettingRepository settingRepository;
 
     public SettingsController(
             ReindexService reindexService,
             ResourceSettingsService resourceSettingsService,
             KeywordGenerationService keywordGenerationService,
-            BrokenLinkScanService brokenLinkScanService) {
+            BrokenLinkScanService brokenLinkScanService,
+            AppSettingRepository settingRepository) {
         this.reindexService = reindexService;
         this.resourceSettingsService = resourceSettingsService;
         this.keywordGenerationService = keywordGenerationService;
         this.brokenLinkScanService = brokenLinkScanService;
+        this.settingRepository = settingRepository;
     }
 
     @GetMapping("/resources")
@@ -172,6 +180,41 @@ public class SettingsController {
         return emitter;
     }
 
+    @GetMapping("/link-threshold")
+    public LinkThresholdDto getLinkThreshold() {
+        double value =
+                settingRepository
+                        .findById(LINK_THRESHOLD_KEY)
+                        .map(
+                                s -> {
+                                    try {
+                                        return Double.parseDouble(s.getValue());
+                                    } catch (NumberFormatException ignored) {
+                                        return LINK_THRESHOLD_DEFAULT;
+                                    }
+                                })
+                        .orElse(LINK_THRESHOLD_DEFAULT);
+        return new LinkThresholdDto(value);
+    }
+
+    @PutMapping("/link-threshold")
+    public ResponseEntity<LinkThresholdDto> setLinkThreshold(
+            @RequestBody LinkThresholdDto request) {
+        if (request.threshold() < 0.0 || request.threshold() > 1.0) {
+            return ResponseEntity.badRequest().build();
+        }
+        AppSetting setting =
+                settingRepository
+                        .findById(LINK_THRESHOLD_KEY)
+                        .orElse(
+                                new AppSetting(
+                                        LINK_THRESHOLD_KEY,
+                                        String.valueOf(LINK_THRESHOLD_DEFAULT)));
+        setting.setValue(String.valueOf(request.threshold()));
+        settingRepository.save(setting);
+        return ResponseEntity.ok(new LinkThresholdDto(request.threshold()));
+    }
+
     @DeleteMapping("/broken-links")
     public BrokenLinkDeleteResult deleteBrokenLinks(@RequestBody BrokenLinkDeleteRequest request) {
         int deleted =
@@ -181,4 +224,6 @@ public class SettingsController {
     }
 
     private record ErrorMessage(String message) {}
+
+    public record LinkThresholdDto(double threshold) {}
 }

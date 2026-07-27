@@ -180,6 +180,40 @@ interface PromptState extends Prompt {
                 </section>
 
                 <section class="settings-section">
+                  <h2>Umbral de similitud de enlace</h2>
+                  <p class="section-desc">
+                    Similitud coseno mínima para que un documento se proponga como enlace relacionado. Valores más bajos
+                    generan más sugerencias con menor precisión (por defecto: 0.72).
+                  </p>
+                  <div class="resource-row">
+                    <label for="link-threshold" class="resource-label">Umbral (0.00 – 1.00)</label>
+                    <input
+                      id="link-threshold"
+                      class="resource-input"
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      [(ngModel)]="linkThreshold"
+                      [disabled]="linkThresholdSaving()"
+                    />
+                    <p-button
+                      label="Guardar"
+                      size="small"
+                      [loading]="linkThresholdSaving()"
+                      [disabled]="linkThreshold < 0 || linkThreshold > 1 || linkThresholdSaving()"
+                      (onClick)="saveLinkThreshold()"
+                    />
+                  </div>
+                  @if (linkThresholdSaved()) {
+                    <span class="feedback success">Umbral guardado correctamente</span>
+                  }
+                  @if (linkThresholdError()) {
+                    <span class="feedback error">{{ linkThresholdError() }}</span>
+                  }
+                </section>
+
+                <section class="settings-section">
                   <h2>Mantenimiento</h2>
                   <p class="section-desc">
                     Busca conceptos duplicados en la wiki (por ejemplo, el mismo concepto en español e inglés) y
@@ -481,6 +515,11 @@ export class SettingsComponent implements OnInit {
   readonly resourceSaved = signal(false);
   readonly resourceError = signal<string | null>(null);
 
+  linkThreshold = 0.72;
+  readonly linkThresholdSaving = signal(false);
+  readonly linkThresholdSaved = signal(false);
+  readonly linkThresholdError = signal<string | null>(null);
+
   readonly showDedupModal = signal(false);
   readonly dedupMergeRunning = signal(false);
 
@@ -516,6 +555,13 @@ export class SettingsComponent implements OnInit {
       },
     });
 
+    this.api.getLinkThreshold().subscribe({
+      next: (data) => {
+        this.linkThreshold = data.threshold;
+      },
+      error: () => {},
+    });
+
     this.api.getPrompts().subscribe({
       next: (data) => {
         this.prompts.set(data.map((p) => ({ ...p, saving: false, saved: false, error: null })));
@@ -523,6 +569,26 @@ export class SettingsComponent implements OnInit {
       },
       error: () => {
         this.loading.set(false);
+      },
+    });
+  }
+
+  saveLinkThreshold(): void {
+    if (this.linkThreshold < 0 || this.linkThreshold > 1) return;
+    this.linkThresholdSaving.set(true);
+    this.linkThresholdSaved.set(false);
+    this.linkThresholdError.set(null);
+
+    this.api.setLinkThreshold(this.linkThreshold).subscribe({
+      next: (data) => {
+        this.linkThreshold = data.threshold;
+        this.linkThresholdSaving.set(false);
+        this.linkThresholdSaved.set(true);
+        setTimeout(() => this.linkThresholdSaved.set(false), 3000);
+      },
+      error: () => {
+        this.linkThresholdSaving.set(false);
+        this.linkThresholdError.set('Valor inválido. Debe estar entre 0.00 y 1.00.');
       },
     });
   }

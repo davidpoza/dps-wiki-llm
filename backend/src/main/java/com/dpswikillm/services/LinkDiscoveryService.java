@@ -1,16 +1,21 @@
 package com.dpswikillm.services;
 
+import com.dpswikillm.repositories.AppSettingRepository;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class LinkDiscoveryService {
+    private static final Logger log = LoggerFactory.getLogger(LinkDiscoveryService.class);
     private static final double DEFAULT_THRESHOLD = 0.72;
+    private static final String THRESHOLD_SETTING_KEY = "link.similarity-threshold";
     private static final int DEFAULT_LIMIT = 10;
 
     public record LinkDiscoveryProgress(String step, int current, int total) {}
@@ -20,14 +25,17 @@ public class LinkDiscoveryService {
     private final VaultPathResolver pathResolver;
     private final MarkdownService markdownService;
     private final SemanticSearchService semanticSearchService;
+    private final AppSettingRepository settingRepository;
 
     public LinkDiscoveryService(
             VaultPathResolver pathResolver,
             MarkdownService markdownService,
-            SemanticSearchService semanticSearchService) {
+            SemanticSearchService semanticSearchService,
+            AppSettingRepository settingRepository) {
         this.pathResolver = pathResolver;
         this.markdownService = markdownService;
         this.semanticSearchService = semanticSearchService;
+        this.settingRepository = settingRepository;
     }
 
     public List<DiscoveredLink> discover(
@@ -47,14 +55,33 @@ public class LinkDiscoveryService {
 
         onProgress.accept(new LinkDiscoveryProgress("searching", 2, 3));
 
+        double threshold = readThreshold();
         List<DiscoveredLink> results =
                 semanticSearchService.search(query, DEFAULT_LIMIT).stream()
-                        .filter(r -> r.score() >= DEFAULT_THRESHOLD && !r.path().equals(normalized))
+                        .filter(r -> r.score() >= threshold && !r.path().equals(normalized))
                         .map(r -> new DiscoveredLink(r.path(), r.title(), r.docType(), r.score()))
                         .toList();
 
         onProgress.accept(new LinkDiscoveryProgress("done", 3, 3));
         return results;
+    }
+
+    private double readThreshold() {
+        return settingRepository
+                .findById(THRESHOLD_SETTING_KEY)
+                .map(
+                        s -> {
+                            try {
+                                return Double.parseDouble(s.getValue());
+                            } catch (NumberFormatException ex) {
+                                log.warn(
+                                        "Invalid link.similarity-threshold value '{}', using default {}",
+                                        s.getValue(),
+                                        DEFAULT_THRESHOLD);
+                                return DEFAULT_THRESHOLD;
+                            }
+                        })
+                .orElse(DEFAULT_THRESHOLD);
     }
 
     private static String buildQuery(String title, java.util.Map<String, Object> frontmatter) {

@@ -790,6 +790,11 @@ class IngestPipelineServicesTests {
         public Optional<Instant> findEmbeddingStatus(String path) {
             return Optional.empty();
         }
+
+        @Override
+        public Optional<Double> computeScore(String srcPath, String tgtPath) {
+            return Optional.empty();
+        }
     }
 
     private record PipelineHarness(IngestPipelineService pipeline, JobLifecycleService lifecycle) {}

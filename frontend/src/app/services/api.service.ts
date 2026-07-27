@@ -324,6 +324,18 @@ export class ApiService {
     return this.http.post<{ explanation: string }>('/api/notes/explain-link', { sourcePath, targetPath });
   }
 
+  getLinkScore(src: string, tgt: string): Observable<{ score: number | null }> {
+    return this.http.get<{ score: number | null }>(`/api/links/score?src=${encodeURIComponent(src)}&tgt=${encodeURIComponent(tgt)}`);
+  }
+
+  getLinkThreshold(): Observable<{ threshold: number }> {
+    return this.http.get<{ threshold: number }>('/api/settings/link-threshold');
+  }
+
+  setLinkThreshold(threshold: number): Observable<{ threshold: number }> {
+    return this.http.put<{ threshold: number }>('/api/settings/link-threshold', { threshold });
+  }
+
   reindex(): Observable<ReindexProgress> {
     return new Observable((observer: Observer<ReindexProgress>) => {
       const token = this.auth.token();

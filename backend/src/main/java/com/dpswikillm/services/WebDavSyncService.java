@@ -342,7 +342,10 @@ public class WebDavSyncService {
                         upsertBaseline(path, localHash, newEtag, true, false, null);
                         pushed.add(path);
                     } catch (IOException e) {
-                        log.warn("WebDAV sync: failed to push {} to remote: {}", path, e.getMessage());
+                        log.warn(
+                                "WebDAV sync: failed to push {} to remote: {}",
+                                path,
+                                e.getMessage());
                     }
                 } else {
                     // File deleted locally but still present on remote — replicate the delete.

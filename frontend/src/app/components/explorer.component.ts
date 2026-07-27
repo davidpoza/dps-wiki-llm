@@ -413,6 +413,10 @@ import { LinkExplainModalComponent } from './link-explain-modal.component';
           <i class="pi pi-info-circle"></i>
           <span>Explicar enlace</span>
         </div>
+        <div class="wikilink-context-menu-item" (click)="showLinkScore()">
+          <i class="pi pi-chart-bar"></i>
+          <span>Ver puntuación de enlace</span>
+        </div>
       </div>
     }
 
@@ -1608,6 +1612,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly wikilinkContextMenuX = signal(0);
   readonly wikilinkContextMenuY = signal(0);
   readonly wikilinkContextMenuTarget = signal<string | null>(null);
+  readonly wikilinkScoreResult = signal<string | null>(null);
   readonly linkExplainModalVisible = signal(false);
   readonly linkExplainTarget = signal<string | null>(null);
   readonly wikilinkSuggestions = computed(() => {
@@ -2057,6 +2062,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
             this.wikilinkContextMenuTarget.set(target);
             this.wikilinkContextMenuX.set(x);
             this.wikilinkContextMenuY.set(y);
+            this.wikilinkScoreResult.set(null);
             this.wikilinkContextMenuVisible.set(true);
             this.cdr.markForCheck();
           },
@@ -2421,6 +2427,28 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     const resolvedPath = rawTarget ? this.resolveWikilinkPath(rawTarget) : null;
     this.linkExplainTarget.set(resolvedPath);
     this.linkExplainModalVisible.set(true);
+  }
+
+  showLinkScore(): void {
+    const rawTarget = this.wikilinkContextMenuTarget();
+    const tgtPath = rawTarget ? this.resolveWikilinkPath(rawTarget) : null;
+    const srcPath = this.selectedPath();
+    if (!tgtPath || !srcPath) {
+      this.messageService.add({ severity: 'info', summary: 'Puntuación de enlace', detail: 'Sin puntuación disponible', life: 4000 });
+      return;
+    }
+    this.api.getLinkScore(srcPath, tgtPath).subscribe({
+      next: (res) => {
+        if (res.score == null) {
+          this.messageService.add({ severity: 'info', summary: 'Puntuación de enlace', detail: 'Sin puntuación disponible', life: 4000 });
+        } else {
+          this.messageService.add({ severity: 'info', summary: 'Puntuación de enlace', detail: `Similitud coseno: ${res.score.toFixed(3)}`, life: 5000 });
+        }
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Puntuación de enlace', detail: 'Error al obtener la puntuación', life: 4000 });
+      },
+    });
   }
 
   private resolveWikilinkPath(target: string): string | null {

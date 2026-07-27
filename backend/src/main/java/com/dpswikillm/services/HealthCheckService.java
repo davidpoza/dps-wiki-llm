@@ -211,24 +211,26 @@ public class HealthCheckService {
             MutationAction action;
             if (backlinkOnlyPaths.contains(path)) {
                 // Append-only: preserve existing Related content, add missing links
-                action = new MutationAction(
-                        MutationActionType.update,
-                        path,
-                        null,
-                        Map.of(),
-                        Map.of("Related", links),
-                        idempotencyKey,
-                        null);
+                action =
+                        new MutationAction(
+                                MutationActionType.update,
+                                path,
+                                null,
+                                Map.of(),
+                                Map.of("Related", links),
+                                idempotencyKey,
+                                null);
             } else {
                 // Replace: fully overwrite Related section with the computed set
-                action = new MutationAction(
-                        MutationActionType.update,
-                        path,
-                        null,
-                        Map.of(),
-                        null,
-                        idempotencyKey,
-                        Map.of("Related", links));
+                action =
+                        new MutationAction(
+                                MutationActionType.update,
+                                path,
+                                null,
+                                Map.of(),
+                                null,
+                                idempotencyKey,
+                                Map.of("Related", links));
             }
             actions.add(action);
         }

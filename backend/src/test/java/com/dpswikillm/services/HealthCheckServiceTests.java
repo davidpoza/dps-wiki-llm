@@ -62,8 +62,7 @@ class HealthCheckServiceTests {
                         markdownService,
                         mutationApplier,
                         snapshotService,
-                        mock(
-                                com.dpswikillm.repositories.DocumentIndexRepository.class));
+                        mock(com.dpswikillm.repositories.DocumentIndexRepository.class));
 
         snapshot = mock(Snapshot.class);
         when(snapshot.getId()).thenReturn(UUID.randomUUID());
@@ -91,11 +90,12 @@ class HealthCheckServiceTests {
         writeNote("wiki/concepts/a.md", "- [[wiki/concepts/old.md]]");
         writeNote("wiki/concepts/b.md", "- [[wiki/concepts/other.md]]");
 
-        Map<String, LinkedHashSet<String>> computed = Map.of(
-                "wiki/concepts/a.md",
-                linkedSet("[[wiki/concepts/b.md]]"),
-                "wiki/concepts/b.md",
-                linkedSet("[[wiki/concepts/a.md]]"));
+        Map<String, LinkedHashSet<String>> computed =
+                Map.of(
+                        "wiki/concepts/a.md",
+                        linkedSet("[[wiki/concepts/b.md]]"),
+                        "wiki/concepts/b.md",
+                        linkedSet("[[wiki/concepts/a.md]]"));
 
         // A is primary (in selection), B is backlink-only
         service.applyConnections(computed, Set.of("wiki/concepts/b.md"), snapshot);
@@ -118,11 +118,12 @@ class HealthCheckServiceTests {
         writeNote("wiki/concepts/a.md", "- [[wiki/concepts/stale.md]]");
         writeNote("wiki/concepts/b.md", "- [[wiki/concepts/stale.md]]");
 
-        Map<String, LinkedHashSet<String>> computed = Map.of(
-                "wiki/concepts/a.md",
-                linkedSet("[[wiki/concepts/b.md]]"),
-                "wiki/concepts/b.md",
-                linkedSet("[[wiki/concepts/a.md]]"));
+        Map<String, LinkedHashSet<String>> computed =
+                Map.of(
+                        "wiki/concepts/a.md",
+                        linkedSet("[[wiki/concepts/b.md]]"),
+                        "wiki/concepts/b.md",
+                        linkedSet("[[wiki/concepts/a.md]]"));
 
         // Both A and B are in the selection → backlinkOnlyPaths is empty
         service.applyConnections(computed, Set.of(), snapshot);
@@ -143,11 +144,12 @@ class HealthCheckServiceTests {
         writeNote("wiki/concepts/a.md", "- [[wiki/concepts/old.md]]");
         writeNote("wiki/concepts/b.md", "- [[wiki/concepts/old.md]]");
 
-        Map<String, LinkedHashSet<String>> computed = Map.of(
-                "wiki/concepts/a.md",
-                linkedSet("[[wiki/concepts/b.md]]"),
-                "wiki/concepts/b.md",
-                linkedSet("[[wiki/concepts/a.md]]"));
+        Map<String, LinkedHashSet<String>> computed =
+                Map.of(
+                        "wiki/concepts/a.md",
+                        linkedSet("[[wiki/concepts/b.md]]"),
+                        "wiki/concepts/b.md",
+                        linkedSet("[[wiki/concepts/a.md]]"));
 
         // Full run: no pathFilter → backlinkOnlyPaths is empty
         service.applyConnections(computed, Set.of(), snapshot);
@@ -162,11 +164,12 @@ class HealthCheckServiceTests {
         writeNote("wiki/concepts/a.md", null);
         writeNote("wiki/concepts/b.md", null);
 
-        Map<String, LinkedHashSet<String>> computed = Map.of(
-                "wiki/concepts/a.md",
-                linkedSet("[[wiki/concepts/b.md]]"),
-                "wiki/concepts/b.md",
-                linkedSet("[[wiki/concepts/a.md]]"));
+        Map<String, LinkedHashSet<String>> computed =
+                Map.of(
+                        "wiki/concepts/a.md",
+                        linkedSet("[[wiki/concepts/b.md]]"),
+                        "wiki/concepts/b.md",
+                        linkedSet("[[wiki/concepts/a.md]]"));
         Set<String> backlinkOnly = Set.of("wiki/concepts/b.md");
 
         // First run
@@ -178,9 +181,8 @@ class HealthCheckServiceTests {
         service.applyConnections(computed, backlinkOnly, snapshot2);
 
         String bContent = readNote("wiki/concepts/b.md");
-        long occurrences = bContent.lines()
-                .filter(line -> line.contains("[[wiki/concepts/a.md]]"))
-                .count();
+        long occurrences =
+                bContent.lines().filter(line -> line.contains("[[wiki/concepts/a.md]]")).count();
         assertThat(occurrences).isEqualTo(1);
     }
 

@@ -297,6 +297,25 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
         return result.isEmpty() ? Optional.empty() : Optional.ofNullable(result.get(0));
     }
 
+    @Override
+    public Optional<Double> computeScore(String srcPath, String tgtPath) {
+        List<Double> result =
+                jdbcTemplate.query(
+                        """
+                        SELECT 1 - (e1.embedding <=> e2.embedding) AS score
+                        FROM document_embeddings e1
+                        JOIN documents d1 ON d1.id = e1.document_id
+                        JOIN document_embeddings e2 ON e2.model = e1.model
+                        JOIN documents d2 ON d2.id = e2.document_id
+                        WHERE d1.path = ? AND d2.path = ?
+                        LIMIT 1
+                        """,
+                        (rs, rowNum) -> rs.getDouble("score"),
+                        srcPath,
+                        tgtPath);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
     private String vectorLiteral(float[] vector) {
         StringBuilder out = new StringBuilder("[");
         for (int i = 0; i < vector.length; i += 1) {

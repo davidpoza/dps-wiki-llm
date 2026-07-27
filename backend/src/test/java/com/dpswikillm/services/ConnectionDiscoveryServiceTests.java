@@ -15,6 +15,7 @@ import com.dpswikillm.domain.MutationPlan;
 import com.dpswikillm.domain.NormalizedSourcePayload;
 import com.dpswikillm.domain.SearchResult;
 import com.dpswikillm.domain.SourceKind;
+import com.dpswikillm.repositories.AppSettingRepository;
 import com.dpswikillm.repositories.JobConnectionCandidateRepository;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -44,7 +45,9 @@ class ConnectionDiscoveryServiceTests {
                             return new ArrayList<>(saved);
                         });
         JobLifecycleService lifecycle = mock(JobLifecycleService.class);
-        service = new ConnectionDiscoveryService(semanticSearch, candidateRepository, lifecycle);
+        AppSettingRepository settingRepository = mock(AppSettingRepository.class);
+        when(settingRepository.findById(any())).thenReturn(java.util.Optional.empty());
+        service = new ConnectionDiscoveryService(semanticSearch, candidateRepository, lifecycle, settingRepository);
     }
 
     @Test
