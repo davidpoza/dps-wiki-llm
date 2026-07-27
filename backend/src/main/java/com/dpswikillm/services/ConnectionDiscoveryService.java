@@ -162,7 +162,10 @@ public class ConnectionDiscoveryService {
     private static String buildQuery(NormalizedSourcePayload payload) {
         var note = payload.sourceNote();
         if (note != null && note.keywords() != null && !note.keywords().isEmpty()) {
-            return String.join(" ", note.keywords());
+            String joined = note.keywords().stream()
+                    .map(k -> k.replace('-', ' '))
+                    .collect(Collectors.joining(", "));
+            return "Primary topic: " + payload.title().replace('-', ' ') + ". Related concepts: " + joined + ".";
         }
         return payload.title();
     }

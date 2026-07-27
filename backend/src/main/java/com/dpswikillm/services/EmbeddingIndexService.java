@@ -93,9 +93,9 @@ public class EmbeddingIndexService {
         if (raw instanceof List<?> kw && !kw.isEmpty()) {
             String joined =
                     kw.stream()
-                            .map(Object::toString)
-                            .collect(java.util.stream.Collectors.joining(" "));
-            return (doc.title() + " " + joined).replaceAll("\\s+", " ").trim();
+                            .map(k -> k.toString().replace('-', ' '))
+                            .collect(java.util.stream.Collectors.joining(", "));
+            return "Primary topic: " + doc.title().replace('-', ' ') + ". Related concepts: " + joined + ".";
         }
         return (doc.title() + "\n" + doc.body()).replaceAll("\\s+", " ").trim();
     }

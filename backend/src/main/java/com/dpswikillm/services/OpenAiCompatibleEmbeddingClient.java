@@ -39,7 +39,9 @@ public class OpenAiCompatibleEmbeddingClient implements EmbeddingClient {
 
     @Override
     public List<float[]> embedPassages(List<String> texts) {
-        return embed(texts.stream().map(text -> truncate("passage: " + text)).toList());
+        // E5 symmetric similarity: both sides use "query:" prefix (not "passage:")
+        // so that document-to-document cosine comparison uses the same embedding space.
+        return embed(texts.stream().map(text -> truncate("query: " + text)).toList());
     }
 
     @Override
