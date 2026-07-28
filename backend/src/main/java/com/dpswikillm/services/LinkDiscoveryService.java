@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -77,62 +76,21 @@ public class LinkDiscoveryService {
         double coarseThreshold = readThreshold();
         double margin = LinkRankingSettings.cslsMargin(settingRepository);
         int k = LinkRankingSettings.hubnessK(settingRepository);
-        // r_k(A): mean cosine of A to its k nearest neighbors (the top of this same retrieval).
-        double rkA = meanTopK(neighbors, k);
         Map<String, Double> hubnessByPath =
                 documentIndexRepository.findHubnessByPath(properties.embeddings().model());
+        // r_k(A): the source's stored hubness, or its live top-k mean when not yet backfilled.
+        Double storedRkA = hubnessByPath.get(normalized);
+        double rkA = storedRkA != null ? storedRkA : CslsRanker.meanTopK(neighbors, k);
 
         List<DiscoveredLink> results =
-                selectByCsls(neighbors, rkA, hubnessByPath, coarseThreshold, margin);
+                CslsRanker.select(
+                                neighbors, rkA, hubnessByPath, coarseThreshold, margin, MAX_RESULTS)
+                        .stream()
+                        .map(r -> new DiscoveredLink(r.path(), r.title(), r.docType(), r.score()))
+                        .toList();
 
         onProgress.accept(new LinkDiscoveryProgress("done", 3, 3));
         return results;
-    }
-
-    static double meanTopK(List<SearchResult> neighborsSortedByScoreDesc, int k) {
-        if (neighborsSortedByScoreDesc.isEmpty()) {
-            return 0.0;
-        }
-        int n = Math.min(k, neighborsSortedByScoreDesc.size());
-        double sum = 0;
-        for (int i = 0; i < n; i += 1) {
-            sum += neighborsSortedByScoreDesc.get(i).score();
-        }
-        return sum / n;
-    }
-
-    /**
-     * Rank candidates by CSLS and keep only those clearing the acceptance margin. Returns an empty
-     * list when nothing is genuinely related — no raw-cosine fallback. The absolute threshold is a
-     * coarse pool pre-filter only. The displayed {@code score} stays the raw cosine; ordering
-     * follows CSLS.
-     */
-    static List<DiscoveredLink> selectByCsls(
-            List<SearchResult> neighbors,
-            double rkA,
-            Map<String, Double> hubnessByPath,
-            double coarseThreshold,
-            double margin) {
-        record Scored(DiscoveredLink link, double csls) {}
-        return neighbors.stream()
-                .filter(r -> r.score() >= coarseThreshold)
-                .map(
-                        r -> {
-                            double cosine = r.score();
-                            Double rkB = hubnessByPath.get(r.path());
-                            // Missing r_k(B): assume source-like density so ordering stays
-                            // monotonic in raw cosine rather than dropping the candidate.
-                            double rkBValue = rkB != null ? rkB : rkA;
-                            double csls = LinkRankingSettings.csls(cosine, rkA, rkBValue);
-                            return new Scored(
-                                    new DiscoveredLink(r.path(), r.title(), r.docType(), cosine),
-                                    csls);
-                        })
-                .filter(s -> s.csls() >= margin)
-                .sorted(Comparator.comparingDouble(Scored::csls).reversed())
-                .limit(MAX_RESULTS)
-                .map(Scored::link)
-                .toList();
     }
 
     private double readThreshold() {

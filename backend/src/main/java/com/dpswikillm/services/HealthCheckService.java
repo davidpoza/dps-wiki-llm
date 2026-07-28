@@ -1,5 +1,6 @@
 package com.dpswikillm.services;
 
+import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.domain.DocumentRecord;
 import com.dpswikillm.domain.MutationAction;
 import com.dpswikillm.domain.MutationActionType;
@@ -8,6 +9,7 @@ import com.dpswikillm.domain.MutationResult;
 import com.dpswikillm.domain.SearchResult;
 import com.dpswikillm.domain.Snapshot;
 import com.dpswikillm.dto.HealthCheckProgress;
+import com.dpswikillm.repositories.AppSettingRepository;
 import com.dpswikillm.repositories.DocumentIndexRepository;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -60,6 +62,8 @@ public class HealthCheckService {
     private final MutationApplier mutationApplier;
     private final SnapshotService snapshotService;
     private final DocumentIndexRepository repository;
+    private final AppProperties properties;
+    private final AppSettingRepository settingRepository;
 
     public HealthCheckService(
             ReindexService reindexService,
@@ -68,7 +72,9 @@ public class HealthCheckService {
             MarkdownService markdownService,
             MutationApplier mutationApplier,
             SnapshotService snapshotService,
-            DocumentIndexRepository repository) {
+            DocumentIndexRepository repository,
+            AppProperties properties,
+            AppSettingRepository settingRepository) {
         this.reindexService = reindexService;
         this.embeddingIndexService = embeddingIndexService;
         this.semanticSearchService = semanticSearchService;
@@ -76,6 +82,8 @@ public class HealthCheckService {
         this.mutationApplier = mutationApplier;
         this.snapshotService = snapshotService;
         this.repository = repository;
+        this.properties = properties;
+        this.settingRepository = settingRepository;
     }
 
     /** Result of the discovery phases (1 + 2) before connections are written to disk. */
@@ -117,6 +125,14 @@ public class HealthCheckService {
                         .toList();
         int total = sources.size();
 
+        // Phase 1 just backfilled hubness for the whole index, so CSLS is active here. Computed
+        // once
+        // for the whole run.
+        Map<String, Double> hubnessByPath =
+                repository.findHubnessByPath(properties.embeddings().model());
+        int hubnessK = LinkRankingSettings.hubnessK(settingRepository);
+        double margin = LinkRankingSettings.cslsMargin(settingRepository);
+
         Map<String, LinkedHashSet<String>> computed = new LinkedHashMap<>();
         Map<String, Set<String>> knownLinks = new HashMap<>();
         Set<String> countedPairs = new HashSet<>();
@@ -127,17 +143,38 @@ public class HealthCheckService {
             String sourcePath = source.path();
             String query = buildQuery(source);
 
+            List<SearchResult> generalNeighbors =
+                    semanticSearchService.search(query, SEMANTIC_LIMIT).stream()
+                            .filter(r -> !r.path().equals(sourcePath))
+                            .toList();
+            Double storedRkA = hubnessByPath.get(sourcePath);
+            double rkA =
+                    storedRkA != null ? storedRkA : CslsRanker.meanTopK(generalNeighbors, hubnessK);
+
             LinkedHashSet<String> candidates = new LinkedHashSet<>();
-            for (SearchResult r : semanticSearchService.search(query, SEMANTIC_LIMIT)) {
-                if (r.score() >= SEMANTIC_THRESHOLD && !r.path().equals(sourcePath)) {
-                    candidates.add(r.path());
-                }
-            }
             for (SearchResult r :
-                    semanticSearchService.searchByType(query, TOPIC_DOC_TYPE, TOPIC_LIMIT)) {
-                if (r.score() >= TOPIC_THRESHOLD && !r.path().equals(sourcePath)) {
-                    candidates.add(r.path());
-                }
+                    CslsRanker.select(
+                            generalNeighbors,
+                            rkA,
+                            hubnessByPath,
+                            SEMANTIC_THRESHOLD,
+                            margin,
+                            SEMANTIC_LIMIT)) {
+                candidates.add(r.path());
+            }
+            List<SearchResult> topicNeighbors =
+                    semanticSearchService.searchByType(query, TOPIC_DOC_TYPE, TOPIC_LIMIT).stream()
+                            .filter(r -> !r.path().equals(sourcePath))
+                            .toList();
+            for (SearchResult r :
+                    CslsRanker.select(
+                            topicNeighbors,
+                            rkA,
+                            hubnessByPath,
+                            TOPIC_THRESHOLD,
+                            margin,
+                            TOPIC_LIMIT)) {
+                candidates.add(r.path());
             }
 
             for (String targetPath : candidates) {

@@ -37,7 +37,14 @@
 - [x] 5.3 Unit test asserting the `5-htp3` hub is excluded and a genuine link is retained under the margin (`LinkDiscoveryRankingTests.excludesHubFalseLinkAndKeepsGenuineLink`, plus empty-result / coarse-filter / missing-hubness cases)
 - [ ] 5.4 (NEEDS RUNNING BACKEND + EDITOR) Manual E2E: open `muscle-hypertrophy` in the editor, run Link Discovery, confirm `5-htp3` no longer appears and genuine links still do (or "no results" when appropriate)
 
-## 6. Housekeeping
+## 6. Extend CSLS to all automated link-proposal paths
 
-- [x] 6.1 `mvn -f backend/pom.xml spotless:apply` applied; `mvn -f backend/pom.xml test` green (172 tests, 0 failures)
-- [x] 6.2 Updated `docs/03-ai/semantic-search.md` Ranking section with the CSLS ranking, hubness storage, settings, and diagnostics endpoint
+- [x] 6.1 Extract the CSLS selection + `meanTopK` into a shared `CslsRanker` (returns `SearchResult`s), with an empty-hubness → coarse-threshold degrade; refactor `LinkDiscoveryService` to use it (stored `r_k(A)` with `meanTopK` fallback)
+- [x] 6.2 Apply `CslsRanker` in `HealthCheckService`: inject `AppProperties` + `AppSettingRepository`, compute hubness once per run, replace both `>= 0.72` filters (general + topic) with CSLS before writing `Related`. Phase-1 embed backfills hubness so CSLS is active in phase 2 (self-healing)
+- [x] 6.3 Apply `CslsRanker` in `ConnectionDiscoveryService`: inject `DocumentIndexRepository` + `AppProperties`, replace both threshold filters (semantic + topic) with CSLS
+- [x] 6.4 Update `HealthCheckServiceTests` and `ConnectionDiscoveryServiceTests` constructors; empty-hubness mock keeps their existing assertions (coarse-threshold degrade). Retarget `LinkDiscoveryRankingTests` to `CslsRanker` and add the empty-hubness-degrade case
+
+## 7. Housekeeping
+
+- [x] 7.1 `mvn -f backend/pom.xml spotless:apply` applied; `mvn -f backend/pom.xml test` green (173 tests, 0 failures)
+- [x] 7.2 Updated `docs/03-ai/semantic-search.md` Ranking section: CSLS across all three paths, shared `CslsRanker`, degrade behavior, hubness storage, settings, and diagnostics endpoint

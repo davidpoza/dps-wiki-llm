@@ -9,6 +9,7 @@ Link discovery surfaces nonsensical links with high raw cosine scores — e.g. `
 - **Precompute per-document hubness** `r_k(X)` once when embeddings change, stored alongside the embedding index, so discovery only computes `r_k(A)` for the source note at query time and looks up `r_k(B)` per candidate.
 - **Replace the hard-coded absolute threshold** with a data-driven acceptance margin over the CSLS score, calibrated (not guessed) against a small labeled benchmark.
 - **Add a diagnostics capability**: an endpoint/command that reports the global pairwise similarity distribution (mean, p90, p95, p99) and evaluates a small labeled benchmark of known good/bad pairs (with `muscle-hypertrophy ↔ 5-htp` as the canonical negative) so the margin and `k` can be tuned and the fix verified.
+- **Apply the same CSLS selection to every automated link-proposal path, not just the interactive modal.** A shared `CslsRanker` replaces the raw `>= 0.72` filter in `HealthCheckService` (which writes the `Related` section on disk) and `ConnectionDiscoveryService` (ingest connection candidates). This is essential because the health check — not the modal — is what actually wrote false links like `[[5-htp3]]` into notes. The ranker degrades to the coarse absolute threshold when hubness has not been backfilled yet, so it is never stricter than the previous behavior.
 
 ## Capabilities
 
@@ -20,7 +21,7 @@ Link discovery surfaces nonsensical links with high raw cosine scores — e.g. `
 
 ## Impact
 
-- **Backend services**: `LinkDiscoveryService` (CSLS re-ranking + margin selection + empty-result fallback), `EmbeddingIndexService` (trigger hubness recompute after embedding), a new hubness computation path.
+- **Backend services**: a shared `CslsRanker` (CSLS re-ranking + margin selection + empty-result behavior + coarse-threshold degrade), applied in `LinkDiscoveryService`, `HealthCheckService`, and `ConnectionDiscoveryService`; `EmbeddingIndexService` triggers hubness recompute after embedding.
 - **Persistence**: `DocumentIndexRepository` / `JdbcDocumentIndexRepository` gain queries to compute `r_k` per document (pgvector KNN) and to read it back during discovery; new storage for the per-document hubness value (column or table) via a DB migration.
 - **API**: new read-only diagnostics endpoint (global distribution + benchmark evaluation); `LinkScoreController` may expose the CSLS-adjusted score alongside raw cosine.
 - **Config**: `k` (neighbors for `r_k`) and the CSLS acceptance margin become configurable settings replacing the absolute `link.similarity-threshold` as the primary gate.

@@ -62,7 +62,9 @@ class HealthCheckServiceTests {
                         markdownService,
                         mutationApplier,
                         snapshotService,
-                        mock(com.dpswikillm.repositories.DocumentIndexRepository.class));
+                        mock(com.dpswikillm.repositories.DocumentIndexRepository.class),
+                        properties,
+                        mock(com.dpswikillm.repositories.AppSettingRepository.class));
 
         snapshot = mock(Snapshot.class);
         when(snapshot.getId()).thenReturn(UUID.randomUUID());

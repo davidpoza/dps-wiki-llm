@@ -39,6 +39,25 @@ Link discovery SHALL return an empty result set when no candidate clears the acc
 - **WHEN** the source note `muscle-hypertrophy` is scored against `5-htp` whose raw cosine is ~0.85 but which is a hub
 - **THEN** the CSLS-adjusted score for `5-htp` falls below the acceptance margin and it is excluded from the results
 
+### Requirement: CSLS applied to all automated link-proposal paths
+
+Every path that proposes links from semantic similarity SHALL select candidates through the same CSLS ranking, not just the interactive discovery modal. This includes the health check (which writes the `Related` section of notes on disk) and ingest connection discovery. A shared ranker SHALL be the single implementation, so behavior is consistent across paths. When the per-document hubness statistic has not yet been computed for the index, the ranker SHALL degrade to the coarse absolute threshold, so it is never stricter than the previous raw-cosine behavior.
+
+#### Scenario: Health check uses CSLS before writing Related
+
+- **WHEN** the health check computes the links to write into a note's `Related` section
+- **THEN** it selects them via CSLS (using the hubness backfilled in its embedding phase), so hub notes are not written as false links
+
+#### Scenario: Connection discovery uses CSLS
+
+- **WHEN** ingest connection discovery proposes semantic and topic candidates
+- **THEN** those candidates are filtered by CSLS rather than by the raw absolute threshold alone
+
+#### Scenario: Degrade before hubness exists
+
+- **WHEN** the hubness statistic is empty for the index (e.g. immediately after the migration, before any embedding run)
+- **THEN** the ranker accepts candidates by the coarse absolute threshold, never dropping links that the previous raw-cosine gate would have kept
+
 ### Requirement: Acceptance margin as the primary gate
 
 Link discovery SHALL gate results on a configurable CSLS acceptance margin as the primary criterion. Any absolute raw-cosine threshold SHALL act only as a coarse pre-filter on the retrieved candidate pool, never as the final acceptance criterion. The acceptance margin SHALL be adjustable without code changes.

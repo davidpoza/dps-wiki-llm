@@ -1,5 +1,6 @@
 package com.dpswikillm.services;
 
+import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.domain.ConnectionCandidateDecision;
 import com.dpswikillm.domain.ConnectionCandidateSource;
 import com.dpswikillm.domain.Job;
@@ -10,6 +11,7 @@ import com.dpswikillm.domain.MutationPlan;
 import com.dpswikillm.domain.NormalizedSourcePayload;
 import com.dpswikillm.domain.SearchResult;
 import com.dpswikillm.repositories.AppSettingRepository;
+import com.dpswikillm.repositories.DocumentIndexRepository;
 import com.dpswikillm.repositories.JobConnectionCandidateRepository;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,16 +35,22 @@ public class ConnectionDiscoveryService {
     private final JobConnectionCandidateRepository candidateRepository;
     private final JobLifecycleService lifecycleService;
     private final AppSettingRepository settingRepository;
+    private final DocumentIndexRepository documentIndexRepository;
+    private final AppProperties properties;
 
     public ConnectionDiscoveryService(
             SemanticSearchService semanticSearchService,
             JobConnectionCandidateRepository candidateRepository,
             JobLifecycleService lifecycleService,
-            AppSettingRepository settingRepository) {
+            AppSettingRepository settingRepository,
+            DocumentIndexRepository documentIndexRepository,
+            AppProperties properties) {
         this.semanticSearchService = semanticSearchService;
         this.candidateRepository = candidateRepository;
         this.lifecycleService = lifecycleService;
         this.settingRepository = settingRepository;
+        this.documentIndexRepository = documentIndexRepository;
+        this.properties = properties;
     }
 
     public List<JobConnectionCandidate> discoverAndPersist(
@@ -60,19 +68,42 @@ public class ConnectionDiscoveryService {
                                 .toList();
 
         String query = buildQuery(payload);
-        double threshold = readThreshold();
-        List<SearchResult> semanticResults =
+        double coarseThreshold = readThreshold();
+        double margin = LinkRankingSettings.cslsMargin(settingRepository);
+        int k = LinkRankingSettings.hubnessK(settingRepository);
+        Map<String, Double> hubnessByPath =
+                documentIndexRepository.findHubnessByPath(properties.embeddings().model());
+
+        List<SearchResult> generalNeighbors =
                 semanticSearchService.search(query, DEFAULT_NEIGHBOR_LIMIT).stream()
-                        .filter(r -> r.score() >= threshold && !r.path().equals(sourceNotePath))
+                        .filter(r -> !r.path().equals(sourceNotePath))
                         .toList();
+        Double storedRkA = hubnessByPath.get(sourceNotePath);
+        double rkA = storedRkA != null ? storedRkA : CslsRanker.meanTopK(generalNeighbors, k);
+        List<SearchResult> semanticResults =
+                CslsRanker.select(
+                        generalNeighbors,
+                        rkA,
+                        hubnessByPath,
+                        coarseThreshold,
+                        margin,
+                        DEFAULT_NEIGHBOR_LIMIT);
         // Dedicated topic search so curated wiki/topics/ hubs surface on their own, without
         // competing against far more similar source notes in the general top-N.
-        List<SearchResult> topicResults =
+        List<SearchResult> topicNeighbors =
                 semanticSearchService
                         .searchByType(query, TOPIC_DOC_TYPE, TOPIC_CONNECTION_LIMIT)
                         .stream()
-                        .filter(r -> r.score() >= threshold && !r.path().equals(sourceNotePath))
+                        .filter(r -> !r.path().equals(sourceNotePath))
                         .toList();
+        List<SearchResult> topicResults =
+                CslsRanker.select(
+                        topicNeighbors,
+                        rkA,
+                        hubnessByPath,
+                        coarseThreshold,
+                        margin,
+                        TOPIC_CONNECTION_LIMIT);
 
         int total = llmActions.size() + semanticResults.size() + topicResults.size();
         int idx = 0;

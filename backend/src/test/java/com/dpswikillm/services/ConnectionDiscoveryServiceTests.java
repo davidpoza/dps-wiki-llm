@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.domain.ConnectionCandidateSource;
 import com.dpswikillm.domain.Job;
 import com.dpswikillm.domain.JobConnectionCandidate;
@@ -16,7 +17,9 @@ import com.dpswikillm.domain.NormalizedSourcePayload;
 import com.dpswikillm.domain.SearchResult;
 import com.dpswikillm.domain.SourceKind;
 import com.dpswikillm.repositories.AppSettingRepository;
+import com.dpswikillm.repositories.DocumentIndexRepository;
 import com.dpswikillm.repositories.JobConnectionCandidateRepository;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -47,9 +50,28 @@ class ConnectionDiscoveryServiceTests {
         JobLifecycleService lifecycle = mock(JobLifecycleService.class);
         AppSettingRepository settingRepository = mock(AppSettingRepository.class);
         when(settingRepository.findById(any())).thenReturn(java.util.Optional.empty());
+        DocumentIndexRepository documentIndexRepository = mock(DocumentIndexRepository.class);
+        when(documentIndexRepository.findHubnessByPath(any())).thenReturn(Map.of());
+        AppProperties properties =
+                new AppProperties(
+                        "vault",
+                        List.of(),
+                        new AppProperties.Embeddings(
+                                "http://localhost", "model", "", 384, Duration.ofSeconds(1), 8),
+                        new AppProperties.Llm("http://localhost", "model", "key"),
+                        new AppProperties.Telegram("", ""),
+                        null,
+                        null,
+                        null,
+                        null);
         service =
                 new ConnectionDiscoveryService(
-                        semanticSearch, candidateRepository, lifecycle, settingRepository);
+                        semanticSearch,
+                        candidateRepository,
+                        lifecycle,
+                        settingRepository,
+                        documentIndexRepository,
+                        properties);
     }
 
     @Test
