@@ -295,7 +295,8 @@ class IngestPipelineServicesTests {
                         documentRepository,
                         new StubEmbeddingClient(),
                         properties(),
-                        new MarkdownService());
+                        new MarkdownService(),
+                        emptySettings());
         GuidedReviewService realGuidedReview =
                 new GuidedReviewService(
                         jobRepository,
@@ -438,7 +439,8 @@ class IngestPipelineServicesTests {
                         documentRepository,
                         new StubEmbeddingClient(),
                         properties(),
-                        new MarkdownService());
+                        new MarkdownService(),
+                        emptySettings());
 
         GuidedReviewService reviewService =
                 new GuidedReviewService(
@@ -525,7 +527,8 @@ class IngestPipelineServicesTests {
                         documentRepository,
                         new StubEmbeddingClient(),
                         properties(),
-                        new MarkdownService());
+                        new MarkdownService(),
+                        emptySettings());
 
         ConceptResolutionService conceptResolution = mock(ConceptResolutionService.class);
         when(conceptResolution.resolve(any(MutationPlan.class)))
@@ -615,7 +618,11 @@ class IngestPipelineServicesTests {
                 new ReindexService(resolver, new MarkdownService(), documentRepository);
         EmbeddingIndexService embeddings =
                 new EmbeddingIndexService(
-                        documentRepository, embeddingClient, properties(), new MarkdownService());
+                        documentRepository,
+                        embeddingClient,
+                        properties(),
+                        new MarkdownService(),
+                        emptySettings());
         ConceptResolutionService conceptResolution = mock(ConceptResolutionService.class);
         when(conceptResolution.resolve(any(MutationPlan.class)))
                 .thenAnswer(
@@ -726,6 +733,14 @@ class IngestPipelineServicesTests {
         }
     }
 
+    private static com.dpswikillm.repositories.AppSettingRepository emptySettings() {
+        com.dpswikillm.repositories.AppSettingRepository repo =
+                org.mockito.Mockito.mock(com.dpswikillm.repositories.AppSettingRepository.class);
+        org.mockito.Mockito.when(repo.findById(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(java.util.Optional.empty());
+        return repo;
+    }
+
     private static class FakeDocumentRepository implements DocumentIndexRepository {
         List<DocumentRecord> documents = new ArrayList<>();
         Map<UUID, String> hashes = new LinkedHashMap<>();
@@ -794,6 +809,29 @@ class IngestPipelineServicesTests {
         @Override
         public Optional<Double> computeScore(String srcPath, String tgtPath) {
             return Optional.empty();
+        }
+
+        @Override
+        public Optional<Double> computeHubness(UUID documentId, String model, int k) {
+            return Optional.empty();
+        }
+
+        @Override
+        public void updateHubness(UUID documentId, String model, double hubness) {}
+
+        @Override
+        public Map<String, Double> findHubnessByPath(String model) {
+            return Map.of();
+        }
+
+        @Override
+        public List<UUID> findDocumentIdsMissingHubness(String model) {
+            return List.of();
+        }
+
+        @Override
+        public GlobalSimilarityStats sampleGlobalSimilarityStats(String model, int sampleSize) {
+            return new GlobalSimilarityStats(0, 0, 0, 0, 0);
         }
     }
 

@@ -42,4 +42,28 @@ public interface DocumentIndexRepository {
     Optional<Instant> findEmbeddingStatus(String path);
 
     Optional<Double> computeScore(String srcPath, String tgtPath);
+
+    /**
+     * Neighborhood-density statistic r_k for one document: the mean cosine similarity to its {@code
+     * k} nearest neighbors in the same model space, excluding itself. Empty when the document has
+     * no embedding or has no neighbors.
+     */
+    Optional<Double> computeHubness(UUID documentId, String model, int k);
+
+    void updateHubness(UUID documentId, String model, double hubness);
+
+    /** Stored hubness r_k keyed by document path, for the given model. */
+    Map<String, Double> findHubnessByPath(String model);
+
+    /** Document ids that have an embedding for the model but no computed hubness yet. */
+    List<UUID> findDocumentIdsMissingHubness(String model);
+
+    record GlobalSimilarityStats(double mean, double p90, double p95, double p99, int pairCount) {}
+
+    /**
+     * Sample the global pairwise cosine-similarity distribution over the index by drawing a random
+     * subset of embeddings and comparing all of their pairs. Used to observe the model's
+     * anisotropy.
+     */
+    GlobalSimilarityStats sampleGlobalSimilarityStats(String model, int sampleSize);
 }

@@ -316,6 +316,110 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
 
+    @Override
+    public Optional<Double> computeHubness(UUID documentId, String model, int k) {
+        List<Double> result =
+                jdbcTemplate.query(
+                        """
+                        SELECT avg(sim) AS hubness FROM (
+                            SELECT 1 - (e_other.embedding <=> e_self.embedding) AS sim
+                            FROM document_embeddings e_self
+                            JOIN document_embeddings e_other
+                              ON e_other.model = e_self.model
+                             AND e_other.document_id <> e_self.document_id
+                            WHERE e_self.document_id = ? AND e_self.model = ?
+                            ORDER BY e_self.embedding <=> e_other.embedding
+                            LIMIT ?
+                        ) neighbors
+                        """,
+                        (rs, rowNum) -> {
+                            double value = rs.getDouble("hubness");
+                            return rs.wasNull() ? null : value;
+                        },
+                        documentId,
+                        model,
+                        k);
+        return result.isEmpty() ? Optional.empty() : Optional.ofNullable(result.get(0));
+    }
+
+    @Override
+    public void updateHubness(UUID documentId, String model, double hubness) {
+        jdbcTemplate.update(
+                "UPDATE document_embeddings SET hubness = ? WHERE document_id = ? AND model = ?",
+                hubness,
+                documentId,
+                model);
+    }
+
+    @Override
+    public Map<String, Double> findHubnessByPath(String model) {
+        return jdbcTemplate.query(
+                """
+                SELECT d.path, e.hubness
+                FROM document_embeddings e
+                JOIN documents d ON d.id = e.document_id
+                WHERE e.model = ? AND e.hubness IS NOT NULL
+                """,
+                rs -> {
+                    Map<String, Double> byPath = new java.util.LinkedHashMap<>();
+                    while (rs.next()) {
+                        byPath.put(rs.getString("path"), rs.getDouble("hubness"));
+                    }
+                    return byPath;
+                },
+                model);
+    }
+
+    @Override
+    public List<UUID> findDocumentIdsMissingHubness(String model) {
+        return jdbcTemplate.query(
+                "SELECT document_id FROM document_embeddings WHERE model = ? AND hubness IS NULL",
+                (rs, rowNum) -> rs.getObject("document_id", UUID.class),
+                model);
+    }
+
+    @Override
+    public GlobalSimilarityStats sampleGlobalSimilarityStats(String model, int sampleSize) {
+        GlobalSimilarityStats stats =
+                jdbcTemplate.query(
+                        """
+                        WITH sample AS (
+                            SELECT embedding FROM document_embeddings
+                            WHERE model = ?
+                            ORDER BY random()
+                            LIMIT ?
+                        ),
+                        numbered AS (
+                            SELECT embedding, row_number() OVER () AS rn FROM sample
+                        ),
+                        pairs AS (
+                            SELECT 1 - (a.embedding <=> b.embedding) AS sim
+                            FROM numbered a JOIN numbered b ON a.rn < b.rn
+                        )
+                        SELECT
+                            count(*) AS pair_count,
+                            coalesce(avg(sim), 0) AS mean,
+                            coalesce(percentile_cont(0.90) WITHIN GROUP (ORDER BY sim), 0) AS p90,
+                            coalesce(percentile_cont(0.95) WITHIN GROUP (ORDER BY sim), 0) AS p95,
+                            coalesce(percentile_cont(0.99) WITHIN GROUP (ORDER BY sim), 0) AS p99
+                        FROM pairs
+                        """,
+                        rs -> {
+                            if (!rs.next()) {
+                                return new GlobalSimilarityStats(0, 0, 0, 0, 0);
+                            }
+                            return new GlobalSimilarityStats(
+                                    rs.getDouble("mean"),
+                                    rs.getDouble("p90"),
+                                    rs.getDouble("p95"),
+                                    rs.getDouble("p99"),
+                                    rs.getInt("pair_count"));
+                        },
+                        model,
+                        sampleSize);
+        return stats != null ? stats : new GlobalSimilarityStats(0, 0, 0, 0, 0);
+    }
+
     private String vectorLiteral(float[] vector) {
         StringBuilder out = new StringBuilder("[");
         for (int i = 0; i < vector.length; i += 1) {

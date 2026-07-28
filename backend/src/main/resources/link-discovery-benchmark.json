@@ -1,0 +1,20 @@
+[
+  {
+    "src": "wiki/topics/muscle-hypertrophy.md",
+    "tgt": "wiki/concepts/5-htp3.md",
+    "related": false,
+    "note": "Canonical negative: strength training vs. serotonin precursor. High raw cosine (~0.85) purely from E5 anisotropy/hubness."
+  },
+  {
+    "src": "wiki/concepts/5-htp3.md",
+    "tgt": "wiki/concepts/serotonina.md",
+    "related": true,
+    "note": "Genuine positive: 5-HTP is the direct metabolic precursor of serotonin."
+  },
+  {
+    "src": "wiki/concepts/5-htp3.md",
+    "tgt": "wiki/concepts/vias-metabolismo-del-triptofano.md",
+    "related": true,
+    "note": "Genuine positive: 5-HTP sits on the tryptophan metabolism pathway."
+  }
+]

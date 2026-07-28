@@ -2,11 +2,13 @@ package com.dpswikillm.services;
 
 import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.domain.DocumentRecord;
+import com.dpswikillm.repositories.AppSettingRepository;
 import com.dpswikillm.repositories.DocumentIndexRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,16 +21,19 @@ public class EmbeddingIndexService {
     private final EmbeddingClient embeddingClient;
     private final AppProperties properties;
     private final MarkdownService markdownService;
+    private final AppSettingRepository settingRepository;
 
     public EmbeddingIndexService(
             DocumentIndexRepository repository,
             EmbeddingClient embeddingClient,
             AppProperties properties,
-            MarkdownService markdownService) {
+            MarkdownService markdownService,
+            AppSettingRepository settingRepository) {
         this.repository = repository;
         this.embeddingClient = embeddingClient;
         this.properties = properties;
         this.markdownService = markdownService;
+        this.settingRepository = settingRepository;
     }
 
     public EmbedIndexResult embedIncremental() {
@@ -74,7 +79,29 @@ public class EmbeddingIndexService {
         repository.pruneEmbeddingsNotIn(
                 properties.embeddings().model(),
                 documents.stream().map(DocumentRecord::id).toList());
+        recomputeHubness(changed);
         return new EmbedIndexResult(documents.size(), changed.size());
+    }
+
+    /**
+     * Refresh the hubness statistic r_k for documents whose embedding just changed, plus any
+     * embedded document still missing a value (backfill after the migration). Runs after the prune
+     * so neighborhoods reflect the final index. Neighbors of a changed document keep their prior
+     * r_k (bounded drift, acceptable at vault scale) until they are themselves re-embedded.
+     */
+    private void recomputeHubness(List<DocumentRecord> changed) {
+        String model = properties.embeddings().model();
+        int k = LinkRankingSettings.hubnessK(settingRepository);
+        LinkedHashSet<UUID> toRecompute = new LinkedHashSet<>();
+        for (DocumentRecord doc : changed) {
+            toRecompute.add(doc.id());
+        }
+        toRecompute.addAll(repository.findDocumentIdsMissingHubness(model));
+        for (UUID id : toRecompute) {
+            repository
+                    .computeHubness(id, model, k)
+                    .ifPresent(h -> repository.updateHubness(id, model, h));
+        }
     }
 
     private String normalizedHash(DocumentRecord doc) {
@@ -95,7 +122,11 @@ public class EmbeddingIndexService {
                     kw.stream()
                             .map(k -> k.toString().replace('-', ' '))
                             .collect(java.util.stream.Collectors.joining(", "));
-            return "Primary topic: " + doc.title().replace('-', ' ') + ". Related concepts: " + joined + ".";
+            return "Primary topic: "
+                    + doc.title().replace('-', ' ')
+                    + ". Related concepts: "
+                    + joined
+                    + ".";
         }
         return (doc.title() + "\n" + doc.body()).replaceAll("\\s+", " ").trim();
     }

@@ -47,7 +47,9 @@ class ConnectionDiscoveryServiceTests {
         JobLifecycleService lifecycle = mock(JobLifecycleService.class);
         AppSettingRepository settingRepository = mock(AppSettingRepository.class);
         when(settingRepository.findById(any())).thenReturn(java.util.Optional.empty());
-        service = new ConnectionDiscoveryService(semanticSearch, candidateRepository, lifecycle, settingRepository);
+        service =
+                new ConnectionDiscoveryService(
+                        semanticSearch, candidateRepository, lifecycle, settingRepository);
     }
 
     @Test

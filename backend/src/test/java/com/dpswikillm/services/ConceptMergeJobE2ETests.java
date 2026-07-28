@@ -233,7 +233,11 @@ class ConceptMergeJobE2ETests {
         ReindexService reindexService = new ReindexService(pathResolver, markdownService, docRepo);
         EmbeddingIndexService embeddingIndexService =
                 new EmbeddingIndexService(
-                        docRepo, new StubEmbeddingClient(), properties(), markdownService);
+                        docRepo,
+                        new StubEmbeddingClient(),
+                        properties(),
+                        markdownService,
+                        emptySettings());
         return new ConceptMergeJobHandler(
                 markdownService,
                 pathResolver,
@@ -263,7 +267,11 @@ class ConceptMergeJobE2ETests {
                 snapshotService,
                 new ReindexService(resolver(), markdownService, docRepo),
                 new EmbeddingIndexService(
-                        docRepo, new StubEmbeddingClient(), properties(), markdownService),
+                        docRepo,
+                        new StubEmbeddingClient(),
+                        properties(),
+                        markdownService,
+                        emptySettings()),
                 lifecycleService,
                 objectMapper);
     }
@@ -305,6 +313,14 @@ class ConceptMergeJobE2ETests {
         public float[] embedQuery(String text) {
             return new float[] {1, 0};
         }
+    }
+
+    private static com.dpswikillm.repositories.AppSettingRepository emptySettings() {
+        com.dpswikillm.repositories.AppSettingRepository repo =
+                org.mockito.Mockito.mock(com.dpswikillm.repositories.AppSettingRepository.class);
+        org.mockito.Mockito.when(repo.findById(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(java.util.Optional.empty());
+        return repo;
     }
 
     private static class FakeDocumentRepository implements DocumentIndexRepository {
@@ -375,6 +391,29 @@ class ConceptMergeJobE2ETests {
         @Override
         public Optional<Double> computeScore(String srcPath, String tgtPath) {
             return Optional.empty();
+        }
+
+        @Override
+        public Optional<Double> computeHubness(UUID documentId, String model, int k) {
+            return Optional.empty();
+        }
+
+        @Override
+        public void updateHubness(UUID documentId, String model, double hubness) {}
+
+        @Override
+        public Map<String, Double> findHubnessByPath(String model) {
+            return Map.of();
+        }
+
+        @Override
+        public List<UUID> findDocumentIdsMissingHubness(String model) {
+            return List.of();
+        }
+
+        @Override
+        public GlobalSimilarityStats sampleGlobalSimilarityStats(String model, int sampleSize) {
+            return new GlobalSimilarityStats(0, 0, 0, 0, 0);
         }
     }
 }

@@ -59,7 +59,11 @@ class SemanticRetrievalServicesTests {
         StubEmbeddingClient embeddings = new StubEmbeddingClient();
         EmbeddingIndexService service =
                 new EmbeddingIndexService(
-                        repository, embeddings, properties(), new MarkdownService());
+                        repository,
+                        embeddings,
+                        properties(),
+                        new MarkdownService(),
+                        emptySettings());
 
         assertThat(service.embedIncremental().embeddedDocuments()).isEqualTo(1);
         assertThat(service.embedIncremental().embeddedDocuments()).isZero();
@@ -67,6 +71,29 @@ class SemanticRetrievalServicesTests {
         repository.documents = new ArrayList<>();
         service.embedIncremental();
         assertThat(repository.embeddingHashes).isEmpty();
+    }
+
+    @Test
+    void embedIncrementalComputesHubnessAndPrunesItWithEmbeddings() {
+        FakeRepository repository = new FakeRepository();
+        DocumentRecord a = doc("wiki/concepts/a.md", "A", "alpha");
+        DocumentRecord b = doc("wiki/concepts/b.md", "B", "beta");
+        repository.documents = new ArrayList<>(List.of(a, b));
+        EmbeddingIndexService service =
+                new EmbeddingIndexService(
+                        repository,
+                        new StubEmbeddingClient(),
+                        properties(),
+                        new MarkdownService(),
+                        emptySettings());
+
+        service.embedIncremental();
+        assertThat(repository.hubness).containsKeys(a.id(), b.id());
+
+        // Remove b from the vault: its embedding and its hubness are pruned together.
+        repository.documents = new ArrayList<>(List.of(a));
+        service.embedIncremental();
+        assertThat(repository.hubness).containsKey(a.id()).doesNotContainKey(b.id());
     }
 
     @Test
@@ -157,10 +184,19 @@ class SemanticRetrievalServicesTests {
         }
     }
 
+    private static com.dpswikillm.repositories.AppSettingRepository emptySettings() {
+        com.dpswikillm.repositories.AppSettingRepository repo =
+                org.mockito.Mockito.mock(com.dpswikillm.repositories.AppSettingRepository.class);
+        org.mockito.Mockito.when(repo.findById(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(java.util.Optional.empty());
+        return repo;
+    }
+
     private static class FakeRepository implements DocumentIndexRepository {
         List<DocumentRecord> documents = new ArrayList<>();
         Map<UUID, String> embeddingHashes = new LinkedHashMap<>();
         Map<UUID, float[]> vectors = new LinkedHashMap<>();
+        Map<UUID, Double> hubness = new LinkedHashMap<>();
 
         @Override
         public void replaceDocuments(List<DocumentRecord> documents) {
@@ -192,6 +228,7 @@ class SemanticRetrievalServicesTests {
         public void pruneEmbeddingsNotIn(String model, List<UUID> documentIds) {
             embeddingHashes.keySet().removeIf(id -> !documentIds.contains(id));
             vectors.keySet().removeIf(id -> !documentIds.contains(id));
+            hubness.keySet().removeIf(id -> !documentIds.contains(id));
         }
 
         @Override
@@ -287,6 +324,53 @@ class SemanticRetrievalServicesTests {
         @Override
         public Optional<Double> computeScore(String srcPath, String tgtPath) {
             return Optional.empty();
+        }
+
+        @Override
+        public Optional<Double> computeHubness(UUID documentId, String model, int k) {
+            float[] self = vectors.get(documentId);
+            if (self == null) {
+                return Optional.empty();
+            }
+            List<Double> sims = new ArrayList<>();
+            for (Map.Entry<UUID, float[]> entry : vectors.entrySet()) {
+                if (!entry.getKey().equals(documentId)) {
+                    sims.add(cosine(self, entry.getValue()));
+                }
+            }
+            if (sims.isEmpty()) {
+                return Optional.empty();
+            }
+            sims.sort(Comparator.reverseOrder());
+            List<Double> top = sims.subList(0, Math.min(k, sims.size()));
+            return Optional.of(top.stream().mapToDouble(Double::doubleValue).average().orElse(0));
+        }
+
+        @Override
+        public void updateHubness(UUID documentId, String model, double value) {
+            hubness.put(documentId, value);
+        }
+
+        @Override
+        public Map<String, Double> findHubnessByPath(String model) {
+            Map<String, Double> byPath = new LinkedHashMap<>();
+            for (DocumentRecord doc : documents) {
+                Double value = hubness.get(doc.id());
+                if (value != null) {
+                    byPath.put(doc.path(), value);
+                }
+            }
+            return byPath;
+        }
+
+        @Override
+        public List<UUID> findDocumentIdsMissingHubness(String model) {
+            return vectors.keySet().stream().filter(id -> !hubness.containsKey(id)).toList();
+        }
+
+        @Override
+        public GlobalSimilarityStats sampleGlobalSimilarityStats(String model, int sampleSize) {
+            return new GlobalSimilarityStats(0, 0, 0, 0, 0);
         }
     }
 }
