@@ -35,6 +35,8 @@ public class SettingsController {
     private static final double LINK_THRESHOLD_DEFAULT = 0.72;
     private static final String CSLS_MARGIN_KEY = "link.csls-margin";
     private static final double CSLS_MARGIN_DEFAULT = 0.05;
+    private static final String HUBNESS_K_KEY = "link.hubness-k";
+    private static final int HUBNESS_K_DEFAULT = 10;
 
     private final ReindexService reindexService;
     private final ResourceSettingsService resourceSettingsService;
@@ -251,6 +253,37 @@ public class SettingsController {
         return ResponseEntity.ok(new CslsMarginDto(request.margin()));
     }
 
+    @GetMapping("/hubness-k")
+    public HubnessKDto getHubnessK() {
+        int value =
+                settingRepository
+                        .findById(HUBNESS_K_KEY)
+                        .map(
+                                s -> {
+                                    try {
+                                        return Integer.parseInt(s.getValue());
+                                    } catch (NumberFormatException ignored) {
+                                        return HUBNESS_K_DEFAULT;
+                                    }
+                                })
+                        .orElse(HUBNESS_K_DEFAULT);
+        return new HubnessKDto(value);
+    }
+
+    @PutMapping("/hubness-k")
+    public ResponseEntity<HubnessKDto> setHubnessK(@RequestBody HubnessKDto request) {
+        if (request.k() < 1 || request.k() > 100) {
+            return ResponseEntity.badRequest().build();
+        }
+        AppSetting setting =
+                settingRepository
+                        .findById(HUBNESS_K_KEY)
+                        .orElse(new AppSetting(HUBNESS_K_KEY, String.valueOf(HUBNESS_K_DEFAULT)));
+        setting.setValue(String.valueOf(request.k()));
+        settingRepository.save(setting);
+        return ResponseEntity.ok(new HubnessKDto(request.k()));
+    }
+
     @DeleteMapping("/broken-links")
     public BrokenLinkDeleteResult deleteBrokenLinks(@RequestBody BrokenLinkDeleteRequest request) {
         int deleted =
@@ -264,4 +297,6 @@ public class SettingsController {
     public record LinkThresholdDto(double threshold) {}
 
     public record CslsMarginDto(double margin) {}
+
+    public record HubnessKDto(int k) {}
 }

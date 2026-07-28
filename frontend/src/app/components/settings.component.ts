@@ -249,6 +249,41 @@ interface PromptState extends Prompt {
                 </section>
 
                 <section class="settings-section">
+                  <h2>Vecinos k (hubness)</h2>
+                  <p class="section-desc">
+                    Número de vecinos más cercanos usados para calcular la densidad local (hubness r_k) de cada nota,
+                    base del score CSLS (por defecto: 10). <strong>Requiere reindexar o lanzar el Health Check</strong>
+                    para recalcular la hubness almacenada; hasta entonces el valor nuevo no tiene efecto.
+                  </p>
+                  <div class="resource-row">
+                    <label for="hubness-k" class="resource-label">Vecinos k (1 – 100)</label>
+                    <input
+                      id="hubness-k"
+                      class="resource-input"
+                      type="number"
+                      min="1"
+                      max="100"
+                      step="1"
+                      [(ngModel)]="hubnessK"
+                      [disabled]="hubnessKSaving()"
+                    />
+                    <p-button
+                      label="Guardar"
+                      size="small"
+                      [loading]="hubnessKSaving()"
+                      [disabled]="hubnessK < 1 || hubnessK > 100 || hubnessKSaving()"
+                      (onClick)="saveHubnessK()"
+                    />
+                  </div>
+                  @if (hubnessKSaved()) {
+                    <span class="feedback success">Guardado. Reindexa o lanza el Health Check para aplicarlo.</span>
+                  }
+                  @if (hubnessKError()) {
+                    <span class="feedback error">{{ hubnessKError() }}</span>
+                  }
+                </section>
+
+                <section class="settings-section">
                   <h2>Mantenimiento</h2>
                   <p class="section-desc">
                     Busca conceptos duplicados en la wiki (por ejemplo, el mismo concepto en español e inglés) y
@@ -560,6 +595,11 @@ export class SettingsComponent implements OnInit {
   readonly cslsMarginSaved = signal(false);
   readonly cslsMarginError = signal<string | null>(null);
 
+  hubnessK = 10;
+  readonly hubnessKSaving = signal(false);
+  readonly hubnessKSaved = signal(false);
+  readonly hubnessKError = signal<string | null>(null);
+
   readonly showDedupModal = signal(false);
   readonly dedupMergeRunning = signal(false);
 
@@ -605,6 +645,13 @@ export class SettingsComponent implements OnInit {
     this.api.getCslsMargin().subscribe({
       next: (data) => {
         this.cslsMargin = data.margin;
+      },
+      error: () => {},
+    });
+
+    this.api.getHubnessK().subscribe({
+      next: (data) => {
+        this.hubnessK = data.k;
       },
       error: () => {},
     });
@@ -656,6 +703,26 @@ export class SettingsComponent implements OnInit {
       error: () => {
         this.cslsMarginSaving.set(false);
         this.cslsMarginError.set('Valor inválido. Debe estar entre -1.00 y 1.00.');
+      },
+    });
+  }
+
+  saveHubnessK(): void {
+    if (this.hubnessK < 1 || this.hubnessK > 100) return;
+    this.hubnessKSaving.set(true);
+    this.hubnessKSaved.set(false);
+    this.hubnessKError.set(null);
+
+    this.api.setHubnessK(this.hubnessK).subscribe({
+      next: (data) => {
+        this.hubnessK = data.k;
+        this.hubnessKSaving.set(false);
+        this.hubnessKSaved.set(true);
+        setTimeout(() => this.hubnessKSaved.set(false), 4000);
+      },
+      error: () => {
+        this.hubnessKSaving.set(false);
+        this.hubnessKError.set('Valor inválido. Debe ser un entero entre 1 y 100.');
       },
     });
   }

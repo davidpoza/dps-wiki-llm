@@ -352,6 +352,14 @@ export class ApiService {
     return this.http.put<{ margin: number }>('/api/settings/csls-margin', { margin });
   }
 
+  getHubnessK(): Observable<{ k: number }> {
+    return this.http.get<{ k: number }>('/api/settings/hubness-k');
+  }
+
+  setHubnessK(k: number): Observable<{ k: number }> {
+    return this.http.put<{ k: number }>('/api/settings/hubness-k', { k });
+  }
+
   reindex(): Observable<ReindexProgress> {
     return new Observable((observer: Observer<ReindexProgress>) => {
       const token = this.auth.token();
