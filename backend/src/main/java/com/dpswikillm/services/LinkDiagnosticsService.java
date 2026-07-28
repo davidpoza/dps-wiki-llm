@@ -61,6 +61,26 @@ public class LinkDiagnosticsService {
             int sampleSize,
             List<BenchmarkResult> benchmark) {}
 
+    /**
+     * Raw cosine plus CSLS-adjusted score for a single pair, for the editor's link context menu.
+     */
+    public record LinkScore(Double score, Double csls, Double margin, Boolean wouldLink) {}
+
+    public LinkScore scoreLink(String src, String tgt) {
+        Double cosine = repository.computeScore(src, tgt).orElse(null);
+        double margin = LinkRankingSettings.cslsMargin(settingRepository);
+        Map<String, Double> hubnessByPath =
+                repository.findHubnessByPath(properties.embeddings().model());
+        Double rkSrc = hubnessByPath.get(src);
+        Double rkTgt = hubnessByPath.get(tgt);
+        Double csls =
+                (cosine != null && rkSrc != null && rkTgt != null)
+                        ? LinkRankingSettings.csls(cosine, rkSrc, rkTgt)
+                        : null;
+        Boolean wouldLink = csls != null ? csls >= margin : null;
+        return new LinkScore(cosine, csls, margin, wouldLink);
+    }
+
     public Diagnostics run() {
         String model = properties.embeddings().model();
         double margin = LinkRankingSettings.cslsMargin(settingRepository);

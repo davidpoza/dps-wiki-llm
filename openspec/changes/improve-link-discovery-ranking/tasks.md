@@ -44,7 +44,14 @@
 - [x] 6.3 Apply `CslsRanker` in `ConnectionDiscoveryService`: inject `DocumentIndexRepository` + `AppProperties`, replace both threshold filters (semantic + topic) with CSLS
 - [x] 6.4 Update `HealthCheckServiceTests` and `ConnectionDiscoveryServiceTests` constructors; empty-hubness mock keeps their existing assertions (coarse-threshold degrade). Retarget `LinkDiscoveryRankingTests` to `CslsRanker` and add the empty-hubness-degrade case
 
-## 7. Housekeeping
+## 7. UI: configurable margin + CSLS in the link context menu
 
-- [x] 7.1 `mvn -f backend/pom.xml spotless:apply` applied; `mvn -f backend/pom.xml test` green (173 tests, 0 failures)
-- [x] 7.2 Updated `docs/03-ai/semantic-search.md` Ranking section: CSLS across all three paths, shared `CslsRanker`, degrade behavior, hubness storage, settings, and diagnostics endpoint
+- [x] 7.1 Backend: `GET`/`PUT /settings/csls-margin` (mirrors `link-threshold`, signed range [-1, 1]); `GET /links/score` now returns `{score, csls, margin, wouldLink}` via `LinkDiagnosticsService.scoreLink`
+- [x] 7.2 Frontend `api.service.ts`: enrich `getLinkScore` type, add `getCslsMargin`/`setCslsMargin`
+- [x] 7.3 Frontend editor context menu (`showLinkScore`): show raw cosine + CSLS + margin + would-link verdict
+- [x] 7.4 Frontend settings: "Margen CSLS de enlace" field (load/save) next to the cosine threshold
+
+## 8. Housekeeping
+
+- [x] 8.1 `mvn -f backend/pom.xml spotless:apply`; `mvn -f backend/pom.xml test` green (173 tests, 0 failures); `pnpm run build` (frontend) succeeds; prettier applied to changed TS
+- [x] 8.2 Updated `docs/03-ai/semantic-search.md` Ranking section: CSLS across all three paths, shared `CslsRanker`, degrade behavior, hubness storage, settings, and diagnostics endpoint

@@ -324,8 +324,16 @@ export class ApiService {
     return this.http.post<{ explanation: string }>('/api/notes/explain-link', { sourcePath, targetPath });
   }
 
-  getLinkScore(src: string, tgt: string): Observable<{ score: number | null }> {
-    return this.http.get<{ score: number | null }>(`/api/links/score?src=${encodeURIComponent(src)}&tgt=${encodeURIComponent(tgt)}`);
+  getLinkScore(
+    src: string,
+    tgt: string,
+  ): Observable<{ score: number | null; csls: number | null; margin: number | null; wouldLink: boolean | null }> {
+    return this.http.get<{
+      score: number | null;
+      csls: number | null;
+      margin: number | null;
+      wouldLink: boolean | null;
+    }>(`/api/links/score?src=${encodeURIComponent(src)}&tgt=${encodeURIComponent(tgt)}`);
   }
 
   getLinkThreshold(): Observable<{ threshold: number }> {
@@ -334,6 +342,14 @@ export class ApiService {
 
   setLinkThreshold(threshold: number): Observable<{ threshold: number }> {
     return this.http.put<{ threshold: number }>('/api/settings/link-threshold', { threshold });
+  }
+
+  getCslsMargin(): Observable<{ margin: number }> {
+    return this.http.get<{ margin: number }>('/api/settings/csls-margin');
+  }
+
+  setCslsMargin(margin: number): Observable<{ margin: number }> {
+    return this.http.put<{ margin: number }>('/api/settings/csls-margin', { margin });
   }
 
   reindex(): Observable<ReindexProgress> {

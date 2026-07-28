@@ -214,6 +214,41 @@ interface PromptState extends Prompt {
                 </section>
 
                 <section class="settings-section">
+                  <h2>Margen CSLS de enlace</h2>
+                  <p class="section-desc">
+                    Margen mínimo del score CSLS (ajustado por vecindad) para aceptar un enlace. Es el criterio real de
+                    discovery, health check y conexiones; el umbral coseno de arriba solo pre-filtra. Los scores CSLS
+                    rondan el cero y pueden ser negativos: valores más bajos aceptan más enlaces (por defecto: 0.05).
+                  </p>
+                  <div class="resource-row">
+                    <label for="csls-margin" class="resource-label">Margen (-1.00 – 1.00)</label>
+                    <input
+                      id="csls-margin"
+                      class="resource-input"
+                      type="number"
+                      min="-1"
+                      max="1"
+                      step="0.01"
+                      [(ngModel)]="cslsMargin"
+                      [disabled]="cslsMarginSaving()"
+                    />
+                    <p-button
+                      label="Guardar"
+                      size="small"
+                      [loading]="cslsMarginSaving()"
+                      [disabled]="cslsMargin < -1 || cslsMargin > 1 || cslsMarginSaving()"
+                      (onClick)="saveCslsMargin()"
+                    />
+                  </div>
+                  @if (cslsMarginSaved()) {
+                    <span class="feedback success">Margen guardado correctamente</span>
+                  }
+                  @if (cslsMarginError()) {
+                    <span class="feedback error">{{ cslsMarginError() }}</span>
+                  }
+                </section>
+
+                <section class="settings-section">
                   <h2>Mantenimiento</h2>
                   <p class="section-desc">
                     Busca conceptos duplicados en la wiki (por ejemplo, el mismo concepto en español e inglés) y
@@ -520,6 +555,11 @@ export class SettingsComponent implements OnInit {
   readonly linkThresholdSaved = signal(false);
   readonly linkThresholdError = signal<string | null>(null);
 
+  cslsMargin = 0.05;
+  readonly cslsMarginSaving = signal(false);
+  readonly cslsMarginSaved = signal(false);
+  readonly cslsMarginError = signal<string | null>(null);
+
   readonly showDedupModal = signal(false);
   readonly dedupMergeRunning = signal(false);
 
@@ -562,6 +602,13 @@ export class SettingsComponent implements OnInit {
       error: () => {},
     });
 
+    this.api.getCslsMargin().subscribe({
+      next: (data) => {
+        this.cslsMargin = data.margin;
+      },
+      error: () => {},
+    });
+
     this.api.getPrompts().subscribe({
       next: (data) => {
         this.prompts.set(data.map((p) => ({ ...p, saving: false, saved: false, error: null })));
@@ -589,6 +636,26 @@ export class SettingsComponent implements OnInit {
       error: () => {
         this.linkThresholdSaving.set(false);
         this.linkThresholdError.set('Valor inválido. Debe estar entre 0.00 y 1.00.');
+      },
+    });
+  }
+
+  saveCslsMargin(): void {
+    if (this.cslsMargin < -1 || this.cslsMargin > 1) return;
+    this.cslsMarginSaving.set(true);
+    this.cslsMarginSaved.set(false);
+    this.cslsMarginError.set(null);
+
+    this.api.setCslsMargin(this.cslsMargin).subscribe({
+      next: (data) => {
+        this.cslsMargin = data.margin;
+        this.cslsMarginSaving.set(false);
+        this.cslsMarginSaved.set(true);
+        setTimeout(() => this.cslsMarginSaved.set(false), 3000);
+      },
+      error: () => {
+        this.cslsMarginSaving.set(false);
+        this.cslsMarginError.set('Valor inválido. Debe estar entre -1.00 y 1.00.');
       },
     });
   }

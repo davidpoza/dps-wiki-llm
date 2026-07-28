@@ -2434,19 +2434,42 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     const tgtPath = rawTarget ? this.resolveWikilinkPath(rawTarget) : null;
     const srcPath = this.selectedPath();
     if (!tgtPath || !srcPath) {
-      this.messageService.add({ severity: 'info', summary: 'Puntuación de enlace', detail: 'Sin puntuación disponible', life: 4000 });
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Puntuación de enlace',
+        detail: 'Sin puntuación disponible',
+        life: 4000,
+      });
       return;
     }
     this.api.getLinkScore(srcPath, tgtPath).subscribe({
       next: (res) => {
         if (res.score == null) {
-          this.messageService.add({ severity: 'info', summary: 'Puntuación de enlace', detail: 'Sin puntuación disponible', life: 4000 });
+          this.messageService.add({
+            severity: 'info',
+            summary: 'Puntuación de enlace',
+            detail: 'Sin puntuación disponible',
+            life: 4000,
+          });
         } else {
-          this.messageService.add({ severity: 'info', summary: 'Puntuación de enlace', detail: `Similitud coseno: ${res.score.toFixed(3)}`, life: 5000 });
+          let detail = `Similitud coseno: ${res.score.toFixed(3)}`;
+          if (res.csls != null) {
+            const marginText = res.margin != null ? res.margin.toFixed(3) : '—';
+            const verdict = res.wouldLink ? '✓ se enlazaría' : '✗ no se enlazaría';
+            detail += ` · CSLS: ${res.csls.toFixed(3)} (margen ${marginText}) — ${verdict}`;
+          } else {
+            detail += ` · CSLS: no disponible (falta hubness; reindexar)`;
+          }
+          this.messageService.add({ severity: 'info', summary: 'Puntuación de enlace', detail, life: 7000 });
         }
       },
       error: () => {
-        this.messageService.add({ severity: 'error', summary: 'Puntuación de enlace', detail: 'Error al obtener la puntuación', life: 4000 });
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Puntuación de enlace',
+          detail: 'Error al obtener la puntuación',
+          life: 4000,
+        });
       },
     });
   }

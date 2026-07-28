@@ -33,6 +33,8 @@ public class SettingsController {
 
     private static final String LINK_THRESHOLD_KEY = "link.similarity-threshold";
     private static final double LINK_THRESHOLD_DEFAULT = 0.72;
+    private static final String CSLS_MARGIN_KEY = "link.csls-margin";
+    private static final double CSLS_MARGIN_DEFAULT = 0.05;
 
     private final ReindexService reindexService;
     private final ResourceSettingsService resourceSettingsService;
@@ -215,6 +217,40 @@ public class SettingsController {
         return ResponseEntity.ok(new LinkThresholdDto(request.threshold()));
     }
 
+    @GetMapping("/csls-margin")
+    public CslsMarginDto getCslsMargin() {
+        double value =
+                settingRepository
+                        .findById(CSLS_MARGIN_KEY)
+                        .map(
+                                s -> {
+                                    try {
+                                        return Double.parseDouble(s.getValue());
+                                    } catch (NumberFormatException ignored) {
+                                        return CSLS_MARGIN_DEFAULT;
+                                    }
+                                })
+                        .orElse(CSLS_MARGIN_DEFAULT);
+        return new CslsMarginDto(value);
+    }
+
+    @PutMapping("/csls-margin")
+    public ResponseEntity<CslsMarginDto> setCslsMargin(@RequestBody CslsMarginDto request) {
+        // CSLS scores are centered near zero and can be negative, so allow a signed range.
+        if (request.margin() < -1.0 || request.margin() > 1.0) {
+            return ResponseEntity.badRequest().build();
+        }
+        AppSetting setting =
+                settingRepository
+                        .findById(CSLS_MARGIN_KEY)
+                        .orElse(
+                                new AppSetting(
+                                        CSLS_MARGIN_KEY, String.valueOf(CSLS_MARGIN_DEFAULT)));
+        setting.setValue(String.valueOf(request.margin()));
+        settingRepository.save(setting);
+        return ResponseEntity.ok(new CslsMarginDto(request.margin()));
+    }
+
     @DeleteMapping("/broken-links")
     public BrokenLinkDeleteResult deleteBrokenLinks(@RequestBody BrokenLinkDeleteRequest request) {
         int deleted =
@@ -226,4 +262,6 @@ public class SettingsController {
     private record ErrorMessage(String message) {}
 
     public record LinkThresholdDto(double threshold) {}
+
+    public record CslsMarginDto(double margin) {}
 }

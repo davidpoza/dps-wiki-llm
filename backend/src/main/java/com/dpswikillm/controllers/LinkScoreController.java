@@ -1,6 +1,5 @@
 package com.dpswikillm.controllers;
 
-import com.dpswikillm.repositories.DocumentIndexRepository;
 import com.dpswikillm.services.LinkDiagnosticsService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,20 +10,20 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/links")
 public class LinkScoreController {
 
-    private final DocumentIndexRepository documentIndexRepository;
     private final LinkDiagnosticsService linkDiagnosticsService;
 
-    public LinkScoreController(
-            DocumentIndexRepository documentIndexRepository,
-            LinkDiagnosticsService linkDiagnosticsService) {
-        this.documentIndexRepository = documentIndexRepository;
+    public LinkScoreController(LinkDiagnosticsService linkDiagnosticsService) {
         this.linkDiagnosticsService = linkDiagnosticsService;
     }
 
+    /**
+     * Raw cosine plus the CSLS-adjusted score and whether it clears the current acceptance margin,
+     * for the editor's link context menu.
+     */
     @GetMapping("/score")
-    public ScoreResponse getScore(@RequestParam String src, @RequestParam String tgt) {
-        Double score = documentIndexRepository.computeScore(src, tgt).orElse(null);
-        return new ScoreResponse(score);
+    public LinkDiagnosticsService.LinkScore getScore(
+            @RequestParam String src, @RequestParam String tgt) {
+        return linkDiagnosticsService.scoreLink(src, tgt);
     }
 
     /**
@@ -35,6 +34,4 @@ public class LinkScoreController {
     public LinkDiagnosticsService.Diagnostics getDiagnostics() {
         return linkDiagnosticsService.run();
     }
-
-    record ScoreResponse(Double score) {}
 }
