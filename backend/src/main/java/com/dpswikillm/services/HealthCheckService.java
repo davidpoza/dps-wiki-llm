@@ -279,10 +279,24 @@ public class HealthCheckService {
         return mutationApplier.apply(new MutationPlan("health-check-" + snapshot.getId(), actions));
     }
 
+    /**
+     * Builds the search text exactly like {@link EmbeddingIndexService} stores each note's
+     * embedding ("Primary topic: <title>. Related concepts: <keywords>.") so the query lands on the
+     * same vector as the stored embedding. A raw keyword bag drops the title anchor and drifts
+     * toward unrelated notes that share generic vocabulary.
+     */
     private String buildQuery(DocumentRecord doc) {
         Object raw = markdownService.parse(doc.body()).frontmatter().get("keywords");
         if (raw instanceof List<?> keywords && !keywords.isEmpty()) {
-            return keywords.stream().map(Object::toString).collect(Collectors.joining(" "));
+            String joined =
+                    keywords.stream()
+                            .map(k -> k.toString().replace('-', ' '))
+                            .collect(Collectors.joining(", "));
+            return "Primary topic: "
+                    + doc.title().replace('-', ' ')
+                    + ". Related concepts: "
+                    + joined
+                    + ".";
         }
         return doc.title();
     }
