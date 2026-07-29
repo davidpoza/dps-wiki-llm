@@ -510,10 +510,11 @@ export class ApiService {
     return this.http.get<{ build?: { version?: string } }>('/api/actuator/info');
   }
 
-  discoverLinks(path: string): Observable<LinkDiscoveryEvent> {
+  discoverLinks(path: string, mode: 'semantic' | 'graph' = 'semantic'): Observable<LinkDiscoveryEvent> {
     return new Observable((observer: Observer<LinkDiscoveryEvent>) => {
       const token = this.auth.token();
-      const url = `/api/jobs/link-discovery-stream?path=${encodeURIComponent(path)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
+      const modeParam = mode === 'graph' ? '&mode=graph' : '';
+      const url = `/api/jobs/link-discovery-stream?path=${encodeURIComponent(path)}${modeParam}${token ? '&token=' + encodeURIComponent(token) : ''}`;
       const es = new EventSource(url);
       let completed = false;
 

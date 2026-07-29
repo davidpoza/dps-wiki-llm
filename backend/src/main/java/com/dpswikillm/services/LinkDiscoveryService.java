@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,7 @@ public class LinkDiscoveryService {
     private final DocumentIndexRepository documentIndexRepository;
     private final AppProperties properties;
     private final AppSettingRepository settingRepository;
+    private final WikiLinkResolver linkResolver;
 
     public LinkDiscoveryService(
             VaultPathResolver pathResolver,
@@ -43,13 +45,15 @@ public class LinkDiscoveryService {
             SemanticSearchService semanticSearchService,
             DocumentIndexRepository documentIndexRepository,
             AppProperties properties,
-            AppSettingRepository settingRepository) {
+            AppSettingRepository settingRepository,
+            WikiLinkResolver linkResolver) {
         this.pathResolver = pathResolver;
         this.markdownService = markdownService;
         this.semanticSearchService = semanticSearchService;
         this.documentIndexRepository = documentIndexRepository;
         this.properties = properties;
         this.settingRepository = settingRepository;
+        this.linkResolver = linkResolver;
     }
 
     public List<DiscoveredLink> discover(
@@ -69,10 +73,17 @@ public class LinkDiscoveryService {
 
         onProgress.accept(new LinkDiscoveryProgress("searching", 2, 3));
 
-        // Nearest neighbors of A, sorted by cosine desc, excluding A itself.
+        // Already-linked targets are resolved from the note's own wiki-links (case/path/alias aware)
+        // and excluded authoritatively here, so results never re-suggest a link the note already has.
+        Set<String> alreadyLinked =
+                linkResolver.extractLinkedTargets(
+                        content, linkResolver.buildSlugIndex(linkResolver.collectMarkdownFiles()));
+
+        // Nearest neighbors of A, sorted by cosine desc, excluding A itself and existing links.
         List<SearchResult> neighbors =
                 semanticSearchService.search(query, CANDIDATE_POOL).stream()
                         .filter(r -> !r.path().equals(normalized))
+                        .filter(r -> !alreadyLinked.contains(r.path()))
                         .toList();
 
         double coarseThreshold = readThreshold();

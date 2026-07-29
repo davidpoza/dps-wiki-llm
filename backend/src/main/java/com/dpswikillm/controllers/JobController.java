@@ -15,6 +15,7 @@ import com.dpswikillm.dto.ReviewRequest;
 import com.dpswikillm.repositories.JobRepository;
 import com.dpswikillm.services.FileLookupService;
 import com.dpswikillm.services.FileService;
+import com.dpswikillm.services.GraphLinkDiscoveryService;
 import com.dpswikillm.services.GuidedReviewService;
 import com.dpswikillm.services.JobEventService;
 import com.dpswikillm.services.JobLifecycleService;
@@ -52,6 +53,7 @@ public class JobController {
     private final GuidedReviewService guidedReviewService;
     private final FileLookupService fileLookupService;
     private final LinkDiscoveryService linkDiscoveryService;
+    private final GraphLinkDiscoveryService graphLinkDiscoveryService;
     private final SnapshotService snapshotService;
     private final ObjectMapper objectMapper;
     private final FileService fileService;
@@ -65,6 +67,7 @@ public class JobController {
             GuidedReviewService guidedReviewService,
             FileLookupService fileLookupService,
             LinkDiscoveryService linkDiscoveryService,
+            GraphLinkDiscoveryService graphLinkDiscoveryService,
             SnapshotService snapshotService,
             ObjectMapper objectMapper,
             FileService fileService) {
@@ -76,6 +79,7 @@ public class JobController {
         this.guidedReviewService = guidedReviewService;
         this.fileLookupService = fileLookupService;
         this.linkDiscoveryService = linkDiscoveryService;
+        this.graphLinkDiscoveryService = graphLinkDiscoveryService;
         this.snapshotService = snapshotService;
         this.objectMapper = objectMapper;
         this.fileService = fileService;
@@ -243,14 +247,16 @@ public class JobController {
     }
 
     @GetMapping(value = "/jobs/link-discovery-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter linkDiscoveryStream(@RequestParam("path") String path) {
+    public SseEmitter linkDiscoveryStream(
+            @RequestParam("path") String path,
+            @RequestParam(value = "mode", required = false) String mode) {
+        boolean graph = "graph".equalsIgnoreCase(mode);
         SseEmitter emitter = new SseEmitter(0L);
         CompletableFuture.runAsync(
                 () -> {
                     try {
-                        java.util.List<LinkDiscoveryService.DiscoveredLink> results =
-                                linkDiscoveryService.discover(
-                                        path,
+                        java.util.function.Consumer<LinkDiscoveryService.LinkDiscoveryProgress>
+                                onProgress =
                                         progress -> {
                                             try {
                                                 emitter.send(
@@ -262,7 +268,11 @@ public class JobController {
                                                 throw new IllegalStateException(
                                                         "SSE send failed", ex);
                                             }
-                                        });
+                                        };
+                        java.util.List<LinkDiscoveryService.DiscoveredLink> results =
+                                graph
+                                        ? graphLinkDiscoveryService.discover(path, onProgress)
+                                        : linkDiscoveryService.discover(path, onProgress);
                         emitter.send(SseEmitter.event().name("done").data(results));
                         emitter.complete();
                     } catch (Exception ex) {

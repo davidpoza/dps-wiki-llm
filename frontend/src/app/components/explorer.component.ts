@@ -54,6 +54,7 @@ import { NavComponent } from './nav.component';
 import { UnsavedChangesAware } from '../unsaved-changes.guard';
 import { FileVersion } from '../types';
 import { ProgressBarModule } from 'primeng/progressbar';
+import { SelectButton } from 'primeng/selectbutton';
 import { Checkbox } from 'primeng/checkbox';
 import { FormsModule } from '@angular/forms';
 import { GraphViewComponent } from './graph-view.component';
@@ -76,6 +77,7 @@ import { LinkExplainModalComponent } from './link-explain-modal.component';
     NgClass,
     TranslocoPipe,
     ProgressBarModule,
+    SelectButton,
     NavComponent,
     Checkbox,
     FormsModule,
@@ -574,6 +576,16 @@ import { LinkExplainModalComponent } from './link-explain-modal.component';
       (onHide)="onLinkDiscoveryHide()"
     >
       <div class="link-discovery-body">
+        <div class="ld-mode-row">
+          <p-selectButton
+            [options]="linkDiscoveryModeOptions()"
+            [ngModel]="linkDiscoveryMode()"
+            (ngModelChange)="onLinkDiscoveryModeChange($event)"
+            optionLabel="label"
+            optionValue="value"
+            [allowEmpty]="false"
+          />
+        </div>
         @if (linkDiscoveryRunning()) {
           <div class="ld-progress-area">
             <div class="ld-step-label">{{ linkDiscoveryStepLabel() }}</div>
@@ -1385,6 +1397,11 @@ import { LinkExplainModalComponent } from './link-explain-modal.component';
       .link-discovery-body {
         min-height: 80px;
       }
+      .ld-mode-row {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 12px;
+      }
       .ld-progress-area {
         display: flex;
         flex-direction: column;
@@ -1579,6 +1596,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly syncing = signal(false);
   readonly showVersions = signal(false);
   readonly showLinkDiscovery = signal(false);
+  readonly linkDiscoveryMode = signal<'semantic' | 'graph'>('semantic');
   readonly linkDiscoveryRunning = signal(false);
   readonly linkDiscoveryError = signal<string | null>(null);
   readonly linkDiscoveryNoKeywords = signal(false);
@@ -1593,6 +1611,9 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     const step = this.linkDiscoveryStep()?.step;
     if (step === 'loading') return this.t.translate('explorer.linkDiscoveryStepLoading');
     if (step === 'searching') return this.t.translate('explorer.linkDiscoveryStepSearching');
+    if (step === 'lex') return this.t.translate('explorer.linkDiscoveryStepLex');
+    if (step === 'substring') return this.t.translate('explorer.linkDiscoveryStepSubstring');
+    if (step === 'ppr') return this.t.translate('explorer.linkDiscoveryStepPpr');
     return this.t.translate('explorer.linkDiscoveryStepDone');
   });
   readonly linkDiscoveryAllSelected = computed(() => {
@@ -2787,24 +2808,48 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     });
   }
 
+  linkDiscoveryModeOptions(): { label: string; value: 'semantic' | 'graph' }[] {
+    return [
+      { label: this.t.translate('explorer.linkDiscoveryModeSemantic'), value: 'semantic' },
+      { label: this.t.translate('explorer.linkDiscoveryModeGraph'), value: 'graph' },
+    ];
+  }
+
   openLinkDiscovery(): void {
+    if (!this.selectedPath()) return;
+    this.linkDiscoveryMode.set('semantic');
+    this.showLinkDiscovery.set(true);
+    this.runLinkDiscovery();
+  }
+
+  onLinkDiscoveryModeChange(mode: 'semantic' | 'graph'): void {
+    if (mode === this.linkDiscoveryMode()) return;
+    this.linkDiscoveryMode.set(mode);
+    this.runLinkDiscovery();
+  }
+
+  private runLinkDiscovery(): void {
     const path = this.selectedPath();
     if (!path) return;
+    this.linkDiscoverySub?.unsubscribe();
+    this.linkDiscoverySub = null;
+    const mode = this.linkDiscoveryMode();
     const fm = this.frontmatter();
     const hasKeywords = Array.isArray(fm['keywords']) && (fm['keywords'] as unknown[]).length > 0;
     this.linkDiscoveryResults.set([]);
     this.linkDiscoverySelected.set(new Set());
     this.linkDiscoveryError.set(null);
     this.linkDiscoveryStep.set(null);
-    this.linkDiscoveryNoKeywords.set(!hasKeywords);
-    this.showLinkDiscovery.set(true);
-    if (!hasKeywords) return;
+    // Semantic discovery needs keywords; graph mode can seed from the note's title alone.
+    this.linkDiscoveryNoKeywords.set(mode === 'semantic' && !hasKeywords);
+    if (mode === 'semantic' && !hasKeywords) return;
     this.linkDiscoveryRunning.set(true);
-    this.linkDiscoverySub = this.api.discoverLinks(path).subscribe({
+    this.linkDiscoverySub = this.api.discoverLinks(path, mode).subscribe({
       next: (event) => {
         if (event.type === 'progress') {
           this.linkDiscoveryStep.set({ step: event.step, current: event.current, total: event.total });
         } else if (event.type === 'done') {
+          // Backend already excludes already-linked targets; this is a lightweight secondary guard.
           const wikilinkRe = /\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
           const existingSlugs = new Set<string>();
           let m: RegExpExecArray | null;
