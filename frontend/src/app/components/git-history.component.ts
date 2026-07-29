@@ -270,6 +270,7 @@ const FIRST_PAGE = 0;
         display: flex;
         flex-direction: column;
         gap: 0.35rem;
+        min-width: 0;
       }
       .path-row {
         display: flex;
@@ -364,6 +365,8 @@ const FIRST_PAGE = 0;
       .diff-container {
         display: block;
         width: 100%;
+        max-width: 100%;
+        min-width: 0;
         padding: 0;
       }
       .diff-loading {
@@ -379,6 +382,7 @@ const FIRST_PAGE = 0;
         color: #d4d4d4;
         border-radius: 4px;
         padding: 0.5rem;
+        max-width: 100%;
         overflow-x: auto;
         white-space: pre;
       }
@@ -559,6 +563,15 @@ const FIRST_PAGE = 0;
         }
         .conflict-panes {
           flex-direction: column;
+        }
+        .conflict-pane:first-child {
+          border-right: none;
+          border-bottom: 1px solid var(--app-border);
+        }
+        .diff-pre,
+        .pane-body {
+          font-size: 0.68rem;
+          padding: 0.4rem;
         }
       }
     `,

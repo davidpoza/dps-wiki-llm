@@ -17,6 +17,7 @@ import { Conflict } from '../types';
       [modal]="true"
       [draggable]="false"
       [closable]="false"
+      styleClass="merge-dialog"
       [style]="{ width: '95vw', height: '90vh' }"
       [contentStyle]="{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '0' }"
     >
@@ -43,12 +44,12 @@ import { Conflict } from '../types';
         </div>
         <div class="result-pane">
           <div class="result-header">
-            <span>Resultado</span>
+            <span>{{ 'sync.mergeResultTitle' | transloco }}</span>
           </div>
           <textarea
             class="result-body"
             [(ngModel)]="resultContent"
-            placeholder="Escribe o pega el contenido final aquí…"
+            [placeholder]="'sync.mergeResultPlaceholder' | transloco"
           ></textarea>
         </div>
       </div>
@@ -178,8 +179,35 @@ import { Conflict } from '../types';
         cursor: default;
       }
       :host ::ng-deep .line-changed {
-        background: color-mix(in srgb, var(--app-warning, #f59e0b) 18%, transparent);
+        background: color-mix(in srgb, var(--app-warning, #f59e0b) 22%, transparent);
+        box-shadow: inset 3px 0 0 var(--app-warning, #f59e0b);
         display: block;
+      }
+      @media (max-width: 600px) {
+        :host ::ng-deep .merge-dialog.p-dialog {
+          width: 100vw !important;
+          height: 100dvh !important;
+          max-height: 100dvh !important;
+          margin: 0 !important;
+          border-radius: 0 !important;
+        }
+        .source-panes {
+          flex-direction: column;
+        }
+        .source-pane:first-child {
+          border-right: none;
+          border-bottom: 1px solid var(--app-border);
+        }
+        .source-body {
+          max-height: 22vh;
+        }
+        .result-pane {
+          flex: 1 1 auto;
+          min-height: 30vh;
+        }
+        .footer-actions {
+          flex-wrap: wrap;
+        }
       }
     `,
   ],

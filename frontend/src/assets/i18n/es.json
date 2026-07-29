@@ -124,7 +124,9 @@
     "submitManual": "Resolver",
     "cancelManual": "Cancelar",
     "bulkError": "Algunos conflictos no se pudieron resolver.",
-    "mergeEditorTitle": "Resolución manual: {{ path }}"
+    "mergeEditorTitle": "Resolución manual: {{ path }}",
+    "mergeResultTitle": "Resultado",
+    "mergeResultPlaceholder": "Escribe o pega el contenido final aquí…"
   },
   "versions": {
     "button": "Versiones",

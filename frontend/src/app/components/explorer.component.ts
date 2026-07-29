@@ -646,7 +646,7 @@ import { LinkExplainModalComponent } from './link-explain-modal.component';
       [(visible)]="showVersions"
       [modal]="true"
       [draggable]="false"
-      [style]="{ width: '860px' }"
+      [style]="{ width: '90vw', maxWidth: '860px' }"
     >
       <div class="versions-layout">
         <div class="versions-list">
@@ -1335,6 +1335,7 @@ import { LinkExplainModalComponent } from './link-explain-modal.component';
       .versions-preview {
         flex: 1;
         min-width: 0;
+        max-width: 100%;
         overflow: auto;
         border: 1px solid var(--app-border);
         border-radius: 6px;
@@ -1367,6 +1368,19 @@ import { LinkExplainModalComponent } from './link-explain-modal.component';
         padding: 16px;
         color: var(--app-text-muted);
         font-size: 0.85rem;
+      }
+      @media (max-width: 600px) {
+        .versions-layout {
+          flex-direction: column;
+          height: auto;
+        }
+        .versions-list {
+          width: auto;
+          max-height: 30vh;
+        }
+        .versions-preview {
+          max-height: 45vh;
+        }
       }
       .link-discovery-body {
         min-height: 80px;
