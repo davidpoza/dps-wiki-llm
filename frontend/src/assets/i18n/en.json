@@ -98,7 +98,8 @@
     "source": {
       "LOCAL_EDIT": "Edit",
       "JOB": "Job",
-      "WEBDAV_PULL": "Sync"
+      "WEBDAV_PULL": "Sync",
+      "HEALTH_CHECK": "Health check"
     }
   },
   "sync": {
