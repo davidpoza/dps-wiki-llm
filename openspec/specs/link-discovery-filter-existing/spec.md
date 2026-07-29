@@ -1,30 +1,42 @@
 # link-discovery-filter-existing Specification
 
+## Purpose
+Evita que Link Discovery vuelva a proponer enlaces que la nota ya contiene. La exclusión se basa en el path de destino resuelto de cada wikilink de la nota (insensible a mayúsculas, ruta completa, basename y alias) y se aplica de forma autoritativa en el backend, tanto en el modo Semantic como en el modo Graph.
 ## Requirements
-
 ### Requirement: Filtrado de enlaces ya presentes en la nota
 
-El modal de Link Discovery SHALL excluir de sus resultados cualquier enlace cuyo slug ya aparezca como wikilink (`[[slug]]`) en cualquier parte del contenido de la nota actualmente abierta en el editor.
+Link Discovery SHALL excluir de sus resultados cualquier resultado cuyo path de destino ya esté enlazado desde la nota actualmente abierta, en cualquier parte de su contenido. La exclusión SHALL basarse en el **path de destino resuelto** de cada wikilink de la nota (usando el índice de slugs del vault), no en la igualdad literal del nombre de archivo, de modo que un enlace existente escrito con distinto uso de mayúsculas (`[[Krebs-Cycle]]`), como ruta completa (`[[wiki/concepts/krebs-cycle]]`) o con alias (`[[krebs-cycle|texto]]`) también excluya su resultado correspondiente. La exclusión SHALL aplicarse de forma autoritativa en el backend antes de devolver los resultados, y SHALL aplicarse tanto al modo Semantic como al modo Graph.
 
 #### Scenario: Resultado ya enlazado queda oculto
 
-- **WHEN** el modal de Link Discovery recibe resultados del backend
-- **AND** uno o más resultados tienen un slug que ya aparece como `[[slug]]` en el contenido de la nota
-- **THEN** esos resultados no se muestran en el modal
+- **WHEN** Link Discovery produce resultados para la nota abierta
+- **AND** uno o más resultados tienen un path que ya aparece enlazado como `[[slug]]` en el contenido de la nota
+- **THEN** esos resultados no se incluyen en la respuesta ni se muestran en el modal
 
 #### Scenario: Resultado no enlazado sí se muestra
 
-- **WHEN** el modal de Link Discovery recibe resultados del backend
-- **AND** un resultado tiene un slug que no aparece como wikilink en el contenido de la nota
+- **WHEN** Link Discovery produce resultados para la nota abierta
+- **AND** un resultado tiene un path que no aparece enlazado en el contenido de la nota
 - **THEN** ese resultado se muestra normalmente
 
-#### Scenario: Todos los resultados ya enlazados
+#### Scenario: Coincidencia insensible a mayúsculas, ruta y alias
 
-- **WHEN** el modal de Link Discovery recibe resultados del backend
-- **AND** todos los resultados tienen slugs que ya aparecen como wikilinks en la nota
-- **THEN** el modal muestra el mensaje de "sin resultados"
+- **WHEN** la nota contiene el enlace existente `[[Krebs-Cycle]]`, `[[wiki/concepts/krebs-cycle]]` o `[[krebs-cycle|el ciclo del ácido cítrico]]`
+- **AND** un resultado resuelve al mismo path de destino que ese enlace
+- **THEN** ese resultado queda excluido, pese a las diferencias de mayúsculas, ruta o alias
 
 #### Scenario: El filtro incluye cualquier punto del documento
 
-- **WHEN** un wikilink `[[slug]]` existe en la sección de introducción, cuerpo, Related o cualquier otra sección de la nota
-- **THEN** el resultado correspondiente queda excluido del modal, independientemente de en qué sección aparezca
+- **WHEN** un wikilink existente aparece en la introducción, el cuerpo, la sección Related o cualquier otra parte de la nota
+- **THEN** el resultado correspondiente queda excluido, independientemente de en qué sección aparezca
+
+#### Scenario: La exclusión aplica en ambos modos
+
+- **WHEN** el usuario ejecuta Link Discovery en modo Semantic o en modo Graph
+- **THEN** los resultados de ese modo excluyen los paths ya enlazados desde la nota
+
+#### Scenario: Todos los resultados ya enlazados
+
+- **WHEN** todos los resultados producidos resuelven a paths que ya están enlazados en la nota
+- **THEN** el modal muestra el mensaje de "sin resultados"
+
