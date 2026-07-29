@@ -191,6 +191,34 @@ export interface GraphResponse {
   edges: GraphEdge[];
 }
 
+export interface GlobalSimilarityStats {
+  mean: number;
+  p90: number;
+  p95: number;
+  p99: number;
+  pairCount: number;
+}
+
+export interface BenchmarkResult {
+  src: string;
+  tgt: string;
+  expectedRelated: boolean;
+  cosine: number | null;
+  rkSrc: number | null;
+  rkTgt: number | null;
+  csls: number | null;
+  predictedRelated: boolean | null;
+  correct: boolean | null;
+}
+
+export interface LinkDiagnostics {
+  distribution: GlobalSimilarityStats;
+  margin: number;
+  k: number;
+  sampleSize: number;
+  benchmark: BenchmarkResult[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
@@ -334,6 +362,10 @@ export class ApiService {
       margin: number | null;
       wouldLink: boolean | null;
     }>(`/api/links/score?src=${encodeURIComponent(src)}&tgt=${encodeURIComponent(tgt)}`);
+  }
+
+  getLinkDiagnostics(): Observable<LinkDiagnostics> {
+    return this.http.get<LinkDiagnostics>('/api/links/diagnostics');
   }
 
   getLinkThreshold(): Observable<{ threshold: number }> {

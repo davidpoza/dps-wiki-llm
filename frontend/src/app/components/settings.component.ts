@@ -3,7 +3,14 @@ import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { SelectButtonModule } from 'primeng/selectbutton';
 import { TabsModule } from 'primeng/tabs';
-import { ApiService, BrokenLinkEntry, BrokenLinkScanEvent, JobSummary, Prompt } from '../services/api.service';
+import {
+  ApiService,
+  BrokenLinkEntry,
+  BrokenLinkScanEvent,
+  JobSummary,
+  LinkDiagnostics,
+  Prompt,
+} from '../services/api.service';
 import { NavComponent } from './nav.component';
 import { ThemeService } from '../services/theme.service';
 import { APP_VERSION } from '../version';
@@ -284,6 +291,93 @@ interface PromptState extends Prompt {
                 </section>
 
                 <section class="settings-section">
+                  <h2>Diagnóstico de enlaces (CSLS)</h2>
+                  <p class="section-desc">
+                    Análisis de solo lectura para calibrar el margen y k. Muestra la distribución global de similitud
+                    coseno del índice (para ver la anisotropía del modelo) y evalúa un conjunto de pares de referencia
+                    con su coseno, hubness r_k, score CSLS y veredicto frente al margen actual. Las filas con veredicto
+                    incorrecto se resaltan.
+                  </p>
+                  <div class="reindex-row">
+                    <p-button
+                      label="Ejecutar diagnóstico"
+                      size="small"
+                      [loading]="diagnosticsRunning()"
+                      [disabled]="diagnosticsRunning()"
+                      (onClick)="runDiagnostics()"
+                    />
+                    @if (diagnosticsError()) {
+                      <span class="feedback error">{{ diagnosticsError() }}</span>
+                    }
+                  </div>
+
+                  @if (diagnostics(); as d) {
+                    <div class="diag-results">
+                      <div class="diag-stats">
+                        <span
+                          >Margen actual: <strong>{{ d.margin.toFixed(3) }}</strong></span
+                        >
+                        <span
+                          >k (hubness): <strong>{{ d.k }}</strong></span
+                        >
+                        <span
+                          >Muestra: <strong>{{ d.sampleSize }}</strong> pares ({{
+                            d.distribution.pairCount
+                          }}
+                          comparados)</span
+                        >
+                      </div>
+                      <div class="diag-stats">
+                        <span
+                          >Coseno medio: <strong>{{ d.distribution.mean.toFixed(3) }}</strong></span
+                        >
+                        <span
+                          >p90: <strong>{{ d.distribution.p90.toFixed(3) }}</strong></span
+                        >
+                        <span
+                          >p95: <strong>{{ d.distribution.p95.toFixed(3) }}</strong></span
+                        >
+                        <span
+                          >p99: <strong>{{ d.distribution.p99.toFixed(3) }}</strong></span
+                        >
+                      </div>
+                      <div class="diag-table-wrap">
+                        <table class="diag-table">
+                          <thead>
+                            <tr>
+                              <th>Par</th>
+                              <th>Esperado</th>
+                              <th>cos</th>
+                              <th>r_k src</th>
+                              <th>r_k tgt</th>
+                              <th>CSLS</th>
+                              <th>Predicho</th>
+                              <th></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (r of d.benchmark; track r.src + '→' + r.tgt) {
+                              <tr [class.diag-wrong]="r.correct === false">
+                                <td class="diag-pair">{{ r.src }} ↔ {{ r.tgt }}</td>
+                                <td>{{ r.expectedRelated ? 'enlace' : 'no' }}</td>
+                                <td>{{ r.cosine !== null ? r.cosine.toFixed(3) : '—' }}</td>
+                                <td>{{ r.rkSrc !== null ? r.rkSrc.toFixed(3) : '—' }}</td>
+                                <td>{{ r.rkTgt !== null ? r.rkTgt.toFixed(3) : '—' }}</td>
+                                <td>{{ r.csls !== null ? r.csls.toFixed(3) : '—' }}</td>
+                                <td>
+                                  {{ r.predictedRelated === null ? '—' : r.predictedRelated ? 'enlace' : 'no' }}
+                                </td>
+                                <td>{{ r.correct === null ? '—' : r.correct ? '✓' : '✗' }}</td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  }
+                </section>
+
+                <section class="settings-section">
                   <h2>Mantenimiento</h2>
                   <p class="section-desc">
                     Busca conceptos duplicados en la wiki (por ejemplo, el mismo concepto en español e inglés) y
@@ -530,6 +624,48 @@ interface PromptState extends Prompt {
         gap: 12px;
         margin-top: 10px;
       }
+      .diag-results {
+        margin-top: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .diag-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        font-size: 0.85rem;
+        color: var(--app-text-muted);
+      }
+      .diag-stats strong {
+        color: var(--app-text);
+      }
+      .diag-table-wrap {
+        overflow-x: auto;
+      }
+      .diag-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+        white-space: nowrap;
+      }
+      .diag-table th,
+      .diag-table td {
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--app-border);
+      }
+      .diag-table th {
+        color: var(--app-text-subtle);
+        font-weight: 600;
+      }
+      .diag-pair {
+        font-family: monospace;
+        white-space: normal;
+      }
+      .diag-wrong {
+        background: var(--app-error-surface, rgba(220, 38, 38, 0.1));
+      }
       .feedback {
         font-size: 0.85rem;
       }
@@ -599,6 +735,10 @@ export class SettingsComponent implements OnInit {
   readonly hubnessKSaving = signal(false);
   readonly hubnessKSaved = signal(false);
   readonly hubnessKError = signal<string | null>(null);
+
+  readonly diagnosticsRunning = signal(false);
+  readonly diagnostics = signal<LinkDiagnostics | null>(null);
+  readonly diagnosticsError = signal<string | null>(null);
 
   readonly showDedupModal = signal(false);
   readonly dedupMergeRunning = signal(false);
@@ -723,6 +863,22 @@ export class SettingsComponent implements OnInit {
       error: () => {
         this.hubnessKSaving.set(false);
         this.hubnessKError.set('Valor inválido. Debe ser un entero entre 1 y 100.');
+      },
+    });
+  }
+
+  runDiagnostics(): void {
+    this.diagnosticsRunning.set(true);
+    this.diagnosticsError.set(null);
+
+    this.api.getLinkDiagnostics().subscribe({
+      next: (data) => {
+        this.diagnostics.set(data);
+        this.diagnosticsRunning.set(false);
+      },
+      error: () => {
+        this.diagnosticsRunning.set(false);
+        this.diagnosticsError.set('No se pudo ejecutar el diagnóstico.');
       },
     });
   }
