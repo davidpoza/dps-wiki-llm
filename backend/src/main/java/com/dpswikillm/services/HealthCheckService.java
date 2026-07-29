@@ -49,10 +49,15 @@ public class HealthCheckService {
     private static final Logger log = LoggerFactory.getLogger(HealthCheckService.class);
 
     private static final double SEMANTIC_THRESHOLD = 0.72;
-    private static final int SEMANTIC_LIMIT = 8;
+    // Retrieve a broad pool by raw cosine, then let CSLS re-rank it and keep only the top few. The
+    // pool must be well above the kept limit; otherwise a genuine neighbor that the model's
+    // anisotropy pushes past rank-N is dropped before CSLS ever scores it.
+    private static final int SEMANTIC_POOL = 40;
+    private static final int SEMANTIC_LIMIT = 10;
     private static final String TOPIC_DOC_TYPE = "topic";
     private static final double TOPIC_THRESHOLD = 0.72;
-    private static final int TOPIC_LIMIT = 3;
+    private static final int TOPIC_POOL = 15;
+    private static final int TOPIC_LIMIT = 5;
     public static final String IDEMPOTENCY_LEDGER = "state/runtime/idempotency-keys.json";
 
     private final ReindexService reindexService;
@@ -144,7 +149,7 @@ public class HealthCheckService {
             String query = buildQuery(source);
 
             List<SearchResult> generalNeighbors =
-                    semanticSearchService.search(query, SEMANTIC_LIMIT).stream()
+                    semanticSearchService.search(query, SEMANTIC_POOL).stream()
                             .filter(r -> !r.path().equals(sourcePath))
                             .toList();
             Double storedRkA = hubnessByPath.get(sourcePath);
@@ -163,7 +168,7 @@ public class HealthCheckService {
                 candidates.add(r.path());
             }
             List<SearchResult> topicNeighbors =
-                    semanticSearchService.searchByType(query, TOPIC_DOC_TYPE, TOPIC_LIMIT).stream()
+                    semanticSearchService.searchByType(query, TOPIC_DOC_TYPE, TOPIC_POOL).stream()
                             .filter(r -> !r.path().equals(sourcePath))
                             .toList();
             for (SearchResult r :

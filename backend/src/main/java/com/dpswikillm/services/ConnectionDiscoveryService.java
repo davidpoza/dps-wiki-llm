@@ -27,9 +27,14 @@ public class ConnectionDiscoveryService {
     private static final Logger log = LoggerFactory.getLogger(ConnectionDiscoveryService.class);
     private static final double DEFAULT_THRESHOLD = 0.72;
     private static final String THRESHOLD_SETTING_KEY = "link.connection-threshold";
-    private static final int DEFAULT_NEIGHBOR_LIMIT = 8;
+    // Retrieve a broad pool by raw cosine, then let CSLS re-rank it and keep only the top few. The
+    // pool must be well above the kept limit; otherwise a genuine neighbor that the model's
+    // anisotropy pushes past rank-N is dropped before CSLS ever scores it.
+    private static final int NEIGHBOR_POOL = 40;
+    private static final int DEFAULT_NEIGHBOR_LIMIT = 10;
     private static final String TOPIC_DOC_TYPE = "topic";
-    private static final int TOPIC_CONNECTION_LIMIT = 3;
+    private static final int TOPIC_CONNECTION_POOL = 15;
+    private static final int TOPIC_CONNECTION_LIMIT = 5;
 
     private final SemanticSearchService semanticSearchService;
     private final JobConnectionCandidateRepository candidateRepository;
@@ -75,7 +80,7 @@ public class ConnectionDiscoveryService {
                 documentIndexRepository.findHubnessByPath(properties.embeddings().model());
 
         List<SearchResult> generalNeighbors =
-                semanticSearchService.search(query, DEFAULT_NEIGHBOR_LIMIT).stream()
+                semanticSearchService.search(query, NEIGHBOR_POOL).stream()
                         .filter(r -> !r.path().equals(sourceNotePath))
                         .toList();
         Double storedRkA = hubnessByPath.get(sourceNotePath);
@@ -92,7 +97,7 @@ public class ConnectionDiscoveryService {
         // competing against far more similar source notes in the general top-N.
         List<SearchResult> topicNeighbors =
                 semanticSearchService
-                        .searchByType(query, TOPIC_DOC_TYPE, TOPIC_CONNECTION_LIMIT)
+                        .searchByType(query, TOPIC_DOC_TYPE, TOPIC_CONNECTION_POOL)
                         .stream()
                         .filter(r -> !r.path().equals(sourceNotePath))
                         .toList();

@@ -20,8 +20,10 @@ public class LinkDiscoveryService {
     private static final Logger log = LoggerFactory.getLogger(LinkDiscoveryService.class);
     private static final double DEFAULT_THRESHOLD = 0.72;
     private static final String THRESHOLD_SETTING_KEY = "link.similarity-threshold";
-    // Fetch more candidates than needed so r_k(A) and the CSLS margin see a meaningful distribution
-    private static final int CANDIDATE_POOL = 20;
+    // Fetch a broad pool so r_k(A) and CSLS re-ranking see a meaningful distribution; the pool must
+    // stay well above MAX_RESULTS or genuine neighbors past rank-N are dropped before CSLS scores
+    // them.
+    private static final int CANDIDATE_POOL = 40;
     private static final int MAX_RESULTS = 10;
 
     public record LinkDiscoveryProgress(String step, int current, int total) {}
