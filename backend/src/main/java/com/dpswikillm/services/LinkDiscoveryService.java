@@ -73,8 +73,10 @@ public class LinkDiscoveryService {
 
         onProgress.accept(new LinkDiscoveryProgress("searching", 2, 3));
 
-        // Already-linked targets are resolved from the note's own wiki-links (case/path/alias aware)
-        // and excluded authoritatively here, so results never re-suggest a link the note already has.
+        // Already-linked targets are resolved from the note's own wiki-links (case/path/alias
+        // aware)
+        // and excluded authoritatively here, so results never re-suggest a link the note already
+        // has.
         Set<String> alreadyLinked =
                 linkResolver.extractLinkedTargets(
                         content, linkResolver.buildSlugIndex(linkResolver.collectMarkdownFiles()));

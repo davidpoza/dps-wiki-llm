@@ -72,7 +72,8 @@
     "awaitingReview": "Este trabajo está esperando tu revisión. Cambia a la pestaña Revisión.",
     "conceptProposals": "Conceptos propuestos",
     "conceptNew": "nuevo",
-    "conceptMerged": "fusionado"
+    "conceptMerged": "fusionado",
+    "tokens": "tokens"
   },
   "review": {
     "empty": "Sin trabajos pendientes de revisión.",

@@ -72,7 +72,8 @@
     "awaitingReview": "This job is awaiting your review. Switch to the Review tab.",
     "conceptProposals": "Proposed concepts",
     "conceptNew": "new",
-    "conceptMerged": "merged"
+    "conceptMerged": "merged",
+    "tokens": "tokens"
   },
   "review": {
     "empty": "No jobs awaiting review.",

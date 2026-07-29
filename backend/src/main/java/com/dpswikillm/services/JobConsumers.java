@@ -20,6 +20,7 @@ public class JobConsumers {
     private final RenameJobService renameJobService;
     private final HealthCheckJobHandler healthCheckJobHandler;
     private final JobRepository jobRepository;
+    private final JobTokenAccounting tokenAccounting;
 
     public JobConsumers(
             JobLifecycleService lifecycleService,
@@ -31,7 +32,8 @@ public class JobConsumers {
             KeywordRegenerationJobHandler keywordRegenerationJobHandler,
             RenameJobService renameJobService,
             HealthCheckJobHandler healthCheckJobHandler,
-            JobRepository jobRepository) {
+            JobRepository jobRepository,
+            JobTokenAccounting tokenAccounting) {
         this.lifecycleService = lifecycleService;
         this.ingestPipelineService = ingestPipelineService;
         this.answerPipelineService = answerPipelineService;
@@ -42,6 +44,19 @@ public class JobConsumers {
         this.renameJobService = renameJobService;
         this.healthCheckJobHandler = healthCheckJobHandler;
         this.jobRepository = jobRepository;
+        this.tokenAccounting = tokenAccounting;
+    }
+
+    /**
+     * Reads the token totals accumulated on this worker thread, clears the context, and persists
+     * them to the job. Runs in the consumer's finally block so it captures usage regardless of how
+     * the pipeline terminated (completed, awaiting review, or failed).
+     */
+    private void flushTokenUsage(java.util.UUID jobId) {
+        JobTokenAccounting.TokenUsage usage = tokenAccounting.snapshot();
+        tokenAccounting.close();
+        lifecycleService.recordTokenUsage(
+                jobId, usage.promptTokens(), usage.completionTokens(), usage.totalTokens());
     }
 
     @RabbitListener(queues = RabbitConfig.WRITE_QUEUE)
@@ -52,48 +67,57 @@ public class JobConsumers {
                 .orElse(false)) {
             return;
         }
-        lifecycleService.transition(
-                message.jobId(), JobStatus.STARTED, "started", "Write job started");
+        tokenAccounting.open();
         try {
-            if (message.jobType() == JobType.INGEST) {
-                ingestPipelineService.run(jobRepository.findById(message.jobId()).orElseThrow());
-                return;
-            }
-            if (message.jobType() == JobType.REVERT) {
-                jobRevertService.revert(jobRepository.findById(message.jobId()).orElseThrow());
-                return;
-            }
-            if (message.jobType() == JobType.ENRICH) {
-                enrichPipelineService.run(jobRepository.findById(message.jobId()).orElseThrow());
-                return;
-            }
-            if (message.jobType() == JobType.MERGE) {
-                conceptMergeJobHandler.run(jobRepository.findById(message.jobId()).orElseThrow());
-                return;
-            }
-            if (message.jobType() == JobType.REGENERATE_KEYWORDS) {
-                keywordRegenerationJobHandler.run(
-                        jobRepository.findById(message.jobId()).orElseThrow());
-                return;
-            }
-            if (message.jobType() == JobType.RENAME) {
-                renameJobService.run(jobRepository.findById(message.jobId()).orElseThrow());
-                return;
-            }
-            if (message.jobType() == JobType.HEALTH_CHECK) {
-                healthCheckJobHandler.run(jobRepository.findById(message.jobId()).orElseThrow());
-                return;
-            }
             lifecycleService.transition(
-                    message.jobId(),
-                    JobStatus.PROGRESS,
-                    "dispatch",
-                    "Write pipeline dispatch placeholder");
-            lifecycleService.transition(
-                    message.jobId(), JobStatus.COMPLETED, "completed", "Write job completed");
-        } catch (Exception ex) {
-            lifecycleService.transition(
-                    message.jobId(), JobStatus.FAILED, "failed", ex.getMessage());
+                    message.jobId(), JobStatus.STARTED, "started", "Write job started");
+            try {
+                if (message.jobType() == JobType.INGEST) {
+                    ingestPipelineService.run(
+                            jobRepository.findById(message.jobId()).orElseThrow());
+                    return;
+                }
+                if (message.jobType() == JobType.REVERT) {
+                    jobRevertService.revert(jobRepository.findById(message.jobId()).orElseThrow());
+                    return;
+                }
+                if (message.jobType() == JobType.ENRICH) {
+                    enrichPipelineService.run(
+                            jobRepository.findById(message.jobId()).orElseThrow());
+                    return;
+                }
+                if (message.jobType() == JobType.MERGE) {
+                    conceptMergeJobHandler.run(
+                            jobRepository.findById(message.jobId()).orElseThrow());
+                    return;
+                }
+                if (message.jobType() == JobType.REGENERATE_KEYWORDS) {
+                    keywordRegenerationJobHandler.run(
+                            jobRepository.findById(message.jobId()).orElseThrow());
+                    return;
+                }
+                if (message.jobType() == JobType.RENAME) {
+                    renameJobService.run(jobRepository.findById(message.jobId()).orElseThrow());
+                    return;
+                }
+                if (message.jobType() == JobType.HEALTH_CHECK) {
+                    healthCheckJobHandler.run(
+                            jobRepository.findById(message.jobId()).orElseThrow());
+                    return;
+                }
+                lifecycleService.transition(
+                        message.jobId(),
+                        JobStatus.PROGRESS,
+                        "dispatch",
+                        "Write pipeline dispatch placeholder");
+                lifecycleService.transition(
+                        message.jobId(), JobStatus.COMPLETED, "completed", "Write job completed");
+            } catch (Exception ex) {
+                lifecycleService.transition(
+                        message.jobId(), JobStatus.FAILED, "failed", ex.getMessage());
+            }
+        } finally {
+            flushTokenUsage(message.jobId());
         }
     }
 
@@ -105,13 +129,18 @@ public class JobConsumers {
                 .orElse(false)) {
             return;
         }
-        lifecycleService.transition(
-                message.jobId(), JobStatus.STARTED, "started", "Answer job started");
+        tokenAccounting.open();
         try {
-            answerPipelineService.run(jobRepository.findById(message.jobId()).orElseThrow());
-        } catch (Exception ex) {
             lifecycleService.transition(
-                    message.jobId(), JobStatus.FAILED, "failed", ex.getMessage());
+                    message.jobId(), JobStatus.STARTED, "started", "Answer job started");
+            try {
+                answerPipelineService.run(jobRepository.findById(message.jobId()).orElseThrow());
+            } catch (Exception ex) {
+                lifecycleService.transition(
+                        message.jobId(), JobStatus.FAILED, "failed", ex.getMessage());
+            }
+        } finally {
+            flushTokenUsage(message.jobId());
         }
     }
 }

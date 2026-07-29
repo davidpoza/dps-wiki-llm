@@ -71,6 +71,9 @@ export interface JobSummary {
   affectedPaths?: string[];
   conceptProposals?: ConceptProposal[];
   fileEvents?: { path: string; action: string }[];
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
 }
 
 export interface ReindexProgress {

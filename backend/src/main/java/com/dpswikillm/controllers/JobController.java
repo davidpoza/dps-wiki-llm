@@ -104,7 +104,10 @@ public class JobController {
                                         j.getError(),
                                         parseAffectedPaths(j),
                                         parseConceptProposals(j),
-                                        buildFileEvents(j)))
+                                        buildFileEvents(j),
+                                        j.getPromptTokens(),
+                                        j.getCompletionTokens(),
+                                        j.getTotalTokens()))
                 .toList();
     }
 

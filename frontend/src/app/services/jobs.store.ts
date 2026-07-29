@@ -43,6 +43,9 @@ export class JobsStore implements OnDestroy {
             error: j.error,
             createdAt: j.createdAt,
             completedAt: j.completedAt ?? undefined,
+            totalTokens: j.totalTokens ?? null,
+            promptTokens: j.promptTokens ?? null,
+            completionTokens: j.completionTokens ?? null,
           });
         }
       }
@@ -141,7 +144,12 @@ export class JobsStore implements OnDestroy {
         next.currentActivity = { label, path, percent };
       } else if (event.step === 'progress' && event.message) {
         try {
-          const prog = JSON.parse(event.message) as { processed?: number; total?: number; updated?: number; failed?: number };
+          const prog = JSON.parse(event.message) as {
+            processed?: number;
+            total?: number;
+            updated?: number;
+            failed?: number;
+          };
           const percent = prog.total ? Math.round(((prog.processed ?? 0) / prog.total) * 100) : 0;
           next.currentActivity = { label: 'progress', percent, updated: prog.updated, failed: prog.failed };
         } catch {
@@ -204,6 +212,9 @@ export class JobsStore implements OnDestroy {
               error: job.error ?? existing.error,
               conceptProposals:
                 (job.conceptProposals?.length ?? 0) > 0 ? job.conceptProposals! : existing.conceptProposals,
+              totalTokens: job.totalTokens ?? existing.totalTokens ?? null,
+              promptTokens: job.promptTokens ?? existing.promptTokens ?? null,
+              completionTokens: job.completionTokens ?? existing.completionTokens ?? null,
             });
           }
           return updated;

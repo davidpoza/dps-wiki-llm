@@ -13,4 +13,7 @@ public record JobSummary(
         String error,
         List<String> affectedPaths,
         List<ConceptProposal> conceptProposals,
-        List<FileEventDto> fileEvents) {}
+        List<FileEventDto> fileEvents,
+        Long promptTokens,
+        Long completionTokens,
+        Long totalTokens) {}

@@ -1,7 +1,6 @@
 package com.dpswikillm.services;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -17,11 +16,11 @@ import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 
 /**
- * Shared resolution of {@code [[wiki-link]]} references against the vault. Owns the slug index (case
- * insensitive, full-path-stem and basename) and the raw-link → target-path resolution that both
- * {@link GraphService} (edges) and graph-based link discovery (adjacency, existing-link exclusion)
- * depend on. Extracted so exclusion and graph traversal share one authoritative resolver rather than
- * a fragile client-side basename match.
+ * Shared resolution of {@code [[wiki-link]]} references against the vault. Owns the slug index
+ * (case insensitive, full-path-stem and basename) and the raw-link → target-path resolution that
+ * both {@link GraphService} (edges) and graph-based link discovery (adjacency, existing-link
+ * exclusion) depend on. Extracted so exclusion and graph traversal share one authoritative resolver
+ * rather than a fragile client-side basename match.
  */
 @Service
 public class WikiLinkResolver {
@@ -52,8 +51,8 @@ public class WikiLinkResolver {
     }
 
     /**
-     * Builds the slug index: full path without extension (lowercased) and basename (lowercased) both
-     * map to the vault-relative path. First match wins for ambiguous stems.
+     * Builds the slug index: full path without extension (lowercased) and basename (lowercased)
+     * both map to the vault-relative path. First match wins for ambiguous stems.
      */
     public Map<String, String> buildSlugIndex(List<Path> files) {
         Path vaultRoot = pathResolver.vaultRoot();
@@ -72,9 +71,9 @@ public class WikiLinkResolver {
     }
 
     /**
-     * Resolves a raw wiki-link target (the part before any {@code |alias}) to a vault-relative path,
-     * trying a full-path match first and then a basename match. Returns {@code null} when nothing
-     * resolves (broken link).
+     * Resolves a raw wiki-link target (the part before any {@code |alias}) to a vault-relative
+     * path, trying a full-path match first and then a basename match. Returns {@code null} when
+     * nothing resolves (broken link).
      */
     public String resolveSlug(String raw, Map<String, String> slugIndex) {
         String normalized = raw.trim().toLowerCase(Locale.ROOT);
@@ -89,9 +88,9 @@ public class WikiLinkResolver {
     }
 
     /**
-     * Extracts every {@code [[wiki-link]]} from {@code content} and resolves each to its target path,
-     * returning the set of already-linked target paths. Aliases and case/path variants collapse to
-     * the same resolved target; unresolved (broken) links are skipped.
+     * Extracts every {@code [[wiki-link]]} from {@code content} and resolves each to its target
+     * path, returning the set of already-linked target paths. Aliases and case/path variants
+     * collapse to the same resolved target; unresolved (broken) links are skipped.
      */
     public Set<String> extractLinkedTargets(String content, Map<String, String> slugIndex) {
         Set<String> targets = new LinkedHashSet<>();

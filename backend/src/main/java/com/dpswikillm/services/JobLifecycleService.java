@@ -55,6 +55,27 @@ public class JobLifecycleService {
         return saved;
     }
 
+    /**
+     * Persists the accumulated LLM token usage for a job. Called from the job worker's finally
+     * block after the pipeline (and any terminal transition) has run, so this load-add-save is the
+     * last write and does not get clobbered. A zero total is skipped so jobs that made no LLM calls
+     * keep null columns and render no token indicator.
+     */
+    @Transactional
+    public void recordTokenUsage(
+            UUID jobId, long promptTokens, long completionTokens, long totalTokens) {
+        if (promptTokens == 0 && completionTokens == 0 && totalTokens == 0) {
+            return;
+        }
+        jobRepository
+                .findById(jobId)
+                .ifPresent(
+                        job -> {
+                            job.addTokenUsage(promptTokens, completionTokens, totalTokens);
+                            jobRepository.save(job);
+                        });
+    }
+
     public void fileEvent(Job job, String path, String action) {
         eventService.broadcast(
                 new JobEvent(

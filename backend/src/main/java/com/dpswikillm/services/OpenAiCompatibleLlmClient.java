@@ -22,9 +22,13 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     private final AppProperties properties;
     private final RestClient restClient;
     private final RetryingLlmExecutor retrying;
+    private final JobTokenAccounting tokenAccounting;
 
     public OpenAiCompatibleLlmClient(
-            AppProperties properties, RestClient.Builder builder, RetryingLlmExecutor retrying) {
+            AppProperties properties,
+            RestClient.Builder builder,
+            RetryingLlmExecutor retrying,
+            JobTokenAccounting tokenAccounting) {
         this.properties = properties;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout((int) CONNECT_TIMEOUT.toMillis());
@@ -32,6 +36,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         this.restClient =
                 builder.baseUrl(properties.llm().baseUrl()).requestFactory(factory).build();
         this.retrying = retrying;
+        this.tokenAccounting = tokenAccounting;
     }
 
     @Override
@@ -62,6 +67,8 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
                             .retrieve()
                             .body(Map.class);
 
+            recordUsage(response);
+
             List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
             Map<String, Object> message = (Map<String, Object>) choices.getFirst().get("message");
             return String.valueOf(message.get("content"));
@@ -70,6 +77,29 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         } catch (RuntimeException ex) {
             throw new LlmClientException("Chat completion failed", ex, true);
         }
+    }
+
+    /**
+     * Attributes the response's {@code usage} block to the active job accounting context. A missing
+     * or partial usage object is treated as zeros; some OpenAI-compatible providers omit {@code
+     * total_tokens}, so it falls back to prompt + completion. Never throws — token accounting must
+     * not fail an otherwise-successful completion.
+     */
+    private void recordUsage(Map<String, Object> response) {
+        if (!(response.get("usage") instanceof Map<?, ?> usage)) {
+            return;
+        }
+        long prompt = asLong(usage.get("prompt_tokens"));
+        long completion = asLong(usage.get("completion_tokens"));
+        long total = asLong(usage.get("total_tokens"));
+        if (total == 0) {
+            total = prompt + completion;
+        }
+        tokenAccounting.record(prompt, completion, total);
+    }
+
+    private static long asLong(Object value) {
+        return value instanceof Number number ? number.longValue() : 0L;
     }
 
     private LlmClientException classify(RestClientResponseException ex) {

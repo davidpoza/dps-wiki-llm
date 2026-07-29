@@ -113,4 +113,7 @@ export interface JobState {
   error?: string;
   createdAt?: string;
   completedAt?: string;
+  totalTokens?: number | null;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
 }

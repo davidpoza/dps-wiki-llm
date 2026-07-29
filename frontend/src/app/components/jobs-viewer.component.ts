@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
@@ -14,7 +14,7 @@ const PAGE_SIZE = 10;
 @Component({
   selector: 'app-jobs-viewer',
   standalone: true,
-  imports: [ButtonModule, TagModule, TranslocoPipe, DatePipe, PaginatorModule],
+  imports: [ButtonModule, TagModule, TranslocoPipe, DatePipe, DecimalPipe, PaginatorModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="jobs-viewer">
@@ -27,6 +27,11 @@ const PAGE_SIZE = 10;
             <div class="job-header">
               <span class="job-type">{{ jobTypeLabel(job.type) }}</span>
               <p-tag [value]="job.status" [severity]="severity(job.status)" />
+              @if (job.totalTokens) {
+                <span class="job-tokens" title="prompt + completion tokens">
+                  {{ job.totalTokens | number }} {{ 'jobs.tokens' | transloco }}
+                </span>
+              }
               @if (job.createdAt) {
                 <span class="job-date">{{ job.createdAt | date: 'dd/MM/yyyy HH:mm' }}</span>
               }
@@ -84,7 +89,9 @@ const PAGE_SIZE = 10;
                 }
                 <span class="scan-percent">({{ job.currentActivity.percent }}%)</span>
                 @if (job.currentActivity.updated !== undefined) {
-                  <span class="scan-counters">{{ job.currentActivity.updated }} act. · {{ job.currentActivity.failed }} err.</span>
+                  <span class="scan-counters"
+                    >{{ job.currentActivity.updated }} act. · {{ job.currentActivity.failed }} err.</span
+                  >
                 }
               </div>
             }
@@ -183,6 +190,16 @@ const PAGE_SIZE = 10;
         font-size: 0.85rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
+      }
+      .job-tokens {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--app-text-muted);
+        background: var(--app-surface-muted, rgba(148, 163, 184, 0.16));
+        border-radius: 10px;
+        padding: 1px 8px;
+        white-space: nowrap;
+        flex-shrink: 0;
       }
       .job-date {
         font-size: 0.78rem;

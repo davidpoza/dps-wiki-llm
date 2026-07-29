@@ -29,7 +29,8 @@ class GraphLinkDiscoveryServiceTests {
 
     @BeforeEach
     void setUp() {
-        AppProperties props = new AppProperties(vault.toString(), null, null, null, null, null, null, null, null);
+        AppProperties props =
+                new AppProperties(vault.toString(), null, null, null, null, null, null, null, null);
         VaultPathResolver pathResolver = new VaultPathResolver(props);
         MarkdownService markdownService = new MarkdownService();
         WikiLinkResolver linkResolver = new WikiLinkResolver(pathResolver);
@@ -67,7 +68,8 @@ class GraphLinkDiscoveryServiceTests {
 
     @Test
     void alreadyLinkedTargetsAreExcludedDespiteCaseAndPath() throws IOException {
-        // insulin already links Glucagon (capitalized) — it must not be re-suggested even though PPR
+        // insulin already links Glucagon (capitalized) — it must not be re-suggested even though
+        // PPR
         // reaches it through pancreas.
         writeNote(
                 "wiki/concepts/insulin.md",
@@ -99,7 +101,8 @@ class GraphLinkDiscoveryServiceTests {
 
     @Test
     void substringScanSeedsWhenNoTokenOverlap() throws IOException {
-        // "hyperglycemia" keyword has no whole-token match, but appears as a substring inside another
+        // "hyperglycemia" keyword has no whole-token match, but appears as a substring inside
+        // another
         // note's body, so the substring stage still seeds it.
         writeNote(
                 "wiki/concepts/diabetes.md",

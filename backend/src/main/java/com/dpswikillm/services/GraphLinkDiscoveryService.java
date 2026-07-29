@@ -62,8 +62,8 @@ public class GraphLinkDiscoveryService {
         this.settingRepository = settingRepository;
     }
 
-    public List<DiscoveredLink> discover(String wikiPath, Consumer<LinkDiscoveryProgress> onProgress)
-            throws IOException {
+    public List<DiscoveredLink> discover(
+            String wikiPath, Consumer<LinkDiscoveryProgress> onProgress) throws IOException {
         String normalized = pathResolver.normalizeRelativePath(wikiPath);
         Path absolute = pathResolver.resolve(normalized);
         if (!Files.exists(absolute)) {
@@ -156,7 +156,8 @@ public class GraphLinkDiscoveryService {
         return path.equals(source) || alreadyLinked.contains(path);
     }
 
-    private Map<String, NoteMeta> buildNoteMetadata(List<Path> files, Map<String, String> slugIndex) {
+    private Map<String, NoteMeta> buildNoteMetadata(
+            List<Path> files, Map<String, String> slugIndex) {
         Path vaultRoot = pathResolver.vaultRoot();
         Map<String, NoteMeta> notes = new HashMap<>();
         for (Path file : files) {
@@ -164,7 +165,8 @@ public class GraphLinkDiscoveryService {
             try {
                 String content = Files.readString(file, StandardCharsets.UTF_8);
                 var doc = markdownService.parse(content);
-                String title = doc.title() == null || doc.title().isBlank() ? stem(relPath) : doc.title();
+                String title =
+                        doc.title() == null || doc.title().isBlank() ? stem(relPath) : doc.title();
                 List<String> aliases = frontmatterList(doc.frontmatter(), "aliases");
                 Set<String> lexTokens = new LinkedHashSet<>(tokenize(title));
                 lexTokens.addAll(tokenize(aliases));
@@ -222,7 +224,8 @@ public class GraphLinkDiscoveryService {
     }
 
     private static String stem(String relPath) {
-        String name = relPath.contains("/") ? relPath.substring(relPath.lastIndexOf('/') + 1) : relPath;
+        String name =
+                relPath.contains("/") ? relPath.substring(relPath.lastIndexOf('/') + 1) : relPath;
         return name.endsWith(".md") ? name.substring(0, name.length() - 3) : name;
     }
 

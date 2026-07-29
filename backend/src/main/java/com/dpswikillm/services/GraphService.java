@@ -66,8 +66,8 @@ public class GraphService {
     }
 
     /**
-     * Builds a walkable undirected adjacency map from the resolved {@code [[wiki-link]]} edges: each
-     * node maps to its distinct neighbors, edges deduped so A↔B appears once per side. Used by
+     * Builds a walkable undirected adjacency map from the resolved {@code [[wiki-link]]} edges:
+     * each node maps to its distinct neighbors, edges deduped so A↔B appears once per side. Used by
      * Personalized PageRank in graph-based link discovery.
      */
     public Map<String, List<String>> buildAdjacency() throws IOException {
@@ -85,9 +85,11 @@ public class GraphService {
                     if (target.equals(relPath)) {
                         continue;
                     }
-                    adjacency.computeIfAbsent(relPath, k -> new java.util.LinkedHashSet<>())
+                    adjacency
+                            .computeIfAbsent(relPath, k -> new java.util.LinkedHashSet<>())
                             .add(target);
-                    adjacency.computeIfAbsent(target, k -> new java.util.LinkedHashSet<>())
+                    adjacency
+                            .computeIfAbsent(target, k -> new java.util.LinkedHashSet<>())
                             .add(relPath);
                 }
             } catch (IOException ex) {

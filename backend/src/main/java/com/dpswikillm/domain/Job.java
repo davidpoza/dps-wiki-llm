@@ -45,6 +45,11 @@ public class Job {
     private String conceptProposals = "[]";
 
     private String error;
+
+    private Long promptTokens;
+    private Long completionTokens;
+    private Long totalTokens;
+
     private Instant createdAt = Instant.now();
     private Instant updatedAt = Instant.now();
     private Instant startedAt;
@@ -157,6 +162,29 @@ public class Job {
 
     public void setError(String error) {
         this.error = error;
+    }
+
+    public Long getPromptTokens() {
+        return promptTokens;
+    }
+
+    public Long getCompletionTokens() {
+        return completionTokens;
+    }
+
+    public Long getTotalTokens() {
+        return totalTokens;
+    }
+
+    /**
+     * Adds the given chat-completion token counts to this job's running totals. Null-safe: totals
+     * start from zero, so historical rows with null columns accumulate correctly.
+     */
+    public void addTokenUsage(long prompt, long completion, long total) {
+        this.promptTokens = (this.promptTokens == null ? 0L : this.promptTokens) + prompt;
+        this.completionTokens =
+                (this.completionTokens == null ? 0L : this.completionTokens) + completion;
+        this.totalTokens = (this.totalTokens == null ? 0L : this.totalTokens) + total;
     }
 
     public Instant getCreatedAt() {
