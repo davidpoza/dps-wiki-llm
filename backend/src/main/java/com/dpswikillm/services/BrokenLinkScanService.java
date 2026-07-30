@@ -213,13 +213,44 @@ public class BrokenLinkScanService {
     }
 
     private boolean isValidSlug(String slug, Set<String> validSlugs) {
-        String normalizedSlug = slug.toLowerCase(Locale.ROOT);
-        // Match by basename or by relative path (without extension)
+        String normalizedSlug = normalizeLinkTarget(slug);
+        if (normalizedSlug.isEmpty()) {
+            // Pure anchor/block reference (e.g. [[#Heading]]) points to the current file
+            return true;
+        }
+        // Match by basename or by relative path (both stored in the index without extension)
         String baseName =
                 normalizedSlug.contains("/")
                         ? normalizedSlug.substring(normalizedSlug.lastIndexOf('/') + 1)
                         : normalizedSlug;
         return validSlugs.contains(normalizedSlug) || validSlugs.contains(baseName);
+    }
+
+    /**
+     * Normalizes a wiki-link target so it can be compared against the slug index. The index stores
+     * paths lower-cased and without the {@code .md} extension, so a link may be written with or
+     * without the extension, with or without the {@code wiki/...} path, and may carry a heading
+     * anchor ({@code #Section}) or block reference ({@code ^block}) that must be ignored when
+     * resolving the target file.
+     */
+    private static String normalizeLinkTarget(String slug) {
+        String target = slug.trim();
+        // Drop heading anchor / block reference — they point within the target file
+        int anchor = target.indexOf('#');
+        if (anchor >= 0) {
+            target = target.substring(0, anchor);
+        }
+        int block = target.indexOf('^');
+        if (block >= 0) {
+            target = target.substring(0, block);
+        }
+        target = target.trim().replace('\\', '/');
+        // Strip trailing .md extension (links may or may not include it)
+        String lower = target.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".md")) {
+            lower = lower.substring(0, lower.length() - 3);
+        }
+        return lower;
     }
 
     private String extractSlugFromLine(String line) {
