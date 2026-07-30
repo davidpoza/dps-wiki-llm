@@ -1,5 +1,6 @@
 package com.dpswikillm.services;
 
+import com.dpswikillm.domain.FrontmatterFilter;
 import com.dpswikillm.domain.SearchResult;
 import com.dpswikillm.repositories.DocumentIndexRepository;
 import java.util.List;
@@ -13,10 +14,12 @@ public class FileLookupService {
         this.repository = repository;
     }
 
-    public List<SearchResult> lookup(String query, int limit) {
-        if (query == null || query.isBlank()) {
+    public List<SearchResult> lookup(String query, List<FrontmatterFilter> filters, int limit) {
+        String text = query == null ? "" : query.trim();
+        List<FrontmatterFilter> propertyFilters = filters == null ? List.of() : filters;
+        if (text.isBlank() && propertyFilters.isEmpty()) {
             return List.of();
         }
-        return repository.lexicalLookup(query.trim(), Math.max(1, limit));
+        return repository.lexicalLookup(text, propertyFilters, Math.max(1, limit));
     }
 }

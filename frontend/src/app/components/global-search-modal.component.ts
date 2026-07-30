@@ -6,7 +6,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { Subject, of } from 'rxjs';
 import { catchError, debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
-import { ApiService, FileSearchResult } from '../services/api.service';
+import { ApiService, FileSearchResult, FrontmatterFilter } from '../services/api.service';
 import { GlobalSearchService } from '../services/global-search.service';
 
 const SEARCH_LIMIT = 15;
@@ -40,8 +40,16 @@ const SNIPPET_AFTER = 80;
           (keydown)="onSearchKeyDown($event)"
         />
       </div>
+      @if (activeFilters().length) {
+        <div class="search-filters">
+          <span class="search-filters-label">{{ 'explorer.searchFiltersLabel' | transloco }}</span>
+          @for (filter of activeFilters(); track filter.key + ':' + filter.value) {
+            <span class="search-filter-chip">{{ filter.key }}: {{ filter.value }}</span>
+          }
+        </div>
+      }
       <div class="search-results">
-        @if (results().length === 0 && searchQuery().trim()) {
+        @if (results().length === 0 && (searchText().trim() || activeFilters().length)) {
           <p class="search-empty">{{ 'explorer.noResults' | transloco }}</p>
         }
         @for (result of results(); track result.path; let i = $index) {
@@ -66,6 +74,27 @@ const SNIPPET_AFTER = 80;
       }
       .search-box input {
         width: 100%;
+      }
+      .search-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .search-filters-label {
+        font-size: 0.75rem;
+        color: var(--app-text-muted);
+      }
+      .search-filter-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 0.75rem;
+        background: var(--app-primary-soft);
+        color: var(--app-primary);
+        white-space: nowrap;
       }
       .search-results {
         max-height: 360px;
@@ -137,6 +166,8 @@ export class GlobalSearchModalComponent {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly searchQuery = signal('');
+  readonly searchText = signal('');
+  readonly activeFilters = signal<FrontmatterFilter[]>([]);
   readonly searchHighlightIndex = signal<number>(-1);
   readonly results = signal<FileSearchResult[]>([]);
 
@@ -147,9 +178,13 @@ export class GlobalSearchModalComponent {
       .pipe(
         debounceTime(200),
         distinctUntilChanged(),
-        switchMap((q) =>
-          q.trim() ? this.api.lookupFiles(q.trim(), SEARCH_LIMIT).pipe(catchError(() => of([]))) : of([]),
-        ),
+        switchMap((raw) => {
+          const { text, filters } = this.parseQuery(raw);
+          if (!text && filters.length === 0) {
+            return of<FileSearchResult[]>([]);
+          }
+          return this.api.lookupFiles(text, SEARCH_LIMIT, filters).pipe(catchError(() => of([])));
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((res) => {
@@ -160,6 +195,8 @@ export class GlobalSearchModalComponent {
     effect(() => {
       if (this.searchService.isOpen()) {
         this.searchQuery.set('');
+        this.searchText.set('');
+        this.activeFilters.set([]);
         this.results.set([]);
         this.searchHighlightIndex.set(-1);
       }
@@ -188,11 +225,34 @@ export class GlobalSearchModalComponent {
 
   onSearchInput(value: string): void {
     this.searchQuery.set(value);
+    const { text, filters } = this.parseQuery(value);
+    this.searchText.set(text);
+    this.activeFilters.set(filters);
     this.searchHighlightIndex.set(-1);
-    if (!value.trim()) {
+    if (!text && filters.length === 0) {
       this.results.set([]);
     }
     this.queries.next(value);
+  }
+
+  /**
+   * Splits the raw input into free-text and Obsidian-style `[key: value]` frontmatter filters.
+   * Tokens are removed from the text; whatever remains (whitespace-collapsed) is the text query.
+   */
+  private parseQuery(raw: string): { text: string; filters: FrontmatterFilter[] } {
+    const filters: FrontmatterFilter[] = [];
+    const text = raw
+      .replace(/\[\s*([^:\]]+?)\s*:\s*([^\]]*?)\s*\]/g, (_match, key: string, value: string) => {
+        const k = key.trim();
+        const v = value.trim();
+        if (k && v) {
+          filters.push({ key: k, value: v });
+        }
+        return ' ';
+      })
+      .replace(/\s+/g, ' ')
+      .trim();
+    return { text, filters };
   }
 
   onSearchKeyDown(event: KeyboardEvent): void {
@@ -224,7 +284,7 @@ export class GlobalSearchModalComponent {
     const body = result.body ?? '';
     if (!body) return '';
     const flat = body.replace(/\s+/g, ' ').trim();
-    const q = this.searchQuery().trim().toLowerCase();
+    const q = this.searchText().trim().toLowerCase();
     const at = q ? flat.toLowerCase().indexOf(q) : -1;
     if (at === -1) {
       return flat.slice(0, SNIPPET_BEFORE + SNIPPET_AFTER).trim();

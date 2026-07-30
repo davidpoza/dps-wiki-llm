@@ -1,6 +1,7 @@
 package com.dpswikillm.repositories;
 
 import com.dpswikillm.domain.DocumentRecord;
+import com.dpswikillm.domain.FrontmatterFilter;
 import com.dpswikillm.domain.SearchResult;
 import java.time.Instant;
 import java.util.List;
@@ -35,7 +36,7 @@ public interface DocumentIndexRepository {
 
     List<SearchResult> semanticSearchByType(float[] queryVector, String docType, int limit);
 
-    List<SearchResult> lexicalLookup(String query, int limit);
+    List<SearchResult> lexicalLookup(String query, List<FrontmatterFilter> filters, int limit);
 
     record SimilarPair(String path1, String path2, double similarity) {}
 

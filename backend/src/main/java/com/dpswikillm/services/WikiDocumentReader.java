@@ -43,7 +43,8 @@ final class WikiDocumentReader {
                     title,
                     docType,
                     updated,
-                    body);
+                    body,
+                    markdown.frontmatter());
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to read markdown document: " + file, ex);
         }

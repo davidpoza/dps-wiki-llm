@@ -14,6 +14,7 @@ import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.domain.ConnectionCandidateDecision;
 import com.dpswikillm.domain.ConnectionCandidateSource;
 import com.dpswikillm.domain.DocumentRecord;
+import com.dpswikillm.domain.FrontmatterFilter;
 import com.dpswikillm.domain.Job;
 import com.dpswikillm.domain.JobConnectionCandidate;
 import com.dpswikillm.domain.JobMode;
@@ -792,7 +793,8 @@ class IngestPipelineServicesTests {
         }
 
         @Override
-        public List<SearchResult> lexicalLookup(String q, int limit) {
+        public List<SearchResult> lexicalLookup(
+                String q, List<FrontmatterFilter> filters, int limit) {
             return List.of();
         }
 

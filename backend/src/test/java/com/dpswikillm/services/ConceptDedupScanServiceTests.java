@@ -219,6 +219,7 @@ class ConceptDedupScanServiceTests {
     }
 
     private DocumentRecord doc(String path, String title) {
-        return new DocumentRecord(UUID.randomUUID(), path, title, "concept", Instant.now(), title);
+        return new DocumentRecord(
+                UUID.randomUUID(), path, title, "concept", Instant.now(), title, java.util.Map.of());
     }
 }

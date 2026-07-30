@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.domain.DocumentRecord;
+import com.dpswikillm.domain.FrontmatterFilter;
 import com.dpswikillm.domain.SearchResult;
 import com.dpswikillm.repositories.DocumentIndexRepository;
 import java.nio.file.Files;
@@ -129,19 +130,70 @@ class SemanticRetrievalServicesTests {
                                         "semantic matching"),
                                 doc("wiki/entities/other.md", "Other", "unrelated")));
 
-        assertThat(new FileLookupService(repository).lookup("semantic", 10))
+        assertThat(new FileLookupService(repository).lookup("semantic", List.of(), 10))
                 .extracting(SearchResult::path)
                 .containsExactly("wiki/concepts/vector-search.md");
     }
 
+    @Test
+    void lexicalLookupFiltersByFrontmatterProperty() {
+        FakeRepository repository = new FakeRepository();
+        repository.documents =
+                new ArrayList<>(
+                        List.of(
+                                doc(
+                                        "wiki/sources/probiotics.md",
+                                        "Probiotics",
+                                        "gut health",
+                                        Map.of(
+                                                "type",
+                                                "source",
+                                                "keywords",
+                                                List.of("probiotics", "prebiotics"))),
+                                doc(
+                                        "wiki/topics/nutrition.md",
+                                        "Nutrition",
+                                        "gut health",
+                                        Map.of("type", "topic", "Tags", List.of("Productivity")))));
+        FileLookupService service = new FileLookupService(repository);
+
+        // Scalar, partial + case-insensitive: [type: sou] -> "source"
+        assertThat(service.lookup("", List.of(new FrontmatterFilter("type", "sou")), 10))
+                .extracting(SearchResult::path)
+                .containsExactly("wiki/sources/probiotics.md");
+        // List value: [keywords: probiotics]
+        assertThat(service.lookup("", List.of(new FrontmatterFilter("keywords", "probiotics")), 10))
+                .extracting(SearchResult::path)
+                .containsExactly("wiki/sources/probiotics.md");
+        // Case-insensitive key + list value: [tags: prod] -> "Tags":["Productivity"]
+        assertThat(service.lookup("", List.of(new FrontmatterFilter("tags", "prod")), 10))
+                .extracting(SearchResult::path)
+                .containsExactly("wiki/topics/nutrition.md");
+        // Text + filter combined (AND)
+        assertThat(
+                        service.lookup(
+                                "gut", List.of(new FrontmatterFilter("type", "topic")), 10))
+                .extracting(SearchResult::path)
+                .containsExactly("wiki/topics/nutrition.md");
+        // No match
+        assertThat(service.lookup("", List.of(new FrontmatterFilter("type", "concept")), 10))
+                .isEmpty();
+    }
+
     private DocumentRecord doc(String path, String title, String body) {
+        return doc(path, title, body, Map.of());
+    }
+
+    private DocumentRecord doc(
+            String path, String title, String body, Map<String, Object> frontmatter) {
         return new DocumentRecord(
                 UUID.nameUUIDFromBytes(path.getBytes()),
                 path,
                 title,
                 "concept",
                 Instant.now(),
-                body);
+                body,
+                frontmatter);
     }
 
     private VaultPathResolver resolver() {
@@ -279,24 +331,58 @@ class SemanticRetrievalServicesTests {
         }
 
         @Override
-        public List<SearchResult> lexicalLookup(String query, int limit) {
-            String lower = query.toLowerCase();
+        public List<SearchResult> lexicalLookup(
+                String query, List<FrontmatterFilter> filters, int limit) {
+            String lower = query == null ? "" : query.toLowerCase();
+            boolean hasText = !lower.isBlank();
+            List<FrontmatterFilter> propertyFilters = filters == null ? List.of() : filters;
             return documents.stream()
                     .filter(
                             doc ->
-                                    (doc.title() + " " + doc.path() + " " + doc.body())
-                                            .toLowerCase()
-                                            .contains(lower))
+                                    !hasText
+                                            || (doc.title() + " " + doc.path() + " " + doc.body())
+                                                    .toLowerCase()
+                                                    .contains(lower))
+                    .filter(
+                            doc ->
+                                    propertyFilters.stream()
+                                            .allMatch(f -> matchesFrontmatter(doc, f)))
                     .map(
                             doc ->
                                     new SearchResult(
                                             doc.path(),
                                             doc.title(),
                                             doc.docType(),
-                                            1.0,
+                                            hasText ? 1.0 : 0.0,
                                             doc.body()))
                     .limit(limit)
                     .toList();
+        }
+
+        private static boolean matchesFrontmatter(DocumentRecord doc, FrontmatterFilter filter) {
+            String needle = normalize(filter.value());
+            for (Map.Entry<String, Object> entry : doc.frontmatter().entrySet()) {
+                if (!entry.getKey().equalsIgnoreCase(filter.key())) {
+                    continue;
+                }
+                Object value = entry.getValue();
+                if (value instanceof Iterable<?> items) {
+                    for (Object item : items) {
+                        if (item != null && normalize(item.toString()).contains(needle)) {
+                            return true;
+                        }
+                    }
+                } else if (value != null && normalize(value.toString()).contains(needle)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static String normalize(String text) {
+            return java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+                    .replaceAll("\\p{M}", "")
+                    .toLowerCase();
         }
 
         private double cosine(float[] a, float[] b) {

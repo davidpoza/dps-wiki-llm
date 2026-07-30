@@ -1,5 +1,6 @@
 package com.dpswikillm.controllers;
 
+import com.dpswikillm.domain.FrontmatterFilter;
 import com.dpswikillm.domain.Job;
 import com.dpswikillm.domain.JobConnectionCandidate;
 import com.dpswikillm.domain.JobMode;
@@ -244,9 +245,10 @@ public class JobController {
 
     @GetMapping("/files/lookup")
     public java.util.List<SearchResult> lookupFiles(
-            @RequestParam("q") String query,
+            @RequestParam(value = "q", required = false) String query,
+            @RequestParam(value = "fm", required = false) List<String> fm,
             @RequestParam(value = "limit", defaultValue = "10") int limit) {
-        return fileLookupService.lookup(query, limit);
+        return fileLookupService.lookup(query, FrontmatterFilter.parseAll(fm), limit);
     }
 
     @GetMapping(value = "/jobs/link-discovery-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

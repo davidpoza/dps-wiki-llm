@@ -1,9 +1,15 @@
 package com.dpswikillm.repositories;
 
 import com.dpswikillm.domain.DocumentRecord;
+import com.dpswikillm.domain.FrontmatterFilter;
 import com.dpswikillm.domain.SearchResult;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -17,10 +23,37 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
-    private final JdbcTemplate jdbcTemplate;
+    private static final TypeReference<Map<String, Object>> FRONTMATTER_TYPE =
+            new TypeReference<>() {};
 
-    public JdbcDocumentIndexRepository(JdbcTemplate jdbcTemplate) {
+    /**
+     * Matches a single frontmatter property filter. Placeholders in order: (1) property key
+     * (case-insensitive), (2) value pattern for a scalar property, (3) value pattern for any element
+     * of a list-valued property. Value comparison is partial (LIKE), lower-cased and unaccented.
+     */
+    private static final String FRONTMATTER_PREDICATE =
+            """
+            EXISTS (
+                SELECT 1 FROM jsonb_each(documents.frontmatter) AS fm(fm_key, fm_val)
+                WHERE lower(fm_key) = lower(?)
+                  AND (
+                    (jsonb_typeof(fm_val) <> 'array'
+                        AND unaccent(lower(fm_val #>> '{}')) LIKE unaccent(lower(?)))
+                    OR (jsonb_typeof(fm_val) = 'array'
+                        AND EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(fm_val) AS fm_elem
+                            WHERE unaccent(lower(fm_elem)) LIKE unaccent(lower(?))
+                        ))
+                  )
+            )
+            """;
+
+    private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
+
+    public JdbcDocumentIndexRepository(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -30,20 +63,22 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
         for (DocumentRecord doc : documents) {
             jdbcTemplate.update(
                     """
-                    INSERT INTO documents (id, path, title, doc_type, updated_at, body)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO documents (id, path, title, doc_type, updated_at, body, frontmatter)
+                    VALUES (?, ?, ?, ?, ?, ?, ?::jsonb)
                     ON CONFLICT (path) DO UPDATE SET
                       title = EXCLUDED.title,
                       doc_type = EXCLUDED.doc_type,
                       updated_at = EXCLUDED.updated_at,
-                      body = EXCLUDED.body
+                      body = EXCLUDED.body,
+                      frontmatter = EXCLUDED.frontmatter
                     """,
                     doc.id(),
                     doc.path(),
                     doc.title(),
                     doc.docType(),
                     Timestamp.from(doc.updatedAt()),
-                    doc.body());
+                    doc.body(),
+                    serializeFrontmatter(doc.frontmatter()));
         }
         List<String> paths = documents.stream().map(DocumentRecord::path).toList();
         if (paths.isEmpty()) {
@@ -61,20 +96,22 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
     public void upsertDocument(DocumentRecord doc) {
         jdbcTemplate.update(
                 """
-                INSERT INTO documents (id, path, title, doc_type, updated_at, body)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO documents (id, path, title, doc_type, updated_at, body, frontmatter)
+                VALUES (?, ?, ?, ?, ?, ?, ?::jsonb)
                 ON CONFLICT (path) DO UPDATE SET
                   title = EXCLUDED.title,
                   doc_type = EXCLUDED.doc_type,
                   updated_at = EXCLUDED.updated_at,
-                  body = EXCLUDED.body
+                  body = EXCLUDED.body,
+                  frontmatter = EXCLUDED.frontmatter
                 """,
                 doc.id(),
                 doc.path(),
                 doc.title(),
                 doc.docType(),
                 Timestamp.from(doc.updatedAt()),
-                doc.body());
+                doc.body(),
+                serializeFrontmatter(doc.frontmatter()));
     }
 
     @Override
@@ -86,7 +123,7 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
     public List<DocumentRecord> findAllDocuments() {
         return jdbcTemplate.query(
                 """
-                SELECT id, path, title, doc_type, updated_at, body
+                SELECT id, path, title, doc_type, updated_at, body, frontmatter
                 FROM documents
                 ORDER BY path
                 """,
@@ -97,7 +134,8 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
                                 rs.getString("title"),
                                 rs.getString("doc_type"),
                                 rs.getTimestamp("updated_at").toInstant(),
-                                rs.getString("body")));
+                                rs.getString("body"),
+                                deserializeFrontmatter(rs.getString("frontmatter"))));
     }
 
     @Override
@@ -211,17 +249,47 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
     }
 
     @Override
-    public List<SearchResult> lexicalLookup(String query, int limit) {
-        String pattern = "%" + query + "%";
+    public List<SearchResult> lexicalLookup(
+            String query, List<FrontmatterFilter> filters, int limit) {
+        boolean hasText = query != null && !query.isBlank();
+        List<FrontmatterFilter> propertyFilters = filters == null ? List.of() : filters;
+        List<Object> params = new ArrayList<>();
+
+        StringBuilder sql = new StringBuilder("SELECT path, title, doc_type, body, ");
+        if (hasText) {
+            sql.append("GREATEST(similarity(title, ?), similarity(path, ?), similarity(body, ?))");
+            params.add(query);
+            params.add(query);
+            params.add(query);
+        } else {
+            sql.append("0");
+        }
+        sql.append(" AS score FROM documents");
+
+        List<String> conditions = new ArrayList<>();
+        if (hasText) {
+            conditions.add("(title ILIKE ? OR path ILIKE ? OR body ILIKE ?)");
+            String pattern = "%" + query + "%";
+            params.add(pattern);
+            params.add(pattern);
+            params.add(pattern);
+        }
+        for (FrontmatterFilter filter : propertyFilters) {
+            conditions.add(FRONTMATTER_PREDICATE);
+            String valuePattern = "%" + escapeLike(filter.value()) + "%";
+            params.add(filter.key());
+            params.add(valuePattern);
+            params.add(valuePattern);
+        }
+        if (!conditions.isEmpty()) {
+            sql.append(" WHERE ").append(String.join(" AND ", conditions));
+        }
+        sql.append(hasText ? " ORDER BY score DESC, path" : " ORDER BY updated_at DESC, path");
+        sql.append(" LIMIT ?");
+        params.add(limit);
+
         return jdbcTemplate.query(
-                """
-                SELECT path, title, doc_type, body,
-                       GREATEST(similarity(title, ?), similarity(path, ?), similarity(body, ?)) AS score
-                FROM documents
-                WHERE title ILIKE ? OR path ILIKE ? OR body ILIKE ?
-                ORDER BY score DESC, path
-                LIMIT ?
-                """,
+                sql.toString(),
                 (rs, rowNum) ->
                         new SearchResult(
                                 rs.getString("path"),
@@ -229,13 +297,7 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
                                 rs.getString("doc_type"),
                                 rs.getDouble("score"),
                                 rs.getString("body")),
-                query,
-                query,
-                query,
-                pattern,
-                pattern,
-                pattern,
-                limit);
+                params.toArray());
     }
 
     @Override
@@ -287,7 +349,7 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
     public List<DocumentRecord> findDocumentsByDocType(String docType) {
         return jdbcTemplate.query(
                 """
-                SELECT id, path, title, doc_type, updated_at, body
+                SELECT id, path, title, doc_type, updated_at, body, frontmatter
                 FROM documents
                 WHERE doc_type = ?
                 ORDER BY path
@@ -299,7 +361,8 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
                                 rs.getString("title"),
                                 rs.getString("doc_type"),
                                 rs.getTimestamp("updated_at").toInstant(),
-                                rs.getString("body")),
+                                rs.getString("body"),
+                                deserializeFrontmatter(rs.getString("frontmatter"))),
                 docType);
     }
 
@@ -443,6 +506,32 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
                         model,
                         sampleSize);
         return stats != null ? stats : new GlobalSimilarityStats(0, 0, 0, 0, 0);
+    }
+
+    private String serializeFrontmatter(Map<String, Object> frontmatter) {
+        if (frontmatter == null || frontmatter.isEmpty()) {
+            return "{}";
+        }
+        try {
+            return objectMapper.writeValueAsString(frontmatter);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize frontmatter", ex);
+        }
+    }
+
+    private Map<String, Object> deserializeFrontmatter(String json) {
+        if (json == null || json.isBlank()) {
+            return new LinkedHashMap<>();
+        }
+        try {
+            return objectMapper.readValue(json, FRONTMATTER_TYPE);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to deserialize frontmatter", ex);
+        }
+    }
+
+    private static String escapeLike(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     private String vectorLiteral(float[] vector) {

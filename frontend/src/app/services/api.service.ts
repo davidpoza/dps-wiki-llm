@@ -51,6 +51,12 @@ export interface FileSearchResult {
   body?: string;
 }
 
+/** An Obsidian-style frontmatter property filter parsed from `[key: value]` search syntax. */
+export interface FrontmatterFilter {
+  key: string;
+  value: string;
+}
+
 export interface JobResponse {
   id: string;
   type: string;
@@ -275,8 +281,12 @@ export class ApiService {
     return this.http.post<void>(`/api/jobs/${jobId}/abandon`, {});
   }
 
-  lookupFiles(q: string, limit = 10): Observable<FileSearchResult[]> {
-    return this.http.get<FileSearchResult[]>('/api/files/lookup', { params: { q, limit: String(limit) } });
+  lookupFiles(q: string, limit = 10, filters: FrontmatterFilter[] = []): Observable<FileSearchResult[]> {
+    const params: Record<string, string | string[]> = { q, limit: String(limit) };
+    if (filters.length) {
+      params['fm'] = filters.map((f) => `${f.key}:${f.value}`);
+    }
+    return this.http.get<FileSearchResult[]>('/api/files/lookup', { params });
   }
 
   getHistory(page = 0, size = 20): Observable<HistoryPage> {

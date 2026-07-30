@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.dpswikillm.config.AppProperties;
 import com.dpswikillm.domain.DocumentRecord;
+import com.dpswikillm.domain.FrontmatterFilter;
 import com.dpswikillm.domain.Job;
 import com.dpswikillm.domain.JobMode;
 import com.dpswikillm.domain.JobStatus;
@@ -285,7 +286,8 @@ class JobRevertServiceTests {
         }
 
         @Override
-        public List<SearchResult> lexicalLookup(String q, int limit) {
+        public List<SearchResult> lexicalLookup(
+                String q, List<FrontmatterFilter> filters, int limit) {
             return List.of();
         }
 
