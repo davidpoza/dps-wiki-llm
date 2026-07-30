@@ -333,6 +333,17 @@ class ConceptMergeJobE2ETests {
         }
 
         @Override
+        public void upsertDocument(DocumentRecord document) {
+            documents.removeIf(d -> d.path().equals(document.path()));
+            documents.add(document);
+        }
+
+        @Override
+        public void deleteDocument(String path) {
+            documents.removeIf(d -> d.path().equals(path));
+        }
+
+        @Override
         public List<DocumentRecord> findAllDocuments() {
             return documents;
         }

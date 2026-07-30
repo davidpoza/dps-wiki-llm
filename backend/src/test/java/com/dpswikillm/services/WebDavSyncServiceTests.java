@@ -82,7 +82,11 @@ class WebDavSyncServiceTests {
         service = new WebDavSyncService(webdav, baselineRepo, snapshotService, resolver);
         fileService =
                 new FileService(
-                        resolver, snapshotService, service, mock(ResourceSettingsService.class));
+                        resolver,
+                        snapshotService,
+                        service,
+                        mock(ResourceSettingsService.class),
+                        mock(DocumentIndexService.class));
     }
 
     // ---------------- Section 5: push on save/delete/rename ----------------

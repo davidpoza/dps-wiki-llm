@@ -2,6 +2,7 @@ package com.dpswikillm.services;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.dpswikillm.config.AppProperties;
@@ -28,7 +29,8 @@ class FileServiceTests {
                         resolver(),
                         mock(SnapshotService.class),
                         mock(WebDavSyncService.class),
-                        resourceSettingsService);
+                        resourceSettingsService,
+                        mock(DocumentIndexService.class));
 
         String rendered =
                 service.renderPdfMarkdown("before\n![[Pasted image 20260618163907.png]]\nafter");
@@ -139,12 +141,54 @@ class FileServiceTests {
         assertThat(result).contains("Mi segundo cerebro: una wiki");
     }
 
+    @Test
+    void saveContentIndexesTheNote() throws Exception {
+        Files.createDirectories(vault.resolve("wiki"));
+        DocumentIndexService indexer = mock(DocumentIndexService.class);
+        FileService service = serviceWith(indexer);
+
+        service.saveContent("wiki/note.md", "# Note\n\nSearchable body.");
+
+        assertThat(vault.resolve("wiki/note.md")).exists();
+        verify(indexer).indexFile("wiki/note.md");
+    }
+
+    @Test
+    void deleteRemovesTheNoteFromTheIndex() throws Exception {
+        Files.createDirectories(vault.resolve("wiki"));
+        Files.writeString(vault.resolve("wiki/note.md"), "# Note\n");
+        DocumentIndexService indexer = mock(DocumentIndexService.class);
+        FileService service = serviceWith(indexer);
+
+        service.deleteFile("wiki/note.md");
+
+        verify(indexer).removeFromIndex("wiki/note.md");
+    }
+
+    @Test
+    void renameUpdatesTheIndexedPaths() throws Exception {
+        Files.createDirectories(vault.resolve("wiki"));
+        Files.writeString(vault.resolve("wiki/old.md"), "# Old\n");
+        DocumentIndexService indexer = mock(DocumentIndexService.class);
+        FileService service = serviceWith(indexer);
+
+        service.renameFile("wiki/old.md", "new.md");
+
+        verify(indexer).removeFromIndex("wiki/old.md");
+        verify(indexer).indexFile("wiki/new.md");
+    }
+
     private FileService service() {
+        return serviceWith(mock(DocumentIndexService.class));
+    }
+
+    private FileService serviceWith(DocumentIndexService documentIndexService) {
         return new FileService(
                 resolver(),
                 mock(SnapshotService.class),
                 mock(WebDavSyncService.class),
-                mock(ResourceSettingsService.class));
+                mock(ResourceSettingsService.class),
+                documentIndexService);
     }
 
     private VaultPathResolver resolver() {

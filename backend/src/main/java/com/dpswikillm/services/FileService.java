@@ -41,16 +41,19 @@ public class FileService {
     private final SnapshotService snapshotService;
     private final WebDavSyncService webDavSyncService;
     private final ResourceSettingsService resourceSettingsService;
+    private final DocumentIndexService documentIndexService;
 
     public FileService(
             VaultPathResolver pathResolver,
             SnapshotService snapshotService,
             WebDavSyncService webDavSyncService,
-            ResourceSettingsService resourceSettingsService) {
+            ResourceSettingsService resourceSettingsService,
+            DocumentIndexService documentIndexService) {
         this.pathResolver = pathResolver;
         this.snapshotService = snapshotService;
         this.webDavSyncService = webDavSyncService;
         this.resourceSettingsService = resourceSettingsService;
+        this.documentIndexService = documentIndexService;
     }
 
     public List<TreeNodeDto> getTree() {
@@ -130,7 +133,8 @@ public class FileService {
             snapshotService.deleteSnapshot(snapshot.getId());
             throw new UncheckedIOException(e);
         }
-        // Local write + history are durable; now replicate the single file to WebDAV.
+        // Local write + history are durable; refresh the content index, then replicate to WebDAV.
+        documentIndexService.indexFile(relativePath);
         webDavSyncService.pushSaved(relativePath, content);
     }
 
@@ -144,6 +148,7 @@ public class FileService {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+        documentIndexService.removeFromIndex(relativePath);
         webDavSyncService.pushDeleted(relativePath);
     }
 
@@ -194,6 +199,8 @@ public class FileService {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+        documentIndexService.removeFromIndex(oldRel);
+        documentIndexService.indexFile(newRel);
         webDavSyncService.pushMoved(oldRel, newRel, content);
     }
 
@@ -232,6 +239,8 @@ public class FileService {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+        documentIndexService.removeFromIndex(oldRel);
+        documentIndexService.indexFile(newRelPath);
         webDavSyncService.pushMoved(oldRel, newRelPath, content);
     }
 
@@ -260,6 +269,7 @@ public class FileService {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+        documentIndexService.indexFile(relativePath);
     }
 
     public byte[] exportPdf(String relativePath) {

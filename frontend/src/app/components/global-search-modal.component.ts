@@ -1,11 +1,17 @@
-import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, HostListener, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
-import { TreeNode } from 'primeng/api';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { TranslocoPipe } from '@jsverse/transloco';
-import { FileService } from '../services/file.service';
+import { Subject, of } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
+import { ApiService, FileSearchResult } from '../services/api.service';
 import { GlobalSearchService } from '../services/global-search.service';
+
+const SEARCH_LIMIT = 15;
+const SNIPPET_BEFORE = 40;
+const SNIPPET_AFTER = 80;
 
 @Component({
   selector: 'app-global-search-modal',
@@ -35,17 +41,18 @@ import { GlobalSearchService } from '../services/global-search.service';
         />
       </div>
       <div class="search-results">
-        @if (filteredFiles().length === 0) {
+        @if (results().length === 0 && searchQuery().trim()) {
           <p class="search-empty">{{ 'explorer.noResults' | transloco }}</p>
         }
-        @for (file of filteredFiles(); track file.data; let i = $index) {
-          <div class="search-result" [class.is-active]="searchHighlightIndex() === i" (click)="selectFile(file)">
+        @for (result of results(); track result.path; let i = $index) {
+          <div class="search-result" [class.is-active]="searchHighlightIndex() === i" (click)="selectResult(result)">
             <i class="pi pi-file"></i>
             <span class="search-result-info">
-              <span [innerHTML]="file.label"></span>
-              @if (searchResultPath(file); as dir) {
-                <span class="search-result-path">{{ dir }}</span>
+              <span class="search-result-title">{{ result.title || result.path }}</span>
+              @if (snippetFor(result); as snippet) {
+                <span class="search-result-snippet">{{ snippet }}</span>
               }
+              <span class="search-result-path">{{ result.path }}</span>
             </span>
           </div>
         }
@@ -86,12 +93,26 @@ import { GlobalSearchService } from '../services/global-search.service';
         color: var(--app-text-muted);
         font-size: 0.8rem;
         flex-shrink: 0;
+        margin-top: 2px;
       }
       .search-result-info {
         display: flex;
         flex-direction: column;
         min-width: 0;
         flex: 1;
+      }
+      .search-result-title {
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .search-result-snippet {
+        font-size: 0.75rem;
+        color: var(--app-text-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .search-result-path {
         font-size: 0.75rem;
@@ -111,29 +132,36 @@ import { GlobalSearchService } from '../services/global-search.service';
 })
 export class GlobalSearchModalComponent {
   protected readonly searchService = inject(GlobalSearchService);
-  private readonly fileService = inject(FileService);
+  private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly searchQuery = signal('');
   readonly searchHighlightIndex = signal<number>(-1);
-  private readonly treeNodes = signal<TreeNode[]>([]);
+  readonly results = signal<FileSearchResult[]>([]);
 
-  readonly allFiles = computed(() => {
-    const flatten = (nodes: TreeNode[]): TreeNode[] => nodes.flatMap((n) => (n.leaf ? [n] : flatten(n.children ?? [])));
-    return flatten(this.treeNodes());
-  });
-
-  readonly filteredFiles = computed(() => {
-    const q = this.searchQuery().toLowerCase().trim();
-    return q ? this.allFiles().filter((n) => (n.data as string).toLowerCase().includes(q)) : this.allFiles();
-  });
+  private readonly queries = new Subject<string>();
 
   constructor() {
+    this.queries
+      .pipe(
+        debounceTime(200),
+        distinctUntilChanged(),
+        switchMap((q) =>
+          q.trim() ? this.api.lookupFiles(q.trim(), SEARCH_LIMIT).pipe(catchError(() => of([]))) : of([]),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((res) => {
+        this.results.set(res);
+        this.searchHighlightIndex.set(-1);
+      });
+
     effect(() => {
       if (this.searchService.isOpen()) {
         this.searchQuery.set('');
+        this.results.set([]);
         this.searchHighlightIndex.set(-1);
-        this.fileService.getTree().subscribe((nodes) => this.treeNodes.set(nodes));
       }
     });
 
@@ -161,10 +189,14 @@ export class GlobalSearchModalComponent {
   onSearchInput(value: string): void {
     this.searchQuery.set(value);
     this.searchHighlightIndex.set(-1);
+    if (!value.trim()) {
+      this.results.set([]);
+    }
+    this.queries.next(value);
   }
 
   onSearchKeyDown(event: KeyboardEvent): void {
-    const count = this.filteredFiles().length;
+    const count = this.results().length;
     if (count === 0) return;
     if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -180,17 +212,25 @@ export class GlobalSearchModalComponent {
   selectHighlightedResult(): void {
     const idx = this.searchHighlightIndex();
     if (idx === -1) return;
-    const file = this.filteredFiles()[idx];
-    if (file) this.selectFile(file);
+    const result = this.results()[idx];
+    if (result) this.selectResult(result);
   }
 
-  selectFile(node: TreeNode): void {
-    this.searchService.selectFile(node.data as string);
+  selectResult(result: FileSearchResult): void {
+    this.searchService.selectFile(result.path);
   }
 
-  searchResultPath(node: TreeNode): string {
-    const path = node.data as string;
-    const idx = path.lastIndexOf('/');
-    return idx === -1 ? '' : path.slice(0, idx + 1);
+  snippetFor(result: FileSearchResult): string {
+    const body = result.body ?? '';
+    if (!body) return '';
+    const flat = body.replace(/\s+/g, ' ').trim();
+    const q = this.searchQuery().trim().toLowerCase();
+    const at = q ? flat.toLowerCase().indexOf(q) : -1;
+    if (at === -1) {
+      return flat.slice(0, SNIPPET_BEFORE + SNIPPET_AFTER).trim();
+    }
+    const start = Math.max(0, at - SNIPPET_BEFORE);
+    const end = Math.min(flat.length, at + q.length + SNIPPET_AFTER);
+    return (start > 0 ? '…' : '') + flat.slice(start, end).trim() + (end < flat.length ? '…' : '');
   }
 }
