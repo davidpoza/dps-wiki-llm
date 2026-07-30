@@ -44,9 +44,17 @@ public class SecurityConfig {
                 .authorizeHttpRequests(
                         auth ->
                                 auth
-                                        // Allow error dispatches (Spring Security 6: MVC matchers
-                                        // don't cover ERROR dispatch)
-                                        .dispatcherTypeMatchers(DispatcherType.ERROR)
+                                        // Allow ERROR and ASYNC dispatches (Spring Security 6:
+                                        // AuthorizationFilter runs on every dispatcher type). ASYNC
+                                        // is the dispatch that finalizes SseEmitter/DeferredResult
+                                        // responses; the JwtAuthFilter (OncePerRequestFilter) is
+                                        // skipped on it, so without this the re-run authorization
+                                        // check fails with AccessDeniedException after data has
+                                        // already been streamed. The original REQUEST dispatch was
+                                        // already authorized, so permitting the continuation is
+                                        // safe.
+                                        .dispatcherTypeMatchers(
+                                                DispatcherType.ERROR, DispatcherType.ASYNC)
                                         .permitAll()
                                         // Paths are matched relative to the servlet context-path
                                         // ("/api"),
