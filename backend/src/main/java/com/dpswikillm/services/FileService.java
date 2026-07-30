@@ -291,6 +291,10 @@ public class FileService {
             ProcessBuilder pb =
                     new ProcessBuilder(
                             "pandoc",
+                            // Match Obsidian's lenient ATX headings: without this, pandoc's default
+                            // `space_in_atx_header` extension treats `###Heading` (no space) as plain
+                            // text, so level-3/4 headings would not be interpreted as headings.
+                            "--from=markdown-space_in_atx_header",
                             renderedInput.toString(),
                             "--pdf-engine=weasyprint",
                             "--standalone",
@@ -438,7 +442,7 @@ public class FileService {
         return rawTarget.split("\\|", 2)[0].split("#", 2)[0].trim().replace('\\', '/');
     }
 
-    private String pdfStylesheet() {
+    String pdfStylesheet() {
         return """
                 /* ── Page layout ── */
                 @page {
@@ -462,11 +466,11 @@ public class FileService {
                   line-height: 1.25;
                 }
                 h1 { font-size: 2em;    border-bottom: 1px solid #d0d7de; padding-bottom: 0.2em; }
-                h2 { font-size: 1.5em;  }
-                h3 { font-size: 1.25em; }
-                h4 { font-size: 1.05em; }
-                h5 { font-size: 0.9em;  }
-                h6 { font-size: 0.85em; color: #57606a; }
+                h2 { font-size: 1.6em;  border-bottom: 1px solid #d8dee4; padding-bottom: 0.15em; }
+                h3 { font-size: 1.3em;  }
+                h4 { font-size: 1.1em;  color: #3d444d; }
+                h5 { font-size: 0.95em; color: #57606a; }
+                h6 { font-size: 0.9em;  color: #57606a; text-transform: uppercase; letter-spacing: 0.03em; }
 
                 /* ── Inline formatting ── */
                 strong, b { font-weight: 700; }
@@ -476,7 +480,10 @@ public class FileService {
                   color: #0969da;
                   text-decoration: underline;
                 }
-                a::after {
+                /* Only annotate real (non-fragment) links with their URL. Pandoc emits an empty
+                   <a href="#cbN-M"> anchor on every syntax-highlighted code line; excluding
+                   fragment hrefs keeps those anchors (and TOC links) from printing "(#cb5-1)". */
+                a[href]:not([href^="#"])::after {
                   content: " (" attr(href) ")";
                   font-size: 0.8em;
                   word-break: break-all;

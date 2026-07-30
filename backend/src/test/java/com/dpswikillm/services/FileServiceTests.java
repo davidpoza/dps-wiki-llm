@@ -41,6 +41,43 @@ class FileServiceTests {
     }
 
     @Test
+    void pdfStylesheetScopesUrlSuffixAwayFromFragmentAnchors() {
+        String css = service().pdfStylesheet();
+
+        // The URL-suffix rule must exclude fragment anchors so pandoc's per-line code anchors
+        // (<a href="#cbN-M">) do not print artifacts like "(#cb5-1)" in code blocks.
+        assertThat(css).contains("a[href]:not([href^=\"#\"])::after");
+        assertThat(css).doesNotContain("\na::after");
+        assertThat(css).doesNotContain(" a::after");
+    }
+
+    @Test
+    void pdfStylesheetGivesEachHeadingLevelADistinctSize() {
+        String css = service().pdfStylesheet();
+
+        double h1 = headingFontSizeEm(css, "h1");
+        double h2 = headingFontSizeEm(css, "h2");
+        double h3 = headingFontSizeEm(css, "h3");
+        double h4 = headingFontSizeEm(css, "h4");
+
+        // Strictly decreasing so every level reads as a distinct heading, and h3/h4 stay above the
+        // 11pt body text (1em) rather than blending into paragraphs.
+        assertThat(h1).isGreaterThan(h2);
+        assertThat(h2).isGreaterThan(h3);
+        assertThat(h3).isGreaterThan(h4);
+        assertThat(h4).isGreaterThan(1.0);
+    }
+
+    private static double headingFontSizeEm(String css, String selector) {
+        java.util.regex.Matcher m =
+                java.util.regex.Pattern.compile(
+                                "(?m)^\\s*" + selector + "\\s*\\{[^}]*font-size:\\s*([0-9.]+)em")
+                        .matcher(css);
+        assertThat(m.find()).as("font-size for %s", selector).isTrue();
+        return Double.parseDouble(m.group(1));
+    }
+
+    @Test
     void stripsFrontmatterTitleWhenBodyRepeatsItAsHeading() {
         String markdown =
                 """
