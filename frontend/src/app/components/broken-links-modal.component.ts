@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { Checkbox } from 'primeng/checkbox';
 import { DialogModule } from 'primeng/dialog';
+import { Scroller } from 'primeng/scroller';
 import { BrokenLinkEntry } from '../services/api.service';
 
 interface FileGroup {
@@ -10,10 +11,14 @@ interface FileGroup {
   entries: BrokenLinkEntry[];
 }
 
+type Row =
+  | { kind: 'header'; sourceFile: string }
+  | { kind: 'item'; entry: BrokenLinkEntry };
+
 @Component({
   selector: 'app-broken-links-modal',
   standalone: true,
-  imports: [FormsModule, ButtonModule, Checkbox, DialogModule],
+  imports: [FormsModule, ButtonModule, Checkbox, DialogModule, Scroller],
   template: `
     <p-dialog
       [visible]="true"
@@ -41,34 +46,65 @@ interface FileGroup {
               (onClick)="toggleAll()"
             />
           </div>
-          <div class="groups-list">
-            @for (group of groups(); track group.sourceFile) {
-              <div class="file-group">
-                <div class="file-header">{{ group.sourceFile }}</div>
-                <div class="items-list">
-                  @for (entry of group.entries; track entryKey(entry)) {
-                    <div class="link-item">
+
+          <div class="search-row">
+            <input
+              type="text"
+              class="search-input"
+              placeholder="Buscar por enlace o fichero…"
+              [ngModel]="query()"
+              (ngModelChange)="query.set($event)"
+            />
+            @if (query()) {
+              <button
+                type="button"
+                class="search-clear"
+                aria-label="Limpiar búsqueda"
+                (click)="query.set('')"
+              >
+                ×
+              </button>
+            }
+          </div>
+
+          @if (rows().length === 0) {
+            <p class="empty-msg">No hay coincidencias para «{{ query() }}».</p>
+          } @else {
+            <div class="rows-scroller-wrap">
+              <p-scroller
+                [items]="rows()"
+                [itemSize]="40"
+                [autoSize]="true"
+                scrollHeight="360px"
+                [style]="{ width: '100%' }"
+                [trackBy]="rowTrackBy"
+              >
+                <ng-template pTemplate="item" let-row>
+                  @if (row.kind === 'header') {
+                    <div class="file-header row" [title]="row.sourceFile">{{ row.sourceFile }}</div>
+                  } @else {
+                    <div class="link-item row">
                       <p-checkbox
-                        [ngModel]="isChecked(entry)"
+                        [ngModel]="isChecked(row.entry)"
                         [binary]="true"
-                        [disabled]="entry.sourceSection !== 'Related'"
-                        (onChange)="toggle(entry)"
+                        [disabled]="row.entry.sourceSection !== 'Related'"
+                        (onChange)="toggle(row.entry)"
                       />
-                      <span class="link-label">
-                        {{ entry.displayAlias || entry.link }}
-                        @if (entry.displayAlias) {
-                          <span class="link-slug">([[{{ entry.link }}]])</span>
+                      <span class="link-label" [title]="row.entry.displayAlias || row.entry.link">
+                        {{ row.entry.displayAlias || row.entry.link }}
+                        @if (row.entry.displayAlias) {
+                          <span class="link-slug">([[{{ row.entry.link }}]])</span>
                         }
-                        @if (entry.sourceSection !== 'Related') {
-                          <span class="section-badge">[{{ entry.sourceSection }}]</span>
+                        @if (row.entry.sourceSection !== 'Related') {
+                          <span class="section-badge">[{{ row.entry.sourceSection }}]</span>
                         }
                       </span>
                     </div>
                   }
-                </div>
-              </div>
-            }
-          </div>
+                </ng-template>
+              </p-scroller>
+            </div>
+          }
         }
       </div>
 
@@ -96,48 +132,81 @@ interface FileGroup {
         align-items: flex-start;
         justify-content: space-between;
         gap: 12px;
-        margin-bottom: 16px;
+        margin-bottom: 12px;
       }
       .modal-desc {
         margin: 0;
         font-size: 0.875rem;
         color: var(--app-text-muted);
       }
-      .groups-list {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        max-height: 50vh;
-        overflow-y: auto;
+      .search-row {
+        position: relative;
+        margin-bottom: 12px;
       }
-      .file-group {
+      .search-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 32px 8px 12px;
+        font-size: 0.875rem;
+        color: var(--app-text);
+        background: var(--app-surface);
+        border: 1px solid var(--app-border);
+        border-radius: 8px;
+        outline: none;
+      }
+      .search-input:focus {
+        border-color: var(--app-accent, var(--app-border));
+      }
+      .search-input::placeholder {
+        color: var(--app-text-subtle);
+      }
+      .search-clear {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        border: none;
+        background: transparent;
+        color: var(--app-text-muted);
+        font-size: 1.15rem;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0 4px;
+      }
+      .rows-scroller-wrap {
         border: 1px solid var(--app-border);
         border-radius: 8px;
         overflow: hidden;
-        flex-shrink: 0;
+      }
+      .row {
+        height: 40px;
+        box-sizing: border-box;
       }
       .file-header {
-        padding: 8px 14px;
+        line-height: 40px;
+        padding: 0 14px;
         background: var(--app-surface-subtle);
         font-size: 0.8rem;
         font-family: monospace;
         color: var(--app-text-muted);
         border-bottom: 1px solid var(--app-border);
-      }
-      .items-list {
-        padding: 8px 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .link-item {
         display: flex;
         align-items: center;
         gap: 10px;
+        padding: 0 14px;
       }
       .link-label {
         font-size: 0.875rem;
         color: var(--app-text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
       }
       .link-slug {
         font-size: 0.75rem;
@@ -175,6 +244,7 @@ export class BrokenLinksModalComponent {
   readonly confirmed = output<{ sourceFile: string; link: string }[]>();
 
   readonly selectedKeys = signal<Set<string>>(new Set());
+  readonly query = signal('');
 
   readonly groups = computed<FileGroup[]>(() => {
     const map = new Map<string, BrokenLinkEntry[]>();
@@ -185,7 +255,44 @@ export class BrokenLinksModalComponent {
     return Array.from(map.entries()).map(([sourceFile, entries]) => ({ sourceFile, entries }));
   });
 
-  readonly allSelected = computed(() => this.selectedKeys().size === this.brokenLinks().length);
+  // Search only affects what is displayed; selection and deletion still operate over the full set.
+  readonly filteredGroups = computed<FileGroup[]>(() => {
+    const q = this.query().trim().toLowerCase();
+    const groups = this.groups();
+    if (!q) return groups;
+    const result: FileGroup[] = [];
+    for (const group of groups) {
+      if (group.sourceFile.toLowerCase().includes(q)) {
+        result.push(group);
+        continue;
+      }
+      const entries = group.entries.filter(
+        (e) =>
+          e.link.toLowerCase().includes(q) ||
+          (e.displayAlias?.toLowerCase().includes(q) ?? false),
+      );
+      if (entries.length > 0) result.push({ sourceFile: group.sourceFile, entries });
+    }
+    return result;
+  });
+
+  readonly rows = computed<Row[]>(() => {
+    const out: Row[] = [];
+    for (const group of this.filteredGroups()) {
+      out.push({ kind: 'header', sourceFile: group.sourceFile });
+      for (const entry of group.entries) out.push({ kind: 'item', entry });
+    }
+    return out;
+  });
+
+  // Entries can repeat the same sourceFile::link key across sections, so compare against the
+  // set of unique keys (not brokenLinks().length) or "todos" would never register as selected.
+  readonly allKeys = computed(() => new Set(this.brokenLinks().map((e) => this.entryKey(e))));
+
+  readonly allSelected = computed(() => {
+    const total = this.allKeys().size;
+    return total > 0 && this.selectedKeys().size === total;
+  });
 
   readonly deleteLabel = computed(() => {
     const n = this.selectedKeys().size;
@@ -194,10 +301,12 @@ export class BrokenLinksModalComponent {
 
   constructor() {
     effect(() => {
-      const keys = new Set(this.brokenLinks().map((e) => this.entryKey(e)));
-      this.selectedKeys.set(keys);
+      this.selectedKeys.set(new Set(this.allKeys()));
     });
   }
+
+  readonly rowTrackBy = (_index: number, row: Row): string =>
+    row.kind === 'header' ? `h:${row.sourceFile}` : `i:${this.entryKey(row.entry)}`;
 
   entryKey(entry: BrokenLinkEntry): string {
     return `${entry.sourceFile}::${entry.link}`;
@@ -221,7 +330,7 @@ export class BrokenLinksModalComponent {
     if (this.allSelected()) {
       this.selectedKeys.set(new Set());
     } else {
-      this.selectedKeys.set(new Set(this.brokenLinks().map((e) => this.entryKey(e))));
+      this.selectedKeys.set(new Set(this.allKeys()));
     }
   }
 
