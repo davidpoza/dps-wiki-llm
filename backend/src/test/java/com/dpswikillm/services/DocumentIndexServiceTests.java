@@ -25,8 +25,7 @@ class DocumentIndexServiceTests {
     void indexFileUpsertsRecordWithDerivedTitleTypeAndBody() throws Exception {
         Files.createDirectories(vault.resolve("wiki/notes"));
         Files.writeString(
-                vault.resolve("wiki/notes/my-note.md"),
-                "# My Note\n\nSearchable body text.\n");
+                vault.resolve("wiki/notes/my-note.md"), "# My Note\n\nSearchable body text.\n");
         DocumentIndexRepository repository = mock(DocumentIndexRepository.class);
 
         service(repository).indexFile("wiki/notes/my-note.md");

@@ -19,7 +19,8 @@ final class WikiDocumentReader {
     static DocumentRecord read(Path vaultRoot, MarkdownService markdownService, Path file) {
         try {
             String relativePath =
-                    vaultRoot.relativize(file.toAbsolutePath().normalize())
+                    vaultRoot
+                            .relativize(file.toAbsolutePath().normalize())
                             .toString()
                             .replace('\\', '/');
             if (!relativePath.startsWith("wiki/")) {

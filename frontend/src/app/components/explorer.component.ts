@@ -2380,35 +2380,48 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   private tokenizeFmString(text: string): FmSegment[] {
     const wikilinkRe = /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g;
     const urlRe = /https?:\/\/[^\s]+/g;
+    // Bare relative path reference to a vault file, e.g. `source_ref: raw/web/foo.md`.
+    // Requires at least one directory segment so plain prose ending in ".md" is not matched;
+    // the full path is passed to navigateToWikilink, which resolves it against n.data.
+    const pathRe = /(?:[\w.-]+\/)+[\w.-]+\.md\b/gi;
     const segments: FmSegment[] = [];
     let cursor = 0;
 
     while (cursor < text.length) {
       wikilinkRe.lastIndex = cursor;
       urlRe.lastIndex = cursor;
+      pathRe.lastIndex = cursor;
       const wikiMatch = wikilinkRe.exec(text);
       const urlMatch = urlRe.exec(text);
+      const pathMatch = pathRe.exec(text);
       const wikiIndex = wikiMatch ? wikiMatch.index : Infinity;
       const urlIndex = urlMatch ? urlMatch.index : Infinity;
+      const pathIndex = pathMatch ? pathMatch.index : Infinity;
 
-      if (wikiIndex === Infinity && urlIndex === Infinity) {
+      const next = Math.min(wikiIndex, urlIndex, pathIndex);
+      if (next === Infinity) {
         segments.push({ kind: 'text', text: text.slice(cursor) });
         break;
       }
 
-      if (wikiIndex <= urlIndex) {
+      if (wikiIndex === next) {
         if (wikiIndex > cursor) segments.push({ kind: 'text', text: text.slice(cursor, wikiIndex) });
         const target = wikiMatch![1].trim();
         const display = (wikiMatch![2] ?? wikiMatch![1]).trim();
         segments.push({ kind: 'internal', text: display, target });
         cursor = wikiIndex + wikiMatch![0].length;
-      } else {
+      } else if (urlIndex === next) {
         if (urlIndex > cursor) segments.push({ kind: 'text', text: text.slice(cursor, urlIndex) });
         const href = urlMatch![0].replace(/[.,;:!?)\]}]+$/, '');
         segments.push({ kind: 'external', text: href, href });
         // Advance only past the href; any trimmed trailing punctuation stays in the
         // string and is emitted as plain text by the next iteration.
         cursor = urlIndex + href.length;
+      } else {
+        if (pathIndex > cursor) segments.push({ kind: 'text', text: text.slice(cursor, pathIndex) });
+        const target = pathMatch![0];
+        segments.push({ kind: 'internal', text: target, target });
+        cursor = pathIndex + target.length;
       }
     }
 
