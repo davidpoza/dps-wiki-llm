@@ -12,6 +12,12 @@ import java.util.UUID;
 public interface DocumentIndexRepository {
     void replaceDocuments(List<DocumentRecord> documents);
 
+    /** Insert or update the content-index entry for a single document, keyed by path. */
+    void upsertDocument(DocumentRecord document);
+
+    /** Remove the content-index entry for a path, if present. */
+    void deleteDocument(String path);
+
     List<DocumentRecord> findAllDocuments();
 
     Map<UUID, String> findEmbeddingHashes(String model);

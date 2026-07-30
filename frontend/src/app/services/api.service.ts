@@ -48,6 +48,7 @@ export interface FileSearchResult {
   title: string;
   docType: string;
   score: number;
+  body?: string;
 }
 
 export interface JobResponse {

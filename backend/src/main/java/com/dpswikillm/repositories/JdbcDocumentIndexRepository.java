@@ -58,6 +58,31 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
     }
 
     @Override
+    public void upsertDocument(DocumentRecord doc) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO documents (id, path, title, doc_type, updated_at, body)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (path) DO UPDATE SET
+                  title = EXCLUDED.title,
+                  doc_type = EXCLUDED.doc_type,
+                  updated_at = EXCLUDED.updated_at,
+                  body = EXCLUDED.body
+                """,
+                doc.id(),
+                doc.path(),
+                doc.title(),
+                doc.docType(),
+                Timestamp.from(doc.updatedAt()),
+                doc.body());
+    }
+
+    @Override
+    public void deleteDocument(String path) {
+        jdbcTemplate.update("DELETE FROM documents WHERE path = ?", path);
+    }
+
+    @Override
     public List<DocumentRecord> findAllDocuments() {
         return jdbcTemplate.query(
                 """
