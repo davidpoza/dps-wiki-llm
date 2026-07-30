@@ -46,5 +46,5 @@
 
 - [x] 8.1 Backend: unit test that `OpenAiCompatibleLlmClient` records usage into an active accounting context and no-ops without one
 - [x] 8.2 Backend: verify a completed job persists correct accumulated totals across multiple LLM calls; concurrent jobs stay independent
-- [ ] 8.3 Compile backend (`mvn compile`) and restart the local backend process (port 8090, local profile — no DevTools)
-- [ ] 8.4 Frontend: run a job end-to-end and confirm the tokens chip appears on the `/jobs` card once the job completes; a no-LLM job shows no chip
+- [x] 8.3 Compile backend (`mvn compile`) and restart the local backend process (port 8090, local profile — no DevTools) — V40 applied, backend up (PID 240592)
+- [x] 8.4 Frontend: run a job end-to-end and confirm the tokens chip appears on the `/jobs` card once the job completes; a no-LLM job shows no chip — ANSWER job d4c57c30 → 3889 tokens persisted + returned by /api/jobs; HEALTH_CHECK (no chat LLM) correctly has null tokens/no chip

@@ -61,6 +61,11 @@ import { GraphViewComponent } from './graph-view.component';
 import { GraphSettingsComponent, GraphSettings, DEFAULT_GRAPH_SETTINGS } from './graph-settings.component';
 import { LinkExplainModalComponent } from './link-explain-modal.component';
 
+type FmSegment =
+  | { kind: 'text'; text: string }
+  | { kind: 'external'; text: string; href: string }
+  | { kind: 'internal'; text: string; target: string };
+
 @Component({
   selector: 'app-explorer',
   standalone: true,
@@ -352,7 +357,32 @@ import { LinkExplainModalComponent } from './link-explain-modal.component';
                         @for (entry of frontmatterEntries(); track entry[0]) {
                           <div class="fm-entry">
                             <span class="fm-key">{{ entry[0] }}</span>
-                            <span class="fm-value">{{ formatFmValue(entry[1]) }}</span>
+                            <span class="fm-value">
+                              @for (seg of formatFmValueSegments(entry[1]); track $index) {
+                                @switch (seg.kind) {
+                                  @case ('external') {
+                                    <a
+                                      class="fm-link"
+                                      [href]="seg.href"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      >{{ seg.text }}</a
+                                    >
+                                  }
+                                  @case ('internal') {
+                                    <a
+                                      class="fm-link"
+                                      href="#"
+                                      (click)="$event.preventDefault(); navigateToWikilink(seg.target)"
+                                      >{{ seg.text }}</a
+                                    >
+                                  }
+                                  @default {
+                                    <span class="fm-text">{{ seg.text }}</span>
+                                  }
+                                }
+                              }
+                            </span>
                           </div>
                         }
                       </div>
@@ -1234,6 +1264,14 @@ import { LinkExplainModalComponent } from './link-explain-modal.component';
       .fm-value {
         font-size: 0.8rem;
         color: var(--app-text);
+      }
+      .fm-value .fm-link {
+        color: var(--app-primary);
+        cursor: pointer;
+        text-decoration: none;
+      }
+      .fm-value .fm-link:hover {
+        text-decoration: underline;
       }
       .fm-editor {
         padding: 4px 16px 10px;
@@ -2320,6 +2358,61 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     if (Array.isArray(value)) return value.join(', ');
     if (value instanceof Date) return value.toISOString().slice(0, 10);
     return String(value ?? '');
+  }
+
+  /**
+   * Tokenizes a frontmatter value into text / external-link / internal-link segments
+   * so the read-only metadata panel can render clickable links. Non-link text is kept
+   * as plain text; only matched spans become interactive.
+   */
+  formatFmValueSegments(value: unknown): FmSegment[] {
+    if (Array.isArray(value)) {
+      const segments: FmSegment[] = [];
+      value.forEach((item, index) => {
+        if (index > 0) segments.push({ kind: 'text', text: ', ' });
+        segments.push(...this.tokenizeFmString(this.formatFmValue(item)));
+      });
+      return segments;
+    }
+    return this.tokenizeFmString(this.formatFmValue(value));
+  }
+
+  private tokenizeFmString(text: string): FmSegment[] {
+    const wikilinkRe = /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g;
+    const urlRe = /https?:\/\/[^\s]+/g;
+    const segments: FmSegment[] = [];
+    let cursor = 0;
+
+    while (cursor < text.length) {
+      wikilinkRe.lastIndex = cursor;
+      urlRe.lastIndex = cursor;
+      const wikiMatch = wikilinkRe.exec(text);
+      const urlMatch = urlRe.exec(text);
+      const wikiIndex = wikiMatch ? wikiMatch.index : Infinity;
+      const urlIndex = urlMatch ? urlMatch.index : Infinity;
+
+      if (wikiIndex === Infinity && urlIndex === Infinity) {
+        segments.push({ kind: 'text', text: text.slice(cursor) });
+        break;
+      }
+
+      if (wikiIndex <= urlIndex) {
+        if (wikiIndex > cursor) segments.push({ kind: 'text', text: text.slice(cursor, wikiIndex) });
+        const target = wikiMatch![1].trim();
+        const display = (wikiMatch![2] ?? wikiMatch![1]).trim();
+        segments.push({ kind: 'internal', text: display, target });
+        cursor = wikiIndex + wikiMatch![0].length;
+      } else {
+        if (urlIndex > cursor) segments.push({ kind: 'text', text: text.slice(cursor, urlIndex) });
+        const href = urlMatch![0].replace(/[.,;:!?)\]}]+$/, '');
+        segments.push({ kind: 'external', text: href, href });
+        // Advance only past the href; any trimmed trailing punctuation stays in the
+        // string and is emitted as plain text by the next iteration.
+        cursor = urlIndex + href.length;
+      }
+    }
+
+    return segments;
   }
 
   toggleSidebarPanel(mode: 'files' | 'toc' | 'graph'): void {
