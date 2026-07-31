@@ -16,12 +16,13 @@ El editor de notas usa **Milkdown 7.21** (`@milkdown/preset-commonmark` + `prese
 - El modo raw y el contenido enviado al backend NO introducen líneas en blanco espurias entre ítems de listas "tight".
 - Round-trip idempotente: abrir una nota y guardarla sin editar no cambia el fichero (ni listas ni separación del frontmatter).
 - Preservar listas realmente "loose" (ítems con varios bloques/párrafos) y no tocar el interior de bloques de código.
+- Emitir bullets `-` y preservar el YAML del frontmatter verbatim (idempotencia total salvo lo indicado en Non-Goals).
 - Cobertura de test unitario para la normalización.
 
 **Non-Goals:**
 - No se reescriben ni reemplazan los schemas internos de Milkdown (evitamos acoplarnos a APIs internas del preset).
 - No se corrige el escapado de wikilinks malformados del origen (p. ej. `[[…md]` con un solo corchete de cierre); es un problema de calidad del dato de origen, fuera de alcance.
-- No se cambia la re-serialización YAML del frontmatter (orden de claves, comillas, formato de listas YAML).
+- No se elimina la línea en blanco que Milkdown inserta entre un encabezado y una lista que le sigue inmediatamente: es la separación de bloques estándar de CommonMark (convencional, y consistente con la mayoría de notas del vault); no es un salto "entre bullets".
 - Sin cambios de backend ni de API.
 
 ## Decisions
@@ -51,6 +52,22 @@ Algoritmo (basado en líneas, consciente de bloques de código):
 **Decisión:** `parseFrontmatter` captura el separador exacto entre el `---` de cierre y el cuerpo (uno o dos saltos), despoja los saltos iniciales del cuerpo y devuelve `separator`. Se guarda en el campo `frontmatterSeparator` al cargar/recargar un fichero (y al volver de modo raw). `stringifyWithFrontmatter` reconstruye con `` `---\n${yaml}---${this.frontmatterSeparator}${body}` ``. Como `currentFullContent()` y `save()` pasan por esta función, el modo raw y el guardado quedan cubiertos, y el round-trip es idempotente para ambas convenciones.
 
 **Alternativa descartada — hardcodear un único `\n`:** más simple, pero al ser el vault inconsistente introduciría churn (quitaría la línea en blanco a las notas que sí la tenían) y violaría el Goal de idempotencia.
+
+### Decisión 3 — Marcador de bullet `-` vía la config nativa de Milkdown
+
+Milkdown por defecto serializa los bullets con `*`, reescribiendo cada `-` del vault en el round-trip. En vez de hacer sustitución de cadena (frágil: podría tocar énfasis `*x*`), se usa el punto de extensión nativo: `ctx.set(remarkStringifyOptionsCtx, { ...ctx.get(remarkStringifyOptionsCtx), bullet: '-' })` en la config del editor. `remark-stringify`/`mdast-util-to-markdown` acepta `bullet: '-' | '*' | '+'` y gestiona por sí mismo la desambiguación (p. ej. `bulletOther` frente a thematic breaks). Se **fusiona** con las opciones por defecto (`handlers`, `encode`) para no perderlas.
+
+**Por qué:** es el mecanismo previsto por Milkdown, correcto y robusto, y deja `currentMarkdown` consistente para cualquier consumidor. Fuerza `-` en todo el vault (Obsidian usa `-`); las pocas notas con `*` se normalizan una vez a `-`.
+
+**Alternativa descartada — regex `^(\s*)\* ` → `$1- ` en el helper:** unit-testable, pero redundante con la config nativa y con más superficie de error.
+
+### Decisión 4 — Frontmatter YAML preservado verbatim
+
+`stringifyWithFrontmatter` volcaba el objeto parseado con `stringifyYaml`, lo que quitaba comillas (`updated: "2026-07-28"` → `2026-07-28`, que además podría re-parsearse como fecha) y podía reordenar/reformatear. En su lugar se conserva el **texto YAML original** (`frontmatterRawText`, capturado por `parseFrontmatter` como `rawYaml = match[1]`) y se reconstruye con `` `---\n${this.frontmatterRawText}\n---${sep}${body}` ``. El objeto parseado (`frontmatter` signal) se mantiene solo para el display (`frontmatterEntries`) y el gate "¿tiene frontmatter?".
+
+El texto raw se actualiza únicamente cuando el usuario edita el panel: `onFrontmatterYamlChange` guarda `frontmatterRawText = value` (sin saltos finales), y `toggleFrontmatterEdit` muestra el texto original (no una versión re-volcada). Ningún flujo muta el objeto frontmatter programáticamente (los añadidos de wikilinks tocan el cuerpo), por lo que raw text y objeto no se desincronizan. `stringifyYaml` deja de usarse.
+
+**Alternativa considerada — `parseDocument`/estilo del paquete `yaml`:** mantendría estilo al re-volcar, pero cambia el modelo (`frontmatter` pasaría de objeto a Document) afectando display y gate; más invasivo que preservar el texto.
 
 ## Risks / Trade-offs
 

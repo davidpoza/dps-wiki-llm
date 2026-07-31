@@ -2,7 +2,7 @@
 
 ### Requirement: Fidelidad de serialización del markdown
 
-Al serializar el cuerpo editado de vuelta a markdown (para el modo raw y para guardar), el editor SHALL preservar la estructura del markdown original salvo por los cambios reales de edición. En concreto, la serialización SHALL preservar las listas "tight": NO SHALL introducir una línea en blanco entre ítems de lista consecutivos cuando el ítem contiene un único bloque de párrafo. Las listas intencionadamente "loose" (ítems con varios bloques/párrafos) SHALL conservar su separación. La normalización SHALL NO alterar el contenido dentro de bloques de código (fenced/indented).
+Al serializar el cuerpo editado de vuelta a markdown (para el modo raw y para guardar), el editor SHALL preservar la estructura del markdown original salvo por los cambios reales de edición. En concreto, la serialización SHALL preservar las listas "tight": NO SHALL introducir una línea en blanco entre ítems de lista consecutivos cuando el ítem contiene un único bloque de párrafo. Las listas intencionadamente "loose" (ítems con varios bloques/párrafos) SHALL conservar su separación. La normalización SHALL NO alterar el contenido dentro de bloques de código (fenced/indented). Los bullets SHALL usar el marcador `-` (convención del vault), no `*`.
 
 #### Scenario: Lista "tight" preservada en round-trip
 
@@ -24,6 +24,11 @@ Al serializar el cuerpo editado de vuelta a markdown (para el modo raw y para gu
 - **WHEN** el cuerpo contiene un bloque de código que incluye líneas que parecen ítems de lista o líneas en blanco
 - **THEN** la normalización no modifica el contenido del bloque de código
 
+#### Scenario: Marcador de bullet `-` preservado
+
+- **WHEN** el usuario abre una nota cuyos bullets usan el marcador `-` y activa el modo raw sin editar
+- **THEN** los bullets siguen usando `-` (no se reescriben a `*`)
+
 ## MODIFIED Requirements
 
 ### Requirement: Guardar cambios del fichero
@@ -42,6 +47,16 @@ El backend SHALL exponer `PUT /api/files/content?path=<relative-path>` que acept
 
 - **WHEN** el usuario abre un fichero (con o sin línea en blanco tras el frontmatter) y lo guarda sin editar el cuerpo
 - **THEN** la separación entre el frontmatter y el cuerpo coincide con la del fichero original (no se añade ni se elimina la línea en blanco)
+
+#### Scenario: YAML del frontmatter preservado verbatim
+
+- **WHEN** el usuario abre un fichero cuyo frontmatter usa comillas u orden de claves concretos y lo guarda sin editar el frontmatter
+- **THEN** el bloque YAML reconstruido es idéntico al original (comillas, orden y formato intactos); no se re-serializa desde el objeto parseado
+
+#### Scenario: Frontmatter re-serializado solo al editarlo
+
+- **WHEN** el usuario edita el YAML en el panel de frontmatter
+- **THEN** se persiste el texto exacto que el usuario escribió (no una versión re-volcada del objeto)
 
 #### Scenario: Guardado exitoso via botón — fichero sin frontmatter
 

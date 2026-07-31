@@ -17,10 +17,17 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NgClass, SlicePipe } from '@angular/common';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { parse as parseYaml } from 'yaml';
 import { ActivatedRoute, Router } from '@angular/router';
 import { skip } from 'rxjs/operators';
-import { Editor, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, rootCtx } from '@milkdown/core';
+import {
+  Editor,
+  defaultValueCtx,
+  editorViewCtx,
+  editorViewOptionsCtx,
+  remarkStringifyOptionsCtx,
+  rootCtx,
+} from '@milkdown/core';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { history } from '@milkdown/plugin-history';
 import { commonmark } from '@milkdown/preset-commonmark';
@@ -1754,6 +1761,10 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   // per-file so the round-trip stays idempotent (some notes use a blank line,
   // others don't). Defaults to a blank line for files without frontmatter.
   private frontmatterSeparator = '\n\n';
+  // The frontmatter YAML text kept verbatim (never re-serialized from the parsed
+  // object) so quoting/formatting survive the round-trip. Updated only when the
+  // user edits the frontmatter panel. See stringifyWithFrontmatter.
+  private frontmatterRawText = '';
   private isLoading = false;
   private treeSubscription: Subscription | null = null;
   protected isResizing = false;
@@ -2104,6 +2115,9 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         ctx.set(rootCtx, this.editorContainer.nativeElement);
         ctx.set(defaultValueCtx, '');
         ctx.set(editorViewOptionsCtx, { attributes: { spellcheck: 'false' } });
+        // Emit `-` bullets to match the vault (Obsidian) convention; Milkdown
+        // defaults to `*`, which would rewrite every bullet on round-trip.
+        ctx.set(remarkStringifyOptionsCtx, { ...ctx.get(remarkStringifyOptionsCtx), bullet: '-' });
         ctx.get(listenerCtx).markdownUpdated((_ctx, rawMarkdown) => {
           const unescaped = rawMarkdown.replace(/\\\[\\\[([^\]]*?)(?:\\\]\\\]|\]\])/g, '[[$1]]');
           const markdown = tightenListSerialization(unescaped);
@@ -2217,6 +2231,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         this.isDirty.set(false);
         this.rawFileContent = rawContent;
         this.frontmatterSeparator = parsed.separator;
+        this.frontmatterRawText = parsed.rawYaml;
         this.frontmatter.set(parsed.data);
         this.editingFrontmatter.set(false);
         this.frontmatterYamlError.set(false);
@@ -2310,26 +2325,28 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     data: Record<string, unknown>;
     content: string;
     separator: string;
+    rawYaml: string;
   } {
     const input = raw.startsWith('﻿') ? raw.slice(1) : raw;
     const match = input.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?([\s\S]*)$/);
-    if (!match) return { data: {}, content: input, separator: '\n\n' };
+    if (!match) return { data: {}, content: input, separator: '\n\n', rawYaml: '' };
     // Preserve the exact separation between the closing `---` and the body: the
     // regex already consumed one newline, so any further leading newlines are
     // blank lines the author included and must survive the round-trip.
     const leadingNewlines = /^\n*/.exec(match[2])?.[0] ?? '';
     const content = match[2].slice(leadingNewlines.length);
     const separator = `\n${leadingNewlines}`;
+    const rawYaml = match[1];
     try {
-      const data = (parseYaml(match[1]) ?? {}) as Record<string, unknown>;
-      return { data, content, separator };
+      const data = (parseYaml(rawYaml) ?? {}) as Record<string, unknown>;
+      return { data, content, separator, rawYaml };
     } catch {
-      return { data: {}, content, separator };
+      return { data: {}, content, separator, rawYaml };
     }
   }
 
-  private stringifyWithFrontmatter(body: string, data: Record<string, unknown>): string {
-    return `---\n${stringifyYaml(data)}---${this.frontmatterSeparator}${body}`;
+  private stringifyWithFrontmatter(body: string): string {
+    return `---\n${this.frontmatterRawText}\n---${this.frontmatterSeparator}${body}`;
   }
 
   private loadFile(node: TreeNode): void {
@@ -2343,6 +2360,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         this.isDirty.set(false);
         this.rawFileContent = rawContent;
         this.frontmatterSeparator = parsed.separator;
+        this.frontmatterRawText = parsed.rawYaml;
         this.frontmatter.set(parsed.data);
         this.editingFrontmatter.set(false);
         this.frontmatterYamlError.set(false);
@@ -2370,7 +2388,9 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   toggleFrontmatterEdit(): void {
     if (!this.editingFrontmatter()) {
-      this.frontmatterRawYaml.set(stringifyYaml(this.frontmatter()));
+      // Show the original YAML verbatim (quotes/formatting intact), not a
+      // re-serialized version of the parsed object.
+      this.frontmatterRawYaml.set(this.frontmatterRawText);
       this.frontmatterYamlError.set(false);
     }
     this.editingFrontmatter.update((v) => !v);
@@ -2381,6 +2401,9 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     try {
       const parsed = (parseYaml(value) ?? {}) as Record<string, unknown>;
       if (typeof parsed === 'object' && !Array.isArray(parsed)) {
+        // Persist the user's exact text (minus trailing newlines, which the
+        // reconstruction re-adds) so edited frontmatter keeps their formatting.
+        this.frontmatterRawText = value.replace(/\n+$/, '');
         this.frontmatter.set(parsed);
         this.frontmatterYamlError.set(false);
         this.isDirty.set(true);
@@ -2483,6 +2506,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
       const raw = this.rawModeText();
       const parsed = this.parseFrontmatter(raw);
       this.frontmatterSeparator = parsed.separator;
+      this.frontmatterRawText = parsed.rawYaml;
       this.frontmatter.set(parsed.data);
       this.frontmatterRawYaml.set(raw.startsWith('---') ? (raw.split('---')[1] ?? '') : '');
       this.currentMarkdown = parsed.content;
@@ -2727,7 +2751,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
       this.editorMode() === 'raw'
         ? this.rawModeText()
         : Object.keys(fm).length > 0
-          ? this.stringifyWithFrontmatter(this.currentMarkdown, fm)
+          ? this.stringifyWithFrontmatter(this.currentMarkdown)
           : this.currentMarkdown;
     this.fileService.saveContent(path, fullContent).subscribe({
       next: () => {
@@ -2812,6 +2836,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         const parsed = this.parseFrontmatter(content);
         this.rawFileContent = content;
         this.frontmatterSeparator = parsed.separator;
+        this.frontmatterRawText = parsed.rawYaml;
         this.frontmatter.set(parsed.data);
         this.editingFrontmatter.set(false);
         this.currentMarkdown = parsed.content;
@@ -2850,7 +2875,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
 
   private currentFullContent(): string {
     const fm = this.frontmatter();
-    return Object.keys(fm).length > 0 ? this.stringifyWithFrontmatter(this.currentMarkdown, fm) : this.currentMarkdown;
+    return Object.keys(fm).length > 0 ? this.stringifyWithFrontmatter(this.currentMarkdown) : this.currentMarkdown;
   }
 
   /** Minimal LCS-based line diff of the previewed version against the current content. */
@@ -3167,7 +3192,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     }
     const fm = this.frontmatter();
     const fullContent =
-      Object.keys(fm).length > 0 ? this.stringifyWithFrontmatter(this.currentMarkdown, fm) : this.currentMarkdown;
+      Object.keys(fm).length > 0 ? this.stringifyWithFrontmatter(this.currentMarkdown) : this.currentMarkdown;
     this.fileService.saveContent(path, fullContent).subscribe({
       next: () => {
         this.isDirty.set(false);

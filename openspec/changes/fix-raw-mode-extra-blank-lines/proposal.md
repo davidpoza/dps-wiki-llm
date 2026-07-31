@@ -5,7 +5,9 @@ Al abrir una nota en el editor Milkdown (WYSIWYG) y consultarla en modo raw —o
 ## What Changes
 
 - Corregir la serialización Milkdown → markdown para que **preserve las listas "tight"**: no insertar una línea en blanco entre ítems de lista consecutivos cuando el original no la tenía.
-- Eliminar la línea en blanco extra que se añade tras el bloque frontmatter al reconstruir el fichero completo (`---\n<yaml>---\n\n<cuerpo>` → un único salto).
+- Emitir bullets con marcador `-` (convención del vault/Obsidian) en lugar de `*`, para que Milkdown no reescriba el marcador de cada bullet en el round-trip.
+- Preservar el separador original entre el bloque frontmatter y el cuerpo (una línea en blanco o ninguna), en vez de forzar siempre `\n\n`.
+- Preservar el YAML del frontmatter **verbatim** (comillas, orden de claves, formato), re-serializándolo solo cuando el usuario lo edita en el panel — el objeto parseado ya no se vuelca con `stringifyYaml` en cada guardado.
 - Garantizar que el contenido mostrado en modo raw y el enviado al backend coincidan con el markdown original salvo por los cambios reales de edición (fidelidad de round-trip).
 - Añadir cobertura de test para el round-trip de listas y frontmatter.
 
@@ -19,7 +21,7 @@ Al abrir una nota en el editor Milkdown (WYSIWYG) y consultarla en modo raw —o
 
 ## Impact
 
-- **Código frontend**: `frontend/src/app/components/explorer.component.ts` — listener `markdownUpdated` (post-proceso del markdown serializado), `stringifyWithFrontmatter`, y la ruta de guardado/modo raw (`save`, `toggleEditorMode`, `currentFullContent`).
+- **Código frontend**: `frontend/src/app/components/explorer.component.ts` — configuración del editor (`remarkStringifyOptionsCtx` con `bullet: '-'`), listener `markdownUpdated` (post-proceso del markdown serializado), `parseFrontmatter`/`stringifyWithFrontmatter` (separador preservado), y la ruta de guardado/modo raw (`save`, `toggleEditorMode`, `currentFullContent`). Helper puro `markdown-normalize.ts`.
 - **Causa raíz**: en `@milkdown/preset-commonmark` 7.21.x, `bulletListSchema`/`orderedListSchema` almacenan `spread` como cadena (`"false"`/`"true"`) y `toMarkdown` la re-emite; en mdast `spread` debe ser booleano, y la cadena `"false"` es *truthy*, por lo que remark serializa la lista como "loose".
 - **Sin cambios de API ni de backend**; sin migraciones. Efecto secundario positivo: diffs de git y snapshots de versiones más limpios.
 - **Riesgo**: la normalización no debe alterar listas intencionadamente "loose" (con varios párrafos por ítem) ni el contenido dentro de bloques de código.

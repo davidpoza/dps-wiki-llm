@@ -8,6 +8,12 @@ describe('tightenListSerialization', () => {
     expect(tightenListSerialization(loose)).toBe(tight);
   });
 
+  it('tightens dash-marker lists (marker-agnostic)', () => {
+    const loose = ['- a', '', '- b', '', '- c'].join('\n');
+    const tight = ['- a', '- b', '- c'].join('\n');
+    expect(tightenListSerialization(loose)).toBe(tight);
+  });
+
   it('collapses ordered lists and nested items too', () => {
     const loose = ['1. one', '', '2. two', '', '  * nested a', '', '  * nested b'].join('\n');
     const tight = ['1. one', '2. two', '  * nested a', '  * nested b'].join('\n');
