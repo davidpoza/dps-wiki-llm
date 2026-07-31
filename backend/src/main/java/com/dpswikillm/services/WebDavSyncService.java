@@ -1,5 +1,6 @@
 package com.dpswikillm.services;
 
+import com.dpswikillm.domain.Job;
 import com.dpswikillm.domain.Snapshot;
 import com.dpswikillm.domain.VaultFileSync;
 import com.dpswikillm.dto.ConflictDto;
@@ -186,10 +187,20 @@ public class WebDavSyncService {
     // ---------------------------------------------------------------------
 
     public SyncResultDto sync() {
-        return sync(null);
+        return sync(null, null);
     }
 
     public SyncResultDto sync(Consumer<SyncProgressDto> onProgress) {
+        return sync(onProgress, null);
+    }
+
+    /**
+     * Runs the pull + reconcile. When {@code job} is non-null, the pull snapshot (capturing the
+     * local mutations — files pulled from the remote and files deleted locally) is linked to that
+     * job, so the sync becomes revertible through the standard job-revert mechanism. The affected
+     * local paths are the union of the returned {@code pulled} and {@code deleted} lists.
+     */
+    public SyncResultDto sync(Consumer<SyncProgressDto> onProgress, Job job) {
         if (!webDavClient.isEnabled()) {
             throw new WebDavNotConfiguredException();
         }
@@ -319,7 +330,10 @@ public class WebDavSyncService {
                 if (pullSnapshot == null) {
                     pullSnapshot =
                             snapshotService.beginSnapshot(
-                                    null, "webdav-sync", "WebDAV sync", "WEBDAV_PULL");
+                                    job != null ? job.getId().toString() : null,
+                                    "webdav-sync",
+                                    "WebDAV sync",
+                                    "WEBDAV_PULL");
                 }
                 // Ensure we have the actual content before applying.
                 if (remoteContent == null && remote != null) {
@@ -379,7 +393,7 @@ public class WebDavSyncService {
                 pushed.size(),
                 conflicts.size());
         if (pullSnapshot != null) {
-            snapshotService.finalizeSnapshot(pullSnapshot, null);
+            snapshotService.finalizeSnapshot(pullSnapshot, job);
         }
         return new SyncResultDto(pulled, deleted, pushed, conflicts);
     }

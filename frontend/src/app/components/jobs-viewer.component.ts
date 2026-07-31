@@ -427,10 +427,18 @@ export class JobsViewerComponent {
     }
   }
 
-  private readonly REVERTIBLE_TYPES: ReadonlySet<string> = new Set(['INGEST', 'HEALTH_CHECK']);
+  private readonly REVERTIBLE_TYPES: ReadonlySet<string> = new Set(['INGEST', 'HEALTH_CHECK', 'SYNC']);
 
   canRevert(job: JobState): boolean {
-    return job.status === 'COMPLETED' && this.REVERTIBLE_TYPES.has(job.type);
+    if (job.status !== 'COMPLETED' || !this.REVERTIBLE_TYPES.has(job.type)) {
+      return false;
+    }
+    // A SYNC job is only revertible when it produced local changes (pulls/deletes captured in a
+    // snapshot); a push-only or no-op sync has no snapshot and nothing to revert.
+    if (job.type === 'SYNC') {
+      return job.files.length > 0;
+    }
+    return true;
   }
 
   revert(jobId: string): void {
@@ -463,6 +471,7 @@ export class JobsViewerComponent {
       REGENERATE_KEYWORDS: 'Regenerar keywords',
       RENAME: 'Renombrar',
       HEALTH_CHECK: 'Health Check',
+      SYNC: 'Sync',
     };
     return labels[type] ?? type;
   }

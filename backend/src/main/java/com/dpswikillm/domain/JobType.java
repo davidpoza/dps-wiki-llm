@@ -8,5 +8,6 @@ public enum JobType {
     MERGE,
     REGENERATE_KEYWORDS,
     RENAME,
-    HEALTH_CHECK
+    HEALTH_CHECK,
+    SYNC
 }

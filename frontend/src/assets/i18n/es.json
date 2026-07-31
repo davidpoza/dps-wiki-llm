@@ -111,6 +111,7 @@
   "sync": {
     "button": "Sincronizar",
     "syncing": "Sincronizando…",
+    "enqueued": "Sincronización encolada. Sigue el progreso en el panel de trabajos.",
     "summary": "Sincronización completada: {{ pulled }} descargados, {{ pushed }} subidos, {{ deleted }} eliminados, {{ conflicts }} conflicto(s).",
     "notConfigured": "WebDAV no está configurado.",
     "error": "La sincronización falló.",

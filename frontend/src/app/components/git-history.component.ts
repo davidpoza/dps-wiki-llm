@@ -1,11 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal, untracked } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { DialogModule } from 'primeng/dialog';
 import { PaginatorModule, PaginatorState } from 'primeng/paginator';
 import { Router } from '@angular/router';
-import { ApiService, SyncEvent } from '../services/api.service';
-import { Conflict, FileHistoryEntry, SyncResult } from '../types';
+import { ApiService } from '../services/api.service';
+import { JobsStore } from '../services/jobs.store';
+import { Conflict, FileHistoryEntry, JobState } from '../types';
 import { ConflictMergeEditorComponent } from './conflict-merge-editor.component';
 
 const PAGE_SIZE = 20;
@@ -26,13 +27,6 @@ const FIRST_PAGE = 0;
           </button>
         </div>
       </div>
-
-      @if (syncing() && syncTotal() > 0) {
-        <div class="sync-progress-wrap">
-          <div class="sync-progress-bar" [style.width.%]="(syncProcessed() / syncTotal()) * 100"></div>
-          <span class="sync-progress-label">{{ syncProcessed() }}/{{ syncTotal() }}</span>
-        </div>
-      }
 
       @if (syncMessage()) {
         <p class="sync-msg" [class.error]="syncIsError()">{{ syncMessage() }}</p>
@@ -581,6 +575,29 @@ export class GitHistoryComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly t = inject(TranslocoService);
   private readonly router = inject(Router);
+  private readonly jobsStore = inject(JobsStore);
+
+  constructor() {
+    // React to the SYNC job we enqueued reaching a terminal state: refresh history and conflicts.
+    effect(() => {
+      const id = this.pendingSyncJobId();
+      if (!id) return;
+      const job = this.jobsStore.jobs().get(id);
+      if (!job) return;
+      if (job.status === 'COMPLETED') {
+        untracked(() => {
+          this.pendingSyncJobId.set(null);
+          this.onSyncJobDone(job);
+        });
+      } else if (job.status === 'FAILED') {
+        untracked(() => {
+          this.pendingSyncJobId.set(null);
+          this.syncIsError.set(true);
+          this.syncMessage.set(this.t.translate('sync.error'));
+        });
+      }
+    });
+  }
 
   readonly entries = signal<FileHistoryEntry[]>([]);
   readonly totalElements = signal(0);
@@ -594,8 +611,7 @@ export class GitHistoryComponent implements OnInit {
   readonly syncing = signal(false);
   readonly syncMessage = signal<string | null>(null);
   readonly syncIsError = signal(false);
-  readonly syncProcessed = signal(0);
-  readonly syncTotal = signal(0);
+  private readonly pendingSyncJobId = signal<string | null>(null);
   readonly conflicts = signal<Conflict[]>([]);
   readonly showConflicts = signal(false);
   readonly totalConflicts = signal(0);
@@ -639,42 +655,37 @@ export class GitHistoryComponent implements OnInit {
   }
 
   sync(): void {
+    if (this.syncing()) return;
     this.syncing.set(true);
-    this.syncMessage.set(null);
     this.syncIsError.set(false);
-    this.syncProcessed.set(0);
-    this.syncTotal.set(0);
-    this.api.syncWebdav().subscribe({
-      next: (event: SyncEvent) => {
-        if (event.type === 'progress') {
-          this.syncProcessed.set(event.processed);
-          this.syncTotal.set(event.total);
-        } else {
-          const result: SyncResult = event.result;
-          this.syncing.set(false);
-          this.syncIsError.set(false);
-          this.syncMessage.set(
-            this.t.translate('sync.summary', {
-              pulled: result.pulled.length,
-              pushed: (result.pushed ?? []).length,
-              deleted: result.deleted.length,
-              conflicts: result.conflicts.length,
-            }),
-          );
-          this.load();
-          if (result.conflicts.length > 0) {
-            this.loadConflicts();
-          }
-        }
+    this.api.enqueueSync().subscribe({
+      next: (res) => {
+        this.pendingSyncJobId.set(res.jobId);
+        this.syncMessage.set(this.t.translate('sync.enqueued'));
+        this.syncing.set(false);
       },
-      error: (err: { code?: string; message?: string }) => {
+      error: () => {
         this.syncing.set(false);
         this.syncIsError.set(true);
-        this.syncMessage.set(
-          err.code === 'not_configured' ? this.t.translate('sync.notConfigured') : this.t.translate('sync.error'),
-        );
+        this.syncMessage.set(this.t.translate('sync.error'));
       },
     });
+  }
+
+  /** Called when the enqueued SYNC job completes: refresh history and reload any conflicts. */
+  private onSyncJobDone(job: JobState): void {
+    this.syncing.set(false);
+    this.syncIsError.set(false);
+    let message = this.t.translate('sync.enqueued');
+    try {
+      const parsed = JSON.parse(job.result ?? '{}') as { message?: string };
+      if (parsed.message) message = parsed.message;
+    } catch {
+      // keep default message
+    }
+    this.syncMessage.set(message);
+    this.load();
+    this.loadConflicts();
   }
 
   private loadConflicts(): void {

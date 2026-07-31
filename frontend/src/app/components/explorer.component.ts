@@ -12,6 +12,7 @@ import {
   OnDestroy,
   OnInit,
   signal,
+  untracked,
   ViewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -50,6 +51,7 @@ import { ApiService, DiscoveredLink, EmbeddingStatus } from '../services/api.ser
 import { AuthService } from '../services/auth.service';
 import { FileService } from '../services/file.service';
 import { GlobalSearchService } from '../services/global-search.service';
+import { JobsStore } from '../services/jobs.store';
 import { NavComponent } from './nav.component';
 import { UnsavedChangesAware } from '../unsaved-changes.guard';
 import { FileVersion } from '../types';
@@ -1566,8 +1568,26 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly t = inject(TranslocoService);
   protected readonly globalSearchService = inject(GlobalSearchService);
+  private readonly jobsStore = inject(JobsStore);
 
   constructor() {
+    // When the SYNC job we enqueued reaches a terminal state, reload the tree if it changed files.
+    effect(() => {
+      const id = this.pendingSyncJobId();
+      if (!id) return;
+      const job = this.jobsStore.jobs().get(id);
+      if (!job) return;
+      if (job.status === 'COMPLETED') {
+        const changed = job.files.length > 0;
+        untracked(() => {
+          this.pendingSyncJobId.set(null);
+          if (changed) this.reloadTree();
+        });
+      } else if (job.status === 'FAILED' || job.status === 'REVERTED') {
+        untracked(() => this.pendingSyncJobId.set(null));
+      }
+    });
+
     effect(() => {
       const path = this.globalSearchService.pendingNavigation();
       if (path === null) return;
@@ -1632,6 +1652,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   readonly showMoveDialog = signal(false);
   readonly moveTargetDir = signal<TreeNode | null>(null);
   readonly syncing = signal(false);
+  private readonly pendingSyncJobId = signal<string | null>(null);
   readonly showVersions = signal(false);
   readonly showLinkDiscovery = signal(false);
   readonly linkDiscoveryMode = signal<'semantic' | 'graph'>('semantic');
@@ -2883,32 +2904,26 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
   sync(): void {
     if (this.syncing()) return;
     this.syncing.set(true);
-    this.api.syncWebdav().subscribe({
-      next: (event) => {
-        if (event.type === 'done') {
-          const { pulled, deleted, pushed, conflicts } = event.result;
-          this.messageService.add({
-            severity: conflicts.length > 0 ? 'warn' : 'success',
-            summary: this.t.translate('sync.button'),
-            detail: this.t.translate('sync.summary', {
-              pulled: pulled.length,
-              pushed: (pushed ?? []).length,
-              deleted: deleted.length,
-              conflicts: conflicts.length,
-            }),
-          });
-          if (pulled.length > 0 || deleted.length > 0 || (pushed ?? []).length > 0) this.reloadTree();
-        }
-      },
-      complete: () => {
+    // Ensure the jobs stream is live so the completion watcher below sees the SYNC job update.
+    this.jobsStore.connect();
+    this.api.enqueueSync().subscribe({
+      next: (res) => {
+        this.pendingSyncJobId.set(res.jobId);
+        this.messageService.add({
+          severity: 'info',
+          summary: this.t.translate('sync.button'),
+          detail: this.t.translate('sync.enqueued'),
+        });
         this.syncing.set(false);
         this.cdr.markForCheck();
       },
-      error: (err: { code?: string; message?: string }) => {
+      error: () => {
         this.syncing.set(false);
-        const detail =
-          err?.code === 'NOT_CONFIGURED' ? this.t.translate('sync.notConfigured') : this.t.translate('sync.error');
-        this.messageService.add({ severity: 'error', summary: this.t.translate('common.error'), detail });
+        this.messageService.add({
+          severity: 'error',
+          summary: this.t.translate('common.error'),
+          detail: this.t.translate('sync.error'),
+        });
         this.cdr.markForCheck();
       },
     });

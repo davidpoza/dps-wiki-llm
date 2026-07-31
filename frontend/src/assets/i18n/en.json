@@ -111,6 +111,7 @@
   "sync": {
     "button": "Sync",
     "syncing": "Syncing…",
+    "enqueued": "Sync enqueued. Follow progress in the jobs panel.",
     "summary": "Sync complete: {{ pulled }} pulled, {{ pushed }} pushed, {{ deleted }} deleted, {{ conflicts }} conflict(s).",
     "notConfigured": "WebDAV is not configured.",
     "error": "Sync failed.",

@@ -19,6 +19,7 @@ public class JobConsumers {
     private final KeywordRegenerationJobHandler keywordRegenerationJobHandler;
     private final RenameJobService renameJobService;
     private final HealthCheckJobHandler healthCheckJobHandler;
+    private final SyncJobHandler syncJobHandler;
     private final JobRepository jobRepository;
     private final JobTokenAccounting tokenAccounting;
 
@@ -32,6 +33,7 @@ public class JobConsumers {
             KeywordRegenerationJobHandler keywordRegenerationJobHandler,
             RenameJobService renameJobService,
             HealthCheckJobHandler healthCheckJobHandler,
+            SyncJobHandler syncJobHandler,
             JobRepository jobRepository,
             JobTokenAccounting tokenAccounting) {
         this.lifecycleService = lifecycleService;
@@ -43,6 +45,7 @@ public class JobConsumers {
         this.keywordRegenerationJobHandler = keywordRegenerationJobHandler;
         this.renameJobService = renameJobService;
         this.healthCheckJobHandler = healthCheckJobHandler;
+        this.syncJobHandler = syncJobHandler;
         this.jobRepository = jobRepository;
         this.tokenAccounting = tokenAccounting;
     }
@@ -103,6 +106,10 @@ public class JobConsumers {
                 if (message.jobType() == JobType.HEALTH_CHECK) {
                     healthCheckJobHandler.run(
                             jobRepository.findById(message.jobId()).orElseThrow());
+                    return;
+                }
+                if (message.jobType() == JobType.SYNC) {
+                    syncJobHandler.run(jobRepository.findById(message.jobId()).orElseThrow());
                     return;
                 }
                 lifecycleService.transition(

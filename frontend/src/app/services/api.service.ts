@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable, Observer } from 'rxjs';
-import { ConceptProposal, HistoryPage, SyncResult, Conflict, JobMode } from '../types';
+import { ConceptProposal, HistoryPage, Conflict, JobMode } from '../types';
 import { AuthService } from './auth.service';
 
 export interface EnqueueResponse {
@@ -180,19 +180,6 @@ export interface BrokenLinkScanResult {
 
 export type BrokenLinkScanEvent = BrokenLinkScanProgress | BrokenLinkScanResult;
 
-export interface SyncProgress {
-  type: 'progress';
-  processed: number;
-  total: number;
-  path: string;
-}
-
-export interface SyncDone {
-  type: 'done';
-  result: SyncResult;
-}
-
-export type SyncEvent = SyncProgress | SyncDone;
 
 export interface GraphNode {
   id: string;
@@ -305,35 +292,9 @@ export class ApiService {
     return this.http.get(`/api/history/${changeId}/diff`, { responseType: 'text' });
   }
 
-  syncWebdav(): Observable<SyncEvent> {
-    return new Observable((observer: Observer<SyncEvent>) => {
-      const token = this.auth.token();
-      const url = token ? `/api/webdav/sync?token=${encodeURIComponent(token)}` : '/api/webdav/sync';
-      const es = new EventSource(url);
-      let completed = false;
-
-      es.addEventListener('progress', (e: MessageEvent) => {
-        const data = JSON.parse(e.data) as { processed: number; total: number; path: string };
-        observer.next({ type: 'progress', ...data });
-      });
-      es.addEventListener('done', (e: MessageEvent) => {
-        completed = true;
-        observer.next({ type: 'done', result: JSON.parse(e.data) as SyncResult });
-        es.close();
-        observer.complete();
-      });
-      es.addEventListener('error', (e: MessageEvent) => {
-        completed = true;
-        const data = e.data ? (JSON.parse(e.data) as { code?: string; message?: string }) : {};
-        es.close();
-        observer.error({ code: data.code, message: data.message ?? 'Error desconocido' });
-      });
-      es.onerror = () => {
-        es.close();
-        if (!completed) observer.error({ message: 'Error de conexión' });
-      };
-      return () => es.close();
-    });
+  /** Enqueues a WebDAV manual sync as a background job. Progress is followed via the jobs panel. */
+  enqueueSync(): Observable<EnqueueResponse> {
+    return this.http.post<EnqueueResponse>('/api/jobs/sync', {});
   }
 
   getConflicts(): Observable<Conflict[]> {
