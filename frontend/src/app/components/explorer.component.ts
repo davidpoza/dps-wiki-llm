@@ -33,6 +33,7 @@ import { createLivePreviewPlugin, insertTableAtCursor } from './live-preview.plu
 import { createObsidianImagePreviewPlugin, OBSIDIAN_IMAGE_PREVIEW_REFRESH } from './obsidian-image-preview.plugin';
 import { createClipboardImagePlugin } from './clipboard-image.plugin';
 import { createImageResourceViewPlugin } from './image-resource-view.plugin';
+import { tightenListSerialization } from './markdown-normalize';
 import type { EditorView } from '@milkdown/prose/view';
 import { TreeNode, ConfirmationService, MessageService, MenuItem } from 'primeng/api';
 import { Tree } from 'primeng/tree';
@@ -1749,6 +1750,10 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     return roots;
   });
   private rawFileContent = '';
+  // Whitespace between the closing frontmatter `---` and the body, preserved
+  // per-file so the round-trip stays idempotent (some notes use a blank line,
+  // others don't). Defaults to a blank line for files without frontmatter.
+  private frontmatterSeparator = '\n\n';
   private isLoading = false;
   private treeSubscription: Subscription | null = null;
   protected isResizing = false;
@@ -2100,7 +2105,8 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         ctx.set(defaultValueCtx, '');
         ctx.set(editorViewOptionsCtx, { attributes: { spellcheck: 'false' } });
         ctx.get(listenerCtx).markdownUpdated((_ctx, rawMarkdown) => {
-          const markdown = rawMarkdown.replace(/\\\[\\\[([^\]]*?)(?:\\\]\\\]|\]\])/g, '[[$1]]');
+          const unescaped = rawMarkdown.replace(/\\\[\\\[([^\]]*?)(?:\\\]\\\]|\]\])/g, '[[$1]]');
+          const markdown = tightenListSerialization(unescaped);
           if (this.isLoading) {
             this.isLoading = false;
             this.currentMarkdown = markdown;
@@ -2210,6 +2216,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         this.selectedLabel.set(label);
         this.isDirty.set(false);
         this.rawFileContent = rawContent;
+        this.frontmatterSeparator = parsed.separator;
         this.frontmatter.set(parsed.data);
         this.editingFrontmatter.set(false);
         this.frontmatterYamlError.set(false);
@@ -2299,20 +2306,30 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     }
   }
 
-  private parseFrontmatter(raw: string): { data: Record<string, unknown>; content: string } {
+  private parseFrontmatter(raw: string): {
+    data: Record<string, unknown>;
+    content: string;
+    separator: string;
+  } {
     const input = raw.startsWith('﻿') ? raw.slice(1) : raw;
-    const match = input.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)([\s\S]*)$/);
-    if (!match) return { data: {}, content: input };
+    const match = input.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?([\s\S]*)$/);
+    if (!match) return { data: {}, content: input, separator: '\n\n' };
+    // Preserve the exact separation between the closing `---` and the body: the
+    // regex already consumed one newline, so any further leading newlines are
+    // blank lines the author included and must survive the round-trip.
+    const leadingNewlines = /^\n*/.exec(match[2])?.[0] ?? '';
+    const content = match[2].slice(leadingNewlines.length);
+    const separator = `\n${leadingNewlines}`;
     try {
       const data = (parseYaml(match[1]) ?? {}) as Record<string, unknown>;
-      return { data, content: match[2] };
+      return { data, content, separator };
     } catch {
-      return { data: {}, content: match[2] };
+      return { data: {}, content, separator };
     }
   }
 
   private stringifyWithFrontmatter(body: string, data: Record<string, unknown>): string {
-    return `---\n${stringifyYaml(data)}---\n\n${body}`;
+    return `---\n${stringifyYaml(data)}---${this.frontmatterSeparator}${body}`;
   }
 
   private loadFile(node: TreeNode): void {
@@ -2325,6 +2342,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
         this.selectedLabel.set(node.label ?? path);
         this.isDirty.set(false);
         this.rawFileContent = rawContent;
+        this.frontmatterSeparator = parsed.separator;
         this.frontmatter.set(parsed.data);
         this.editingFrontmatter.set(false);
         this.frontmatterYamlError.set(false);
@@ -2464,6 +2482,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
     } else {
       const raw = this.rawModeText();
       const parsed = this.parseFrontmatter(raw);
+      this.frontmatterSeparator = parsed.separator;
       this.frontmatter.set(parsed.data);
       this.frontmatterRawYaml.set(raw.startsWith('---') ? (raw.split('---')[1] ?? '') : '');
       this.currentMarkdown = parsed.content;
@@ -2792,6 +2811,7 @@ export class ExplorerComponent implements OnInit, AfterViewInit, OnDestroy, Unsa
       next: () => {
         const parsed = this.parseFrontmatter(content);
         this.rawFileContent = content;
+        this.frontmatterSeparator = parsed.separator;
         this.frontmatter.set(parsed.data);
         this.editingFrontmatter.set(false);
         this.currentMarkdown = parsed.content;

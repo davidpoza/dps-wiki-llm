@@ -69,6 +69,14 @@
             }
           },
           "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "tsconfig.spec.json",
+            "buildTarget": "dps-wiki-llm-frontend:build:development",
+            "runner": "vitest"
+          }
         }
       }
     }
