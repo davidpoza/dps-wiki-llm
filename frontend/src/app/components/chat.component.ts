@@ -94,6 +94,11 @@ import { ChatMessage, ChatSession, ChatSessionDetail } from '../types';
           <!-- Session header -->
           <div class="session-header">
             <span class="session-header-title">{{ activeSession()?.title }}</span>
+            @if (sessionTokenTotal()) {
+              <span class="session-tokens" [title]="'chat.sessionTokens' | transloco"
+                >{{ sessionTokenTotal() }} {{ 'chat.tokens' | transloco }}</span
+              >
+            }
             <div class="session-header-actions">
               @if (exportPath()) {
                 <span class="export-confirm">✓ {{ exportPath() }}</span>
@@ -122,11 +127,41 @@ import { ChatMessage, ChatSession, ChatSessionDetail } from '../types';
             }
             @for (msg of messages(); track msg.id) {
               <div class="message" [ngClass]="msg.role">
-                <div class="bubble" [ngClass]="msg.role">
-                  @if (msg.role === 'assistant') {
-                    <div class="markdown" [innerHTML]="renderMarkdown(msg.content)"></div>
-                  } @else {
-                    <div class="plain">{{ msg.content }}</div>
+                <div class="message-col">
+                  <div class="bubble" [ngClass]="msg.role">
+                    @if (msg.role === 'assistant') {
+                      <div class="markdown" [innerHTML]="renderMarkdown(msg.content)"></div>
+                    } @else {
+                      <div class="plain">{{ msg.content }}</div>
+                    }
+                  </div>
+                  @if (msg.role === 'assistant' && (msg.sources.length || msg.totalTokens)) {
+                    <div class="message-meta">
+                      @if (msg.sources.length) {
+                        <div class="sources">
+                          <span class="sources-label">{{ 'chat.sources' | transloco }}:</span>
+                          @for (src of msg.sources; track src.path) {
+                            <span
+                              class="source-chip"
+                              [class.linked]="src.provenance === 'LINKED'"
+                              [title]="
+                                src.provenance === 'LINKED'
+                                  ? ('chat.sourceLinked' | transloco: { depth: src.depth })
+                                  : ('chat.sourceDirect' | transloco)
+                              "
+                            >
+                              {{ src.path }}
+                              @if (src.provenance === 'LINKED') {
+                                <span class="source-depth">↳{{ src.depth }}</span>
+                              }
+                            </span>
+                          }
+                        </div>
+                      }
+                      @if (msg.totalTokens) {
+                        <span class="token-badge">{{ msg.totalTokens }} {{ 'chat.tokens' | transloco }}</span>
+                      }
+                    </div>
                   }
                 </div>
               </div>
@@ -324,12 +359,83 @@ import { ChatMessage, ChatSession, ChatSessionDetail } from '../types';
       .message.assistant {
         justify-content: flex-start;
       }
-      .bubble {
+      .message-col {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
         max-width: 72%;
+        min-width: 0;
+      }
+      .message.user .message-col {
+        align-items: flex-end;
+      }
+      .message.assistant .message-col {
+        align-items: flex-start;
+      }
+      .bubble {
+        max-width: 100%;
         padding: 10px 14px;
         border-radius: 14px;
         font-size: 0.9rem;
         line-height: 1.6;
+      }
+      .message-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 10px;
+        padding: 0 4px;
+      }
+      .sources {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+      .sources-label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--app-text-muted);
+      }
+      .source-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 0.72rem;
+        font-family: monospace;
+        color: var(--app-text-muted);
+        background: var(--app-surface-muted);
+        border: 1px solid var(--app-border);
+        border-radius: 6px;
+        padding: 1px 6px;
+        max-width: 260px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .source-chip.linked {
+        border-style: dashed;
+        color: var(--app-primary);
+      }
+      .source-depth {
+        font-weight: 700;
+      }
+      .token-badge {
+        font-size: 0.7rem;
+        color: var(--app-text-subtle);
+        background: var(--app-surface-subtle);
+        border-radius: 6px;
+        padding: 1px 6px;
+        white-space: nowrap;
+      }
+      .session-tokens {
+        font-size: 0.72rem;
+        color: var(--app-text-muted);
+        background: var(--app-surface-muted);
+        border-radius: 6px;
+        padding: 2px 8px;
+        white-space: nowrap;
       }
       .bubble.user {
         background: var(--app-primary);
@@ -475,6 +581,9 @@ export class ChatComponent implements OnInit, AfterViewChecked {
 
   readonly activeSession = computed(() => this.sessions().find((s) => s.id === this.activeSessionId()));
   readonly hasMessages = computed(() => this.messages().length > 0);
+  readonly sessionTokenTotal = computed(() =>
+    this.messages().reduce((sum, m) => sum + (m.totalTokens || 0), 0),
+  );
 
   private shouldScrollToBottom = false;
 

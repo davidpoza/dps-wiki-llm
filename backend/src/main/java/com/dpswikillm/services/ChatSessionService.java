@@ -2,9 +2,10 @@ package com.dpswikillm.services;
 
 import com.dpswikillm.domain.ChatMessage;
 import com.dpswikillm.domain.ChatSession;
-import com.dpswikillm.domain.SearchResult;
+import com.dpswikillm.dto.ChatContextSettingsDto;
 import com.dpswikillm.repositories.ChatMessageRepository;
 import com.dpswikillm.repositories.ChatSessionRepository;
+import com.dpswikillm.services.ChatContextService.ContextPacket;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -17,27 +18,31 @@ import org.springframework.web.server.ResponseStatusException;
 @Transactional
 public class ChatSessionService {
 
-    private static final int TOP_K = 5;
-    private static final int MAX_KB_CONTEXT_CHARS = 6_000;
     private static final int MAX_HISTORY_CHARS = 6_000;
 
     private final ChatSessionRepository sessionRepo;
     private final ChatMessageRepository messageRepo;
-    private final SemanticSearchService semanticSearch;
+    private final ChatContextService chatContextService;
+    private final ChatContextSettings chatContextSettings;
     private final LlmClient llmClient;
     private final PromptService promptService;
+    private final JobTokenAccounting tokenAccounting;
 
     public ChatSessionService(
             ChatSessionRepository sessionRepo,
             ChatMessageRepository messageRepo,
-            SemanticSearchService semanticSearch,
+            ChatContextService chatContextService,
+            ChatContextSettings chatContextSettings,
             LlmClient llmClient,
-            PromptService promptService) {
+            PromptService promptService,
+            JobTokenAccounting tokenAccounting) {
         this.sessionRepo = sessionRepo;
         this.messageRepo = messageRepo;
-        this.semanticSearch = semanticSearch;
+        this.chatContextService = chatContextService;
+        this.chatContextSettings = chatContextSettings;
         this.llmClient = llmClient;
         this.promptService = promptService;
+        this.tokenAccounting = tokenAccounting;
     }
 
     public ChatSession createSession(UUID userId) {
@@ -84,12 +89,27 @@ public class ChatSessionService {
             session.setTitle(
                     userContent.length() <= 60 ? userContent : userContent.substring(0, 60));
         }
-        List<com.dpswikillm.dto.ChatMessage> prompt = buildPrompt(userContent, history);
 
-        String answer = llmClient.chat(prompt);
+        ChatContextSettingsDto settings = chatContextSettings.get();
+        ContextPacket context = chatContextService.build(userContent, settings);
+        List<com.dpswikillm.dto.ChatMessage> prompt =
+                buildPrompt(userContent, history, context.contextText());
 
-        ChatMessage assistantMsg =
-                messageRepo.save(new ChatMessage(sessionId, ChatMessage.Role.assistant, answer));
+        String answer;
+        JobTokenAccounting.TokenUsage usage;
+        tokenAccounting.open();
+        try {
+            answer = llmClient.chat(prompt);
+        } finally {
+            usage = tokenAccounting.snapshot();
+            tokenAccounting.close();
+        }
+
+        ChatMessage assistantMsg = new ChatMessage(sessionId, ChatMessage.Role.assistant, answer);
+        assistantMsg.setSources(context.sources());
+        assistantMsg.setTokenUsage(
+                usage.promptTokens(), usage.completionTokens(), usage.totalTokens());
+        assistantMsg = messageRepo.save(assistantMsg);
 
         session.touch();
         sessionRepo.save(session);
@@ -98,10 +118,7 @@ public class ChatSessionService {
     }
 
     private List<com.dpswikillm.dto.ChatMessage> buildPrompt(
-            String question, List<ChatMessage> history) {
-        List<SearchResult> hits = semanticSearch.search(question, TOP_K);
-        String kbContext = buildKbContext(hits);
-
+            String question, List<ChatMessage> history, String kbContext) {
         List<com.dpswikillm.dto.ChatMessage> messages = new ArrayList<>();
         messages.add(
                 new com.dpswikillm.dto.ChatMessage(
@@ -128,21 +145,6 @@ public class ChatSessionService {
                         : "Question: " + question + "\n\nContext:\n" + kbContext;
         messages.add(new com.dpswikillm.dto.ChatMessage("user", userPayload));
         return messages;
-    }
-
-    private String buildKbContext(List<SearchResult> hits) {
-        StringBuilder sb = new StringBuilder();
-        for (SearchResult hit : hits) {
-            String body = hit.body() != null ? hit.body() : "";
-            String header = "### " + hit.path() + "\n";
-            if (sb.length() + header.length() + body.length() > MAX_KB_CONTEXT_CHARS) {
-                int remaining = MAX_KB_CONTEXT_CHARS - sb.length() - header.length();
-                if (remaining > 0) sb.append(header).append(body, 0, remaining);
-                break;
-            }
-            sb.append(header).append(body).append("\n\n");
-        }
-        return sb.toString();
     }
 
     private ChatSession findOwnedSession(UUID sessionId, UUID userId) {

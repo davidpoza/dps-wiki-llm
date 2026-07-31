@@ -7,6 +7,7 @@ import {
   ApiService,
   BrokenLinkEntry,
   BrokenLinkScanEvent,
+  ChatContextSettings,
   JobSummary,
   LinkDiagnostics,
   Prompt,
@@ -52,6 +53,7 @@ interface PromptState extends Prompt {
           <p-tablist>
             <p-tab value="data">Datos</p-tab>
             <p-tab value="prompts">Prompts</p-tab>
+            <p-tab value="chat">Chat</p-tab>
           </p-tablist>
           <p-tabpanels>
             <p-tabpanel value="data">
@@ -486,6 +488,96 @@ interface PromptState extends Prompt {
                 </section>
               </div>
             </p-tabpanel>
+
+            <p-tabpanel value="chat">
+              <div class="tab-sections">
+                <section class="settings-section">
+                  <h2>Contexto del chat</h2>
+                  <p class="section-desc">
+                    Controla cómo el chat recupera y construye el contexto de la base de conocimiento.
+                    La expansión por enlaces sigue los <code>[[wikilinks]]</code> de las notas
+                    recuperadas y añade las más relevantes hasta agotar el presupuesto. Los cambios se
+                    aplican en el siguiente mensaje.
+                  </p>
+                  <div class="chat-config-grid">
+                    <label class="resource-label" for="chat-top-k">Notas recuperadas (top-K)</label>
+                    <input
+                      id="chat-top-k"
+                      class="resource-input"
+                      type="number"
+                      min="1"
+                      max="20"
+                      step="1"
+                      [(ngModel)]="chatTopK"
+                      [disabled]="chatSaving()"
+                    />
+
+                    <label class="resource-label" for="chat-budget"
+                      >Presupuesto de contexto (caracteres)</label
+                    >
+                    <input
+                      id="chat-budget"
+                      class="resource-input"
+                      type="number"
+                      min="500"
+                      max="50000"
+                      step="500"
+                      [(ngModel)]="chatBudget"
+                      [disabled]="chatSaving()"
+                    />
+
+                    <label class="resource-label" for="chat-expansion">Expansión por enlaces</label>
+                    <label class="chat-toggle">
+                      <input
+                        id="chat-expansion"
+                        type="checkbox"
+                        [(ngModel)]="chatExpansionEnabled"
+                        [disabled]="chatSaving()"
+                      />
+                      Seguir enlaces de las notas recuperadas
+                    </label>
+
+                    <label class="resource-label" for="chat-depth">Profundidad máxima</label>
+                    <input
+                      id="chat-depth"
+                      class="resource-input"
+                      type="number"
+                      min="0"
+                      max="3"
+                      step="1"
+                      [(ngModel)]="chatMaxDepth"
+                      [disabled]="chatSaving() || !chatExpansionEnabled"
+                    />
+
+                    <label class="resource-label" for="chat-max-linked">Máx. notas enlazadas</label>
+                    <input
+                      id="chat-max-linked"
+                      class="resource-input"
+                      type="number"
+                      min="0"
+                      max="50"
+                      step="1"
+                      [(ngModel)]="chatMaxLinkedNotes"
+                      [disabled]="chatSaving() || !chatExpansionEnabled"
+                    />
+                  </div>
+                  <div class="reindex-row chat-save-row">
+                    <p-button
+                      label="Guardar"
+                      size="small"
+                      [loading]="chatSaving()"
+                      (onClick)="saveChatContext()"
+                    />
+                    @if (chatSaved()) {
+                      <span class="feedback success">Configuración del chat guardada</span>
+                    }
+                    @if (chatError()) {
+                      <span class="feedback error">{{ chatError() }}</span>
+                    }
+                  </div>
+                </section>
+              </div>
+            </p-tabpanel>
           </p-tabpanels>
         </p-tabs>
       </section>
@@ -569,6 +661,27 @@ interface PromptState extends Prompt {
       .resource-input:focus {
         outline: 2px solid var(--app-primary);
         border-color: var(--app-primary);
+      }
+      .chat-config-grid {
+        display: grid;
+        grid-template-columns: 240px 1fr;
+        align-items: center;
+        gap: 12px 16px;
+      }
+      .chat-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.875rem;
+        color: var(--app-text);
+      }
+      .chat-save-row {
+        margin-top: 16px;
+      }
+      @media (max-width: 640px) {
+        .chat-config-grid {
+          grid-template-columns: 1fr;
+        }
       }
       .prompts-list {
         display: flex;
@@ -736,6 +849,15 @@ export class SettingsComponent implements OnInit {
   readonly hubnessKSaved = signal(false);
   readonly hubnessKError = signal<string | null>(null);
 
+  chatTopK = 5;
+  chatBudget = 6000;
+  chatExpansionEnabled = false;
+  chatMaxDepth = 1;
+  chatMaxLinkedNotes = 5;
+  readonly chatSaving = signal(false);
+  readonly chatSaved = signal(false);
+  readonly chatError = signal<string | null>(null);
+
   readonly diagnosticsRunning = signal(false);
   readonly diagnostics = signal<LinkDiagnostics | null>(null);
   readonly diagnosticsError = signal<string | null>(null);
@@ -793,6 +915,11 @@ export class SettingsComponent implements OnInit {
       next: (data) => {
         this.hubnessK = data.k;
       },
+      error: () => {},
+    });
+
+    this.api.getChatContextSettings().subscribe({
+      next: (s) => this.applyChatContext(s),
       error: () => {},
     });
 
@@ -863,6 +990,41 @@ export class SettingsComponent implements OnInit {
       error: () => {
         this.hubnessKSaving.set(false);
         this.hubnessKError.set('Valor inválido. Debe ser un entero entre 1 y 100.');
+      },
+    });
+  }
+
+  private applyChatContext(s: ChatContextSettings): void {
+    this.chatTopK = s.topK;
+    this.chatBudget = s.contextBudgetChars;
+    this.chatExpansionEnabled = s.expansionEnabled;
+    this.chatMaxDepth = s.maxDepth;
+    this.chatMaxLinkedNotes = s.maxLinkedNotes;
+  }
+
+  saveChatContext(): void {
+    this.chatSaving.set(true);
+    this.chatSaved.set(false);
+    this.chatError.set(null);
+
+    const payload: ChatContextSettings = {
+      topK: this.chatTopK,
+      expansionEnabled: this.chatExpansionEnabled,
+      maxDepth: this.chatMaxDepth,
+      maxLinkedNotes: this.chatMaxLinkedNotes,
+      contextBudgetChars: this.chatBudget,
+    };
+
+    this.api.updateChatContextSettings(payload).subscribe({
+      next: (s) => {
+        this.applyChatContext(s);
+        this.chatSaving.set(false);
+        this.chatSaved.set(true);
+        setTimeout(() => this.chatSaved.set(false), 3000);
+      },
+      error: () => {
+        this.chatSaving.set(false);
+        this.chatError.set('Valores inválidos. Revisa los rangos e inténtalo de nuevo.');
       },
     });
   }

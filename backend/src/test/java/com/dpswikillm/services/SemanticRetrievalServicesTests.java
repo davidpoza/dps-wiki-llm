@@ -331,6 +331,34 @@ class SemanticRetrievalServicesTests {
         }
 
         @Override
+        public java.util.Map<String, String> findBodiesByPaths(List<String> paths) {
+            java.util.Map<String, String> bodies = new java.util.LinkedHashMap<>();
+            for (DocumentRecord doc : documents) {
+                if (paths.contains(doc.path())) {
+                    bodies.put(doc.path(), doc.body());
+                }
+            }
+            return bodies;
+        }
+
+        @Override
+        public List<SearchResult> scorePathsAgainstQuery(float[] queryVector, List<String> paths) {
+            return documents.stream()
+                    .filter(doc -> paths.contains(doc.path()))
+                    .filter(doc -> vectors.containsKey(doc.id()))
+                    .map(
+                            doc ->
+                                    new SearchResult(
+                                            doc.path(),
+                                            doc.title(),
+                                            doc.docType(),
+                                            cosine(queryVector, vectors.get(doc.id())),
+                                            doc.body()))
+                    .sorted(Comparator.comparingDouble(SearchResult::score).reversed())
+                    .toList();
+        }
+
+        @Override
         public List<SearchResult> lexicalLookup(
                 String query, List<FrontmatterFilter> filters, int limit) {
             String lower = query == null ? "" : query.toLowerCase();

@@ -120,6 +120,14 @@ export interface ResourceSettings {
   resourceFolder: string;
 }
 
+export interface ChatContextSettings {
+  topK: number;
+  expansionEnabled: boolean;
+  maxDepth: number;
+  maxLinkedNotes: number;
+  contextBudgetChars: number;
+}
+
 export interface ConceptDedupGroup {
   canonicalFilename: string;
   files: string[];
@@ -404,6 +412,14 @@ export class ApiService {
 
   setHubnessK(k: number): Observable<{ k: number }> {
     return this.http.put<{ k: number }>('/api/settings/hubness-k', { k });
+  }
+
+  getChatContextSettings(): Observable<ChatContextSettings> {
+    return this.http.get<ChatContextSettings>('/api/settings/chat-context');
+  }
+
+  updateChatContextSettings(settings: ChatContextSettings): Observable<ChatContextSettings> {
+    return this.http.put<ChatContextSettings>('/api/settings/chat-context', settings);
   }
 
   reindex(): Observable<ReindexProgress> {

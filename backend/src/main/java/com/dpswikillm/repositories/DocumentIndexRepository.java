@@ -36,6 +36,16 @@ public interface DocumentIndexRepository {
 
     List<SearchResult> semanticSearchByType(float[] queryVector, String docType, int limit);
 
+    /** Note bodies keyed by vault-relative path, for the given paths. Missing paths are omitted. */
+    Map<String, String> findBodiesByPaths(List<String> paths);
+
+    /**
+     * Scores the given candidate paths against a query embedding, returning each as a {@link
+     * SearchResult} (path, title, doc-type, cosine score, body) ordered by descending similarity.
+     * Paths without an embedding are omitted.
+     */
+    List<SearchResult> scorePathsAgainstQuery(float[] queryVector, List<String> paths);
+
     List<SearchResult> lexicalLookup(String query, List<FrontmatterFilter> filters, int limit);
 
     record SimilarPair(String path1, String path2, double similarity) {}

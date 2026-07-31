@@ -7,12 +7,24 @@ export interface ChatSession {
   updatedAt: string;
 }
 
+/** A note that was loaded into the LLM context for a chat answer. */
+export interface ContextSource {
+  path: string;
+  score: number;
+  provenance: 'DIRECT' | 'LINKED';
+  depth: number;
+}
+
 export interface ChatMessage {
   id: string;
   sessionId: string;
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+  sources: ContextSource[];
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
 }
 
 export interface ChatSessionDetail extends ChatSession {

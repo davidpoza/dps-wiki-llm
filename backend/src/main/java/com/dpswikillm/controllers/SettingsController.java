@@ -5,11 +5,13 @@ import com.dpswikillm.dto.BrokenLinkDeleteRequest;
 import com.dpswikillm.dto.BrokenLinkDeleteResult;
 import com.dpswikillm.dto.BrokenLinkScanProgress;
 import com.dpswikillm.dto.BrokenLinkScanResult;
+import com.dpswikillm.dto.ChatContextSettingsDto;
 import com.dpswikillm.dto.KeywordGenerationProgress;
 import com.dpswikillm.dto.ReindexProgress;
 import com.dpswikillm.dto.ResourceSettingsDto;
 import com.dpswikillm.repositories.AppSettingRepository;
 import com.dpswikillm.services.BrokenLinkScanService;
+import com.dpswikillm.services.ChatContextSettings;
 import com.dpswikillm.services.KeywordGenerationService;
 import com.dpswikillm.services.ReindexService;
 import com.dpswikillm.services.ResourceSettingsService;
@@ -43,18 +45,36 @@ public class SettingsController {
     private final KeywordGenerationService keywordGenerationService;
     private final BrokenLinkScanService brokenLinkScanService;
     private final AppSettingRepository settingRepository;
+    private final ChatContextSettings chatContextSettings;
 
     public SettingsController(
             ReindexService reindexService,
             ResourceSettingsService resourceSettingsService,
             KeywordGenerationService keywordGenerationService,
             BrokenLinkScanService brokenLinkScanService,
-            AppSettingRepository settingRepository) {
+            AppSettingRepository settingRepository,
+            ChatContextSettings chatContextSettings) {
         this.reindexService = reindexService;
         this.resourceSettingsService = resourceSettingsService;
         this.keywordGenerationService = keywordGenerationService;
         this.brokenLinkScanService = brokenLinkScanService;
         this.settingRepository = settingRepository;
+        this.chatContextSettings = chatContextSettings;
+    }
+
+    @GetMapping("/chat-context")
+    public ChatContextSettingsDto getChatContext() {
+        return chatContextSettings.get();
+    }
+
+    @PutMapping("/chat-context")
+    public ResponseEntity<ChatContextSettingsDto> updateChatContext(
+            @RequestBody ChatContextSettingsDto request) {
+        try {
+            return ResponseEntity.ok(chatContextSettings.update(request));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     @GetMapping("/resources")

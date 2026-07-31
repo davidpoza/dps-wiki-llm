@@ -793,6 +793,16 @@ class IngestPipelineServicesTests {
         }
 
         @Override
+        public java.util.Map<String, String> findBodiesByPaths(List<String> paths) {
+            return java.util.Map.of();
+        }
+
+        @Override
+        public List<SearchResult> scorePathsAgainstQuery(float[] q, List<String> paths) {
+            return List.of();
+        }
+
+        @Override
         public List<SearchResult> lexicalLookup(
                 String q, List<FrontmatterFilter> filters, int limit) {
             return List.of();

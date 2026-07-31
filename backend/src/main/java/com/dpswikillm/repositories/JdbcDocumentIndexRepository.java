@@ -249,6 +249,54 @@ public class JdbcDocumentIndexRepository implements DocumentIndexRepository {
     }
 
     @Override
+    public Map<String, String> findBodiesByPaths(List<String> paths) {
+        if (paths == null || paths.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = paths.stream().map(ignored -> "?").collect(Collectors.joining(","));
+        return jdbcTemplate.query(
+                "SELECT path, body FROM documents WHERE path IN (" + placeholders + ")",
+                rs -> {
+                    Map<String, String> bodies = new LinkedHashMap<>();
+                    while (rs.next()) {
+                        bodies.put(rs.getString("path"), rs.getString("body"));
+                    }
+                    return bodies;
+                },
+                paths.toArray());
+    }
+
+    @Override
+    public List<SearchResult> scorePathsAgainstQuery(float[] queryVector, List<String> paths) {
+        if (paths == null || paths.isEmpty()) {
+            return List.of();
+        }
+        String placeholders = paths.stream().map(ignored -> "?").collect(Collectors.joining(","));
+        Object[] args = new Object[paths.size() + 2];
+        String vector = vectorLiteral(queryVector);
+        args[0] = vector;
+        for (int i = 0; i < paths.size(); i += 1) {
+            args[i + 1] = paths.get(i);
+        }
+        args[paths.size() + 1] = vector;
+        return jdbcTemplate.query(
+                "SELECT d.path, d.title, d.doc_type, d.body, 1 - (e.embedding <=> ?::vector) AS score"
+                        + " FROM document_embeddings e"
+                        + " JOIN documents d ON d.id = e.document_id"
+                        + " WHERE d.path IN ("
+                        + placeholders
+                        + ") ORDER BY e.embedding <=> ?::vector",
+                (rs, rowNum) ->
+                        new SearchResult(
+                                rs.getString("path"),
+                                rs.getString("title"),
+                                rs.getString("doc_type"),
+                                rs.getDouble("score"),
+                                rs.getString("body")),
+                args);
+    }
+
+    @Override
     public List<SearchResult> lexicalLookup(
             String query, List<FrontmatterFilter> filters, int limit) {
         boolean hasText = query != null && !query.isBlank();
