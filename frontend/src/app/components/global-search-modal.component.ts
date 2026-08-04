@@ -25,7 +25,7 @@ const SNIPPET_AFTER = 80;
       (visibleChange)="onVisibleChange($event)"
       [modal]="true"
       [draggable]="false"
-      [style]="{ width: '480px' }"
+      [style]="{ width: '480px', maxWidth: '92vw' }"
       (onShow)="searchInput.focus()"
     >
       <div class="search-box">
