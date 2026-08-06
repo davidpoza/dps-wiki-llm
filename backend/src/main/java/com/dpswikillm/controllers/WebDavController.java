@@ -7,6 +7,8 @@ import com.dpswikillm.services.WebDavSyncService;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/webdav")
 public class WebDavController {
+
+    private static final Logger log = LoggerFactory.getLogger(WebDavController.class);
 
     private final WebDavSyncService webDavSyncService;
 
@@ -40,6 +44,14 @@ public class WebDavController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
         } catch (WebDavReplicationException e) {
+            // Surface the underlying WebDAV failure (e.g. Sardine's HTTP status) so the 502 is
+            // diagnosable — the cause is otherwise swallowed by the response body.
+            log.error(
+                    "WebDAV conflict resolution for '{}' (keep={}) failed to replicate: {}",
+                    request.path(),
+                    request.keep(),
+                    e.getCause() != null ? e.getCause().getMessage() : e.getMessage(),
+                    e);
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                     .body(Map.of("error", "not_replicated"));
         }

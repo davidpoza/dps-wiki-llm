@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -31,6 +33,8 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/files")
 public class FileController {
 
+    private static final Logger log = LoggerFactory.getLogger(FileController.class);
+
     private final FileService fileService;
     private final SnapshotService snapshotService;
     private final ResourceSettingsService resourceSettingsService;
@@ -42,6 +46,22 @@ public class FileController {
         this.fileService = fileService;
         this.snapshotService = snapshotService;
         this.resourceSettingsService = resourceSettingsService;
+    }
+
+    /**
+     * Logs the underlying WebDAV failure (e.g. Sardine's HTTP status) and returns the standard
+     * "saved locally, not replicated" 502 body. The local write and history entry are always kept.
+     */
+    private ResponseEntity<?> notReplicated(
+            String operation, String detail, WebDavReplicationException e) {
+        log.error(
+                "WebDAV replication failed during {} of '{}': {}",
+                operation,
+                detail,
+                e.getCause() != null ? e.getCause().getMessage() : e.getMessage(),
+                e);
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(Map.of("saved", true, "replicated", false, "error", "not_replicated"));
     }
 
     @GetMapping("/tree")
@@ -94,9 +114,7 @@ public class FileController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
         } catch (WebDavReplicationException e) {
-            // Saved locally + recorded in history, but not replicated to WebDAV.
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                    .body(Map.of("saved", true, "replicated", false, "error", "not_replicated"));
+            return notReplicated("save", path, e);
         } catch (UncheckedIOException | IllegalStateException e) {
             return ResponseEntity.internalServerError().build();
         }
@@ -112,8 +130,7 @@ public class FileController {
         } catch (FileService.NoSuchFileException e) {
             return ResponseEntity.notFound().build();
         } catch (WebDavReplicationException e) {
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                    .body(Map.of("saved", true, "replicated", false, "error", "not_replicated"));
+            return notReplicated("delete", path, e);
         } catch (UncheckedIOException | IllegalStateException e) {
             return ResponseEntity.internalServerError().build();
         }
@@ -132,8 +149,7 @@ public class FileController {
         } catch (FileService.FileAlreadyExistsException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         } catch (WebDavReplicationException e) {
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                    .body(Map.of("saved", true, "replicated", false, "error", "not_replicated"));
+            return notReplicated("rename", path + " -> " + newName, e);
         } catch (UncheckedIOException | IllegalStateException e) {
             return ResponseEntity.internalServerError().build();
         }
@@ -166,8 +182,7 @@ public class FileController {
         } catch (FileService.FileAlreadyExistsException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         } catch (WebDavReplicationException e) {
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                    .body(Map.of("saved", true, "replicated", false, "error", "not_replicated"));
+            return notReplicated("move", path + " -> " + targetDir, e);
         } catch (UncheckedIOException | IllegalStateException e) {
             return ResponseEntity.internalServerError().build();
         }

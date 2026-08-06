@@ -493,12 +493,8 @@ public class WebDavSyncService {
             if (content == null || content.isBlank()) {
                 throw new IllegalArgumentException("content is required for MANUAL resolution");
             }
-            try {
-                webDavClient.put(normalized, content);
-            } catch (IOException e) {
-                throw new WebDavReplicationException(
-                        "Failed to push manual resolved content for " + normalized, e);
-            }
+            // Persist the manual merge locally first so the user's work is never lost when the
+            // WebDAV push fails; only replicate and clear the conflict afterwards.
             Snapshot snapshot =
                     snapshotService.beginSnapshot(
                             null, "webdav-conflict-resolve", normalized, "WEBDAV_PULL");
@@ -511,6 +507,13 @@ public class WebDavSyncService {
                 throw new UncheckedIOException(e);
             }
             snapshotService.finalizeSnapshot(snapshot, null);
+            try {
+                webDavClient.put(normalized, content);
+            } catch (IOException e) {
+                // Merge is saved locally and revertible; leave the conflict flagged for retry.
+                throw new WebDavReplicationException(
+                        "Failed to push manual resolved content for " + normalized, e);
+            }
             upsertBaseline(normalized, sha256(content), null, true, false, null);
         } else {
             throw new IllegalArgumentException("keep must be LOCAL, REMOTE, SKIP, or MANUAL");
