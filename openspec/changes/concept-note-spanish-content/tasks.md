@@ -7,8 +7,8 @@
 
 ## 2. Apply and verify
 
-- [ ] 2.1 Recompile and restart the backend (local profile, port 8090) so Flyway applies `V43` and `PromptService.loadCache()` reloads the updated prompt
-- [ ] 2.2 Confirm Flyway shows `V43` as applied and the backend starts cleanly with no migration/checksum errors
-- [ ] 2.3 Ingest an English-language source note and confirm the created `wiki/concepts/<slug>.md` has a Spanish `title` and Spanish `Summary`, while the slug/`path` and `idempotency_key` remain English
-- [ ] 2.4 Ingest a Spanish-language source note and confirm the created concept note prose/title stay Spanish and the slug stays canonical English
-- [ ] 2.5 Confirm concept de-duplication and wikilink resolution still work (identity keyed on the English slug is unaffected)
+- [x] 2.1 Recompile and restart the backend (local profile, port 8090) so Flyway applies `V43` and `PromptService.loadCache()` reloads the updated prompt
+- [x] 2.2 Confirm Flyway shows `V43` as applied and the backend starts cleanly with no migration/checksum errors
+- [x] 2.3 Ingest an English-language source note and confirm the created `wiki/concepts/<slug>.md` has a Spanish `title` and Spanish `Summary`, while the slug/`path` and `idempotency_key` remain English
+- [x] 2.4 Ingest a Spanish-language source note and confirm the created concept note prose/title stay Spanish and the slug stays canonical English
+- [x] 2.5 Confirm concept de-duplication and wikilink resolution still work (identity keyed on the English slug is unaffected)

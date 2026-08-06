@@ -20,7 +20,8 @@
     "explorer": "Explorer",
     "settings": "Settings",
     "profile": "Profile",
-    "menu": "Menu"
+    "menu": "Menu",
+    "sync": "Sync now"
   },
   "login": {
     "username": "Username",
@@ -114,6 +115,8 @@
     "button": "Sync",
     "syncing": "Syncing…",
     "enqueued": "Sync enqueued. Follow progress in the jobs panel.",
+    "running": "Syncing…",
+    "dismiss": "Dismiss",
     "summary": "Sync complete: {{ pulled }} pulled, {{ pushed }} pushed, {{ deleted }} deleted, {{ conflicts }} conflict(s).",
     "notConfigured": "WebDAV is not configured.",
     "error": "Sync failed.",

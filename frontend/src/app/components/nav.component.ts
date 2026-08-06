@@ -3,6 +3,7 @@ import { NgClass } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { AuthService } from '../services/auth.service';
+import { SyncService } from '../services/sync.service';
 
 interface NavItem {
   path: string;
@@ -39,6 +40,17 @@ interface NavItem {
           <span>{{ currentUser()?.username ?? ('nav.profile' | transloco) }}</span>
         </a>
       </div>
+
+      <button
+        class="nav-sync"
+        type="button"
+        [attr.aria-label]="'nav.sync' | transloco"
+        [attr.title]="'nav.sync' | transloco"
+        [disabled]="sync.syncing()"
+        (click)="sync.startSync()"
+      >
+        <i class="pi pi-sync" [class.pi-spin]="sync.syncing()"></i>
+      </button>
     </nav>
 
     @if (menuOpen()) {
@@ -81,6 +93,28 @@ interface NavItem {
       }
       .nav-toggle:hover {
         background: var(--app-surface-muted);
+      }
+      .nav-sync {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        color: var(--app-text-muted);
+        font-size: 1.15rem;
+        line-height: 1;
+        cursor: pointer;
+        padding: 6px 8px;
+        border-radius: 8px;
+      }
+      .nav-sync:hover:not(:disabled) {
+        background: var(--app-surface-muted);
+        color: var(--app-text);
+      }
+      .nav-sync:disabled {
+        cursor: default;
+        color: var(--app-primary);
       }
       .nav-links {
         display: flex;
@@ -158,6 +192,7 @@ interface NavItem {
 })
 export class NavComponent {
   private readonly auth = inject(AuthService);
+  readonly sync = inject(SyncService);
 
   readonly currentUser = this.auth.currentUser;
   readonly menuOpen = signal(false);

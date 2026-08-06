@@ -3,15 +3,25 @@ import { RouterOutlet } from '@angular/router';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { LoadingService } from './services/loading.service';
 import { GlobalSearchModalComponent } from './components/global-search-modal.component';
+import { SyncStatusToastComponent } from './components/sync-status-toast.component';
+import { ConflictResolverComponent } from './components/conflict-resolver.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, ProgressSpinnerModule, GlobalSearchModalComponent],
+  imports: [
+    RouterOutlet,
+    ProgressSpinnerModule,
+    GlobalSearchModalComponent,
+    SyncStatusToastComponent,
+    ConflictResolverComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <router-outlet />
     <app-global-search-modal />
+    <app-sync-status-toast />
+    <app-conflict-resolver />
     @if (loading.active()) {
       <div class="global-spinner-overlay">
         <p-progressSpinner strokeWidth="4" />

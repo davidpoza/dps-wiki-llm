@@ -1,13 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal, untracked } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
-import { DialogModule } from 'primeng/dialog';
 import { PaginatorModule, PaginatorState } from 'primeng/paginator';
 import { Router } from '@angular/router';
 import { ApiService } from '../services/api.service';
-import { JobsStore } from '../services/jobs.store';
-import { Conflict, FileHistoryEntry, JobState } from '../types';
-import { ConflictMergeEditorComponent } from './conflict-merge-editor.component';
+import { SyncService } from '../services/sync.service';
+import { FileHistoryEntry } from '../types';
 
 const PAGE_SIZE = 20;
 const FIRST_PAGE = 0;
@@ -15,21 +13,21 @@ const FIRST_PAGE = 0;
 @Component({
   selector: 'app-git-history',
   standalone: true,
-  imports: [NgClass, TranslocoPipe, DialogModule, PaginatorModule, ConflictMergeEditorComponent],
+  imports: [NgClass, TranslocoPipe, PaginatorModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="history">
       <div class="history-header">
         <h2>{{ 'git.title' | transloco }}</h2>
         <div class="header-actions">
-          <button class="sync-btn" [disabled]="syncing()" (click)="sync()">
-            {{ syncing() ? ('sync.syncing' | transloco) : ('sync.button' | transloco) }}
+          <button class="sync-btn" [disabled]="sync.syncing()" (click)="sync.startSync()">
+            {{ sync.syncing() ? ('sync.syncing' | transloco) : ('sync.button' | transloco) }}
           </button>
         </div>
       </div>
 
-      @if (syncMessage()) {
-        <p class="sync-msg" [class.error]="syncIsError()">{{ syncMessage() }}</p>
+      @if (sync.result(); as r) {
+        <p class="sync-msg" [class.error]="!r.ok">{{ r.message }}</p>
       }
 
       @if (error()) {
@@ -89,92 +87,6 @@ const FIRST_PAGE = 0;
         </div>
       }
     </div>
-
-    <p-dialog
-      [(visible)]="showConflicts"
-      [modal]="true"
-      [draggable]="false"
-      [style]="{ width: '90vw', maxWidth: '1100px' }"
-    >
-      <ng-template pTemplate="header">
-        <div class="conflicts-dialog-header">
-          <span>{{ 'sync.conflictsHeader' | transloco }}</span>
-          <span class="resolved-counter">{{
-            'sync.resolvedCounter' | transloco: { resolved: resolvedCount(), total: totalConflicts() }
-          }}</span>
-        </div>
-      </ng-template>
-
-      @if (conflicts().length === 0) {
-        <p class="empty">{{ 'sync.noConflicts' | transloco }}</p>
-      }
-
-      @if (conflicts().length > 0) {
-        <div class="bulk-bar">
-          <button class="bulk-btn" (click)="resolveAll('LOCAL')">{{ 'sync.applyAllLocal' | transloco }}</button>
-          <button class="bulk-btn" (click)="resolveAll('REMOTE')">{{ 'sync.applyAllRemote' | transloco }}</button>
-        </div>
-      }
-
-      @for (conflict of conflicts(); track conflict.path) {
-        <div class="conflict">
-          <div class="conflict-row" (click)="toggleExpand(conflict.path)">
-            <i
-              class="pi"
-              [ngClass]="expandedConflicts().has(conflict.path) ? 'pi-chevron-down' : 'pi-chevron-right'"
-            ></i>
-            <span class="conflict-path">{{ conflict.path }}</span>
-            <div class="conflict-actions" (click)="$event.stopPropagation()">
-              <button class="keep-btn" (click)="resolve(conflict.path, 'LOCAL')">
-                {{ 'sync.localVersion' | transloco }}
-              </button>
-              <button class="keep-btn" (click)="resolve(conflict.path, 'REMOTE')">
-                {{ 'sync.remoteVersion' | transloco }}
-              </button>
-              <button
-                class="skip-btn"
-                [title]="'sync.skipTooltip' | transloco"
-                (click)="resolve(conflict.path, 'SKIP')"
-              >
-                {{ 'sync.skipConflict' | transloco }}
-              </button>
-              <button class="manual-btn" (click)="openMergeEditor(conflict)">
-                {{ 'sync.manualResolve' | transloco }}
-              </button>
-            </div>
-          </div>
-
-          @if (expandedConflicts().has(conflict.path)) {
-            <div class="conflict-panes">
-              <div class="conflict-pane">
-                <div class="pane-header">
-                  <span>{{ 'sync.localVersion' | transloco }}</span>
-                </div>
-                <pre class="pane-body">@for (line of splitLines(conflict.localContent); track $index) {
-<span [ngClass]="conflictLineClass(conflict, $index, 'local')">{{ line }}</span>
-}</pre>
-              </div>
-              <div class="conflict-pane">
-                <div class="pane-header">
-                  <span>{{ 'sync.remoteVersion' | transloco }}</span>
-                </div>
-                <pre class="pane-body">@for (line of splitLines(conflict.remoteContent); track $index) {
-<span [ngClass]="conflictLineClass(conflict, $index, 'remote')">{{ line }}</span>
-}</pre>
-              </div>
-            </div>
-          }
-        </div>
-      }
-    </p-dialog>
-
-    @if (activeManualConflict()) {
-      <app-conflict-merge-editor
-        [conflict]="activeManualConflict()!"
-        (resolved)="onManualResolved(activeManualConflict()!.path, $event)"
-        (cancelled)="activeManualConflict.set(null)"
-      />
-    }
   `,
   styles: [
     `
@@ -200,10 +112,6 @@ const FIRST_PAGE = 0;
         cursor: pointer;
         border: 1px solid var(--app-border-strong);
         border-radius: 4px;
-        background: var(--app-surface-muted);
-        color: var(--app-text);
-      }
-      .sync-btn {
         background: var(--app-primary-soft);
         color: var(--app-primary);
         font-weight: 500;
@@ -211,30 +119,6 @@ const FIRST_PAGE = 0;
       .sync-btn:disabled {
         opacity: 0.6;
         cursor: default;
-      }
-      .sync-progress-wrap {
-        position: relative;
-        height: 20px;
-        background: var(--app-border);
-        border-radius: 10px;
-        overflow: hidden;
-        margin-bottom: 0.5rem;
-      }
-      .sync-progress-bar {
-        height: 100%;
-        background: var(--app-primary);
-        border-radius: 10px;
-        transition: width 0.15s ease;
-      }
-      .sync-progress-label {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.7rem;
-        font-weight: 600;
-        color: var(--app-text);
       }
       .sync-msg {
         font-size: 0.85rem;
@@ -367,8 +251,7 @@ const FIRST_PAGE = 0;
         color: var(--app-text-muted);
         font-size: 0.8rem;
       }
-      .diff-pre,
-      .pane-body {
+      .diff-pre {
         margin: 0.25rem 0 0;
         font-size: 0.75rem;
         line-height: 1.45;
@@ -380,8 +263,7 @@ const FIRST_PAGE = 0;
         overflow-x: auto;
         white-space: pre;
       }
-      .diff-pre span,
-      .pane-body span {
+      .diff-pre span {
         display: block;
         white-space: pre;
       }
@@ -400,138 +282,6 @@ const FIRST_PAGE = 0;
       .line-meta {
         color: #8b949e;
       }
-      .conflicts-dialog-header {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        width: 100%;
-      }
-      .resolved-counter {
-        font-size: 0.8rem;
-        font-weight: 400;
-        color: var(--app-text-muted);
-      }
-      .bulk-bar {
-        display: flex;
-        gap: 0.5rem;
-        margin-bottom: 0.75rem;
-        padding-bottom: 0.75rem;
-        border-bottom: 1px solid var(--app-border);
-      }
-      .bulk-btn {
-        padding: 0.25rem 0.75rem;
-        font-size: 0.8rem;
-        cursor: pointer;
-        border: 1px solid var(--app-border-strong);
-        border-radius: 4px;
-        background: var(--app-surface-muted);
-        color: var(--app-text);
-      }
-      .bulk-btn:hover {
-        background: var(--app-surface-subtle);
-      }
-      .conflict {
-        margin-bottom: 0.5rem;
-        border: 1px solid var(--app-border);
-        border-radius: 6px;
-        overflow: hidden;
-      }
-      .conflict-row {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.45rem 0.6rem;
-        background: var(--app-surface-muted);
-        cursor: pointer;
-        user-select: none;
-      }
-      .conflict-row:hover {
-        background: var(--app-surface-subtle);
-      }
-      .conflict-row .pi {
-        font-size: 0.75rem;
-        color: var(--app-text-muted);
-        flex-shrink: 0;
-      }
-      .conflict-path {
-        font-family: monospace;
-        font-size: 0.8rem;
-        font-weight: 600;
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .conflict-actions {
-        display: flex;
-        gap: 0.35rem;
-        flex-shrink: 0;
-      }
-      .conflict-panes {
-        display: flex;
-        gap: 0;
-        border-top: 1px solid var(--app-border);
-      }
-      .conflict-pane {
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
-      }
-      .conflict-pane:first-child {
-        border-right: 1px solid var(--app-border);
-      }
-      .pane-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.4rem 0.6rem;
-        background: var(--app-surface-subtle);
-        font-size: 0.8rem;
-        font-weight: 600;
-      }
-      .keep-btn {
-        padding: 0.15rem 0.5rem;
-        font-size: 0.72rem;
-        cursor: pointer;
-        border: 1px solid var(--app-primary);
-        border-radius: 4px;
-        background: var(--app-primary);
-        color: #fff;
-      }
-      .skip-btn {
-        padding: 0.15rem 0.5rem;
-        font-size: 0.72rem;
-        cursor: pointer;
-        border: 1px solid var(--app-border-strong);
-        border-radius: 4px;
-        background: var(--app-surface-muted);
-        color: var(--app-text-muted);
-      }
-      .skip-btn:hover {
-        background: var(--app-surface-subtle);
-      }
-      .manual-btn {
-        padding: 0.15rem 0.5rem;
-        font-size: 0.72rem;
-        cursor: pointer;
-        border: 1px solid var(--app-warning, #f59e0b);
-        border-radius: 4px;
-        background: transparent;
-        color: var(--app-warning, #f59e0b);
-      }
-      .manual-btn:hover {
-        background: color-mix(in srgb, var(--app-warning, #f59e0b) 12%, transparent);
-      }
-      .pane-body {
-        margin: 0;
-        border-radius: 0;
-        max-height: 40vh;
-      }
-      .line-changed {
-        background: #3a2f1a;
-        color: #ffd58a;
-      }
       .paginator-wrap {
         margin-top: 0.75rem;
       }
@@ -549,21 +299,7 @@ const FIRST_PAGE = 0;
         .history-header {
           flex-wrap: wrap;
         }
-        .conflict-row {
-          flex-wrap: wrap;
-        }
-        .conflict-actions {
-          flex-wrap: wrap;
-        }
-        .conflict-panes {
-          flex-direction: column;
-        }
-        .conflict-pane:first-child {
-          border-right: none;
-          border-bottom: 1px solid var(--app-border);
-        }
-        .diff-pre,
-        .pane-body {
+        .diff-pre {
           font-size: 0.68rem;
           padding: 0.4rem;
         }
@@ -575,27 +311,17 @@ export class GitHistoryComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly t = inject(TranslocoService);
   private readonly router = inject(Router);
-  private readonly jobsStore = inject(JobsStore);
+  readonly sync = inject(SyncService);
 
   constructor() {
-    // React to the SYNC job we enqueued reaching a terminal state: refresh history and conflicts.
+    // Refresh the history list whenever the vault changes (a sync completed or a conflict was
+    // resolved). SyncService owns the sync/conflict orchestration; this page only reflects it.
+    let lastChanged = this.sync.changed();
     effect(() => {
-      const id = this.pendingSyncJobId();
-      if (!id) return;
-      const job = this.jobsStore.jobs().get(id);
-      if (!job) return;
-      if (job.status === 'COMPLETED') {
-        untracked(() => {
-          this.pendingSyncJobId.set(null);
-          this.onSyncJobDone(job);
-        });
-      } else if (job.status === 'FAILED') {
-        untracked(() => {
-          this.pendingSyncJobId.set(null);
-          this.syncIsError.set(true);
-          this.syncMessage.set(this.t.translate('sync.error'));
-        });
-      }
+      const c = this.sync.changed();
+      if (c === lastChanged) return;
+      lastChanged = c;
+      untracked(() => this.load());
     });
   }
 
@@ -607,17 +333,6 @@ export class GitHistoryComponent implements OnInit {
   readonly pageSize = PAGE_SIZE;
   readonly currentPage = signal(FIRST_PAGE);
   readonly page = computed(() => this.entries());
-
-  readonly syncing = signal(false);
-  readonly syncMessage = signal<string | null>(null);
-  readonly syncIsError = signal(false);
-  private readonly pendingSyncJobId = signal<string | null>(null);
-  readonly conflicts = signal<Conflict[]>([]);
-  readonly showConflicts = signal(false);
-  readonly totalConflicts = signal(0);
-  readonly resolvedCount = computed(() => this.totalConflicts() - this.conflicts().length);
-  readonly expandedConflicts = signal<Set<string>>(new Set());
-  readonly activeManualConflict = signal<Conflict | null>(null);
 
   private readonly openDiffs = new Map<string, string[]>();
   private readonly loadingDiffs = new Set<string>();
@@ -652,119 +367,6 @@ export class GitHistoryComponent implements OnInit {
         this.loading.set(false);
       },
     });
-  }
-
-  sync(): void {
-    if (this.syncing()) return;
-    this.syncing.set(true);
-    this.syncIsError.set(false);
-    this.api.enqueueSync().subscribe({
-      next: (res) => {
-        this.pendingSyncJobId.set(res.jobId);
-        this.syncMessage.set(this.t.translate('sync.enqueued'));
-        this.syncing.set(false);
-      },
-      error: () => {
-        this.syncing.set(false);
-        this.syncIsError.set(true);
-        this.syncMessage.set(this.t.translate('sync.error'));
-      },
-    });
-  }
-
-  /** Called when the enqueued SYNC job completes: refresh history and reload any conflicts. */
-  private onSyncJobDone(job: JobState): void {
-    this.syncing.set(false);
-    this.syncIsError.set(false);
-    let message = this.t.translate('sync.enqueued');
-    try {
-      const parsed = JSON.parse(job.result ?? '{}') as { message?: string };
-      if (parsed.message) message = parsed.message;
-    } catch {
-      // keep default message
-    }
-    this.syncMessage.set(message);
-    this.load();
-    this.loadConflicts();
-  }
-
-  private loadConflicts(): void {
-    this.api.getConflicts().subscribe({
-      next: (conflicts) => {
-        this.conflicts.set(conflicts);
-        this.totalConflicts.set(conflicts.length);
-        this.expandedConflicts.set(new Set());
-        this.showConflicts.set(conflicts.length > 0);
-      },
-      error: () => {
-        this.syncIsError.set(true);
-        this.syncMessage.set(this.t.translate('sync.error'));
-      },
-    });
-  }
-
-  resolve(path: string, keep: 'LOCAL' | 'REMOTE' | 'SKIP' | 'MANUAL', content?: string): void {
-    this.api.resolveConflict(path, keep, content).subscribe({
-      next: () => {
-        const remaining = this.conflicts().filter((c) => c.path !== path);
-        this.conflicts.set(remaining);
-        if (remaining.length === 0) {
-          this.showConflicts.set(false);
-        }
-        if (keep !== 'SKIP') {
-          this.load();
-        }
-      },
-      error: () => {
-        this.syncIsError.set(true);
-        this.syncMessage.set(this.t.translate('sync.resolveError'));
-      },
-    });
-  }
-
-  resolveAll(keep: 'LOCAL' | 'REMOTE'): void {
-    const all = [...this.conflicts()];
-    const errors: string[] = [];
-    let remaining = all.length;
-    const done = () => {
-      remaining--;
-      if (remaining === 0 && errors.length > 0) {
-        this.syncIsError.set(true);
-        this.syncMessage.set(this.t.translate('sync.bulkError'));
-      }
-    };
-    for (const c of all) {
-      this.api.resolveConflict(c.path, keep).subscribe({
-        next: () => {
-          this.conflicts.update((list) => list.filter((x) => x.path !== c.path));
-          if (this.conflicts().length === 0) this.showConflicts.set(false);
-          this.load();
-          done();
-        },
-        error: () => {
-          errors.push(c.path);
-          done();
-        },
-      });
-    }
-  }
-
-  toggleExpand(path: string): void {
-    this.expandedConflicts.update((set) => {
-      const next = new Set(set);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
-  }
-
-  openMergeEditor(conflict: Conflict): void {
-    this.activeManualConflict.set(conflict);
-  }
-
-  onManualResolved(path: string, content: string): void {
-    this.activeManualConflict.set(null);
-    this.resolve(path, 'MANUAL', content);
   }
 
   isDiffOpen(changeId: string): boolean {
@@ -811,19 +413,6 @@ export class GitHistoryComponent implements OnInit {
     if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ '))
       return 'line-meta';
     return '';
-  }
-
-  splitLines(content: string): string[] {
-    return (content ?? '').split('\n');
-  }
-
-  conflictLineClass(conflict: Conflict, index: number, side: 'local' | 'remote'): string {
-    const local = this.splitLines(conflict.localContent);
-    const remote = this.splitLines(conflict.remoteContent);
-    const own = side === 'local' ? local : remote;
-    const other = side === 'local' ? remote : local;
-    if (index >= own.length) return '';
-    return own[index] !== (other[index] ?? undefined) ? 'line-changed' : '';
   }
 
   sourceLabel(source: string): string {

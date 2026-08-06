@@ -20,7 +20,8 @@
     "explorer": "Explorador",
     "settings": "Configuración",
     "profile": "Perfil",
-    "menu": "Menú"
+    "menu": "Menú",
+    "sync": "Sincronizar ahora"
   },
   "login": {
     "username": "Usuario",
@@ -114,6 +115,8 @@
     "button": "Sincronizar",
     "syncing": "Sincronizando…",
     "enqueued": "Sincronización encolada. Sigue el progreso en el panel de trabajos.",
+    "running": "Sincronizando…",
+    "dismiss": "Descartar",
     "summary": "Sincronización completada: {{ pulled }} descargados, {{ pushed }} subidos, {{ deleted }} eliminados, {{ conflicts }} conflicto(s).",
     "notConfigured": "WebDAV no está configurado.",
     "error": "La sincronización falló.",
