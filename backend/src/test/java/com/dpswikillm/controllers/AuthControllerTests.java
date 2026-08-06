@@ -10,6 +10,7 @@ import com.dpswikillm.config.PasswordConfig;
 import com.dpswikillm.config.SecurityConfig;
 import com.dpswikillm.domain.User;
 import com.dpswikillm.dto.ChangePasswordRequest;
+import com.dpswikillm.dto.LoginEventDto;
 import com.dpswikillm.dto.LoginRequest;
 import com.dpswikillm.dto.RegisterRequest;
 import com.dpswikillm.dto.TwoFactorLoginRequest;
@@ -20,8 +21,10 @@ import com.dpswikillm.security.TotpService;
 import com.dpswikillm.services.LoginEventService;
 import com.dpswikillm.services.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -181,6 +184,31 @@ class AuthControllerTests {
     @Test
     void me_withoutToken_returns401() throws Exception {
         mockMvc.perform(get("/auth/me")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void loginHistory_returnsFailedAttemptsFromService() throws Exception {
+        User user = new User("alice", "alice@test.com", "$2a$hash", "ROLE_USER");
+        LoginEventDto failed =
+                new LoginEventDto(
+                        UUID.randomUUID(),
+                        OffsetDateTime.now(),
+                        "1.2.3.4",
+                        "ES",
+                        "Madrid",
+                        false,
+                        "BAD_CREDENTIALS");
+        when(loginEventService.getHistory(any())).thenReturn(List.of(failed));
+
+        mockMvc.perform(get("/auth/login-history").with(authentication(principal(user))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].success").value(false))
+                .andExpect(jsonPath("$[0].failureReason").value("BAD_CREDENTIALS"));
+    }
+
+    @Test
+    void loginHistory_withoutToken_returns401() throws Exception {
+        mockMvc.perform(get("/auth/login-history")).andExpect(status().isUnauthorized());
     }
 
     @Test

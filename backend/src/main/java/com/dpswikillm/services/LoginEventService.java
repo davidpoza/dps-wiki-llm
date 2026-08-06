@@ -34,7 +34,7 @@ public class LoginEventService {
     }
 
     public List<LoginEventDto> getHistory(User user) {
-        return repository.findTop20ByUserOrderByCreatedAtDesc(user).stream()
+        return repository.findTop20ByUsernameOrderByCreatedAtDesc(user.getUsername()).stream()
                 .map(
                         e ->
                                 new LoginEventDto(
