@@ -138,6 +138,34 @@ public class FileService {
         webDavSyncService.pushSaved(relativePath, content);
     }
 
+    /**
+     * Recreates a previously-deleted file with the content it had before deletion (typically a
+     * {@code contentBefore} pulled from a job snapshot). Recreates missing parent directories,
+     * captures its own {@code RECOVERY} snapshot so the recreation is itself versioned/reversible,
+     * reindexes, and replicates to WebDAV — mirroring {@link #saveContent}. Rejects when a file
+     * already exists at the target path so an existing note is never clobbered.
+     */
+    public void recoverDeletedFile(String relativePath, String content) {
+        Path resolved = resolveAndValidate(relativePath);
+        if (Files.exists(resolved)) {
+            throw new FileAlreadyExistsException(relativePath);
+        }
+        Snapshot snapshot =
+                snapshotService.beginSnapshot(null, "recover-deleted-file", relativePath, "RECOVERY");
+        try {
+            snapshotService.captureFile(snapshot, relativePath);
+            Files.createDirectories(resolved.getParent());
+            Files.writeString(resolved, content, StandardCharsets.UTF_8);
+            snapshotService.recordAfter(snapshot, relativePath);
+            snapshotService.finalizeSnapshot(snapshot, null);
+        } catch (IOException e) {
+            snapshotService.deleteSnapshot(snapshot.getId());
+            throw new UncheckedIOException(e);
+        }
+        documentIndexService.indexFile(relativePath);
+        webDavSyncService.pushSaved(relativePath, content);
+    }
+
     public void deleteFile(String relativePath) {
         Path resolved = resolveAndValidate(relativePath);
         if (!Files.exists(resolved)) {

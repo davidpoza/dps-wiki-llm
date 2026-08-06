@@ -276,6 +276,10 @@ export class ApiService {
     return this.http.post<void>(`/api/jobs/${jobId}/abandon`, {});
   }
 
+  recoverDeletedFile(jobId: string, path: string): Observable<void> {
+    return this.http.post<void>(`/api/jobs/${jobId}/files/recover`, null, { params: { path } });
+  }
+
   lookupFiles(q: string, limit = 10, filters: FrontmatterFilter[] = []): Observable<FileSearchResult[]> {
     const params: Record<string, string | string[]> = { q, limit: String(limit) };
     if (filters.length) {

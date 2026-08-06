@@ -208,6 +208,35 @@ public class JobController {
         return queueService.enqueue(JobType.REVERT, JobMode.unattended, id.toString());
     }
 
+    /**
+     * Recovers a single deleted file from this job's snapshot, recreating it with the content it
+     * had before deletion, without touching the rest of the job. Returns {@code 404} when the job
+     * has no snapshot or no deletion entry for the path, {@code 400} when the path was not a
+     * deletion, and {@code 409} when a file already exists at the path.
+     */
+    @PostMapping("/jobs/{id}/files/recover")
+    public org.springframework.http.ResponseEntity<Void> recoverDeletedFile(
+            @PathVariable UUID id, @RequestParam("path") String path) {
+        Job job = jobRepository.findById(id).orElse(null);
+        if (job == null || job.getSnapshotId() == null) {
+            return org.springframework.http.ResponseEntity.notFound().build();
+        }
+        String content;
+        try {
+            content = snapshotService.findDeletedContent(job.getSnapshotId(), path);
+        } catch (java.util.NoSuchElementException e) {
+            return org.springframework.http.ResponseEntity.notFound().build();
+        } catch (IllegalArgumentException e) {
+            return org.springframework.http.ResponseEntity.badRequest().build();
+        }
+        try {
+            fileService.recoverDeletedFile(path, content);
+        } catch (FileService.FileAlreadyExistsException e) {
+            return org.springframework.http.ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        return org.springframework.http.ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/jobs/enrich")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public EnqueueJobResponse enqueueEnrich(@RequestParam("path") String path) {

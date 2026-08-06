@@ -285,6 +285,41 @@ class SnapshotServiceTests {
     }
 
     @Test
+    void findDeletedContentReturnsContentBeforeForDeletion() {
+        Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
+        savedFile(snapshot, "wiki/gone.md", "deleted body\n", null);
+        snapshotService.finalizeSnapshot(snapshot, null);
+
+        assertThat(snapshotService.findDeletedContent(snapshot.getId(), "wiki/gone.md"))
+                .isEqualTo("deleted body\n");
+    }
+
+    @Test
+    void findDeletedContentThrowsWhenPathNotInSnapshot() {
+        Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
+        snapshotService.finalizeSnapshot(snapshot, null);
+
+        assertThatThrownBy(
+                        () ->
+                                snapshotService.findDeletedContent(
+                                        snapshot.getId(), "wiki/missing.md"))
+                .isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    @Test
+    void findDeletedContentThrowsWhenEntryIsNotADeletion() {
+        Snapshot snapshot = snapshotService.beginSnapshot("job-1", "ingest", "test");
+        savedFile(snapshot, "wiki/updated.md", "before\n", "after\n");
+        snapshotService.finalizeSnapshot(snapshot, null);
+
+        assertThatThrownBy(
+                        () ->
+                                snapshotService.findDeletedContent(
+                                        snapshot.getId(), "wiki/updated.md"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void getVersionContentThrowsForUnknownVersion() {
         assertThatThrownBy(
                         () -> snapshotService.getVersionContent("wiki/note.md", UUID.randomUUID()))

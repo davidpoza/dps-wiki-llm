@@ -73,6 +73,8 @@
   "jobs": {
     "empty": "No jobs yet. Ingest a document or ask a question to get started.",
     "revert": "Revert",
+    "recover": "Recover",
+    "recovered": "Recovered",
     "files": "Files",
     "awaitingReview": "This job is awaiting your review. Switch to the Review tab.",
     "conceptProposals": "Proposed concepts",

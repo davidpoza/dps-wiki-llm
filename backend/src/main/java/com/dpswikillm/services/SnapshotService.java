@@ -251,6 +251,28 @@ public class SnapshotService {
         return snapshotFileRepository.findBySnapshotId(snapshotId);
     }
 
+    /**
+     * Returns the pre-deletion content of a file that the given snapshot recorded as a deletion
+     * (its {@code contentAfter} is null and its {@code contentBefore} is non-null — exactly the
+     * shape that surfaces as a DELETE chip in the jobs panel). Throws {@link
+     * java.util.NoSuchElementException} when the snapshot has no entry for the path and {@link
+     * IllegalArgumentException} when the entry exists but does not represent a deletion.
+     */
+    public String findDeletedContent(UUID snapshotId, String path) {
+        String normalized = pathResolver.normalizeRelativePath(path);
+        SnapshotFile sf =
+                snapshotFileRepository
+                        .findBySnapshotIdAndPath(snapshotId, normalized)
+                        .orElseThrow(
+                                () ->
+                                        new java.util.NoSuchElementException(
+                                                "No snapshot entry for path: " + path));
+        if (sf.getContentAfter() != null || sf.getContentBefore() == null) {
+            throw new IllegalArgumentException("Path was not deleted by this job: " + path);
+        }
+        return sf.getContentBefore();
+    }
+
     public Snapshot findById(UUID snapshotId) {
         return snapshotRepository
                 .findById(snapshotId)

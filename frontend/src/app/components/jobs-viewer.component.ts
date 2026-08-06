@@ -103,6 +103,19 @@ const PAGE_SIZE = 10;
                   <div class="file-entry">
                     <span class="file-action" [class]="'action-' + f.action">{{ f.action }}</span>
                     <button class="path-btn" (click)="openFile(f.path)">{{ f.path }}</button>
+                    @if (f.action === 'delete') {
+                      @if (isRecovered(job.id, f.path)) {
+                        <span class="file-recovered">{{ 'jobs.recovered' | transloco }}</span>
+                      } @else {
+                        <button
+                          type="button"
+                          class="recover-btn"
+                          (click)="recover(job.id, f.path)"
+                        >
+                          {{ 'jobs.recover' | transloco }}
+                        </button>
+                      }
+                    }
                   </div>
                 }
               </div>
@@ -295,6 +308,31 @@ const PAGE_SIZE = 10;
       .path-btn:hover {
         text-decoration: underline;
       }
+      .recover-btn {
+        flex-shrink: 0;
+        font-size: 0.7rem;
+        font-weight: 600;
+        padding: 1px 8px;
+        border-radius: 4px;
+        border: 1px solid #22c55e;
+        background: transparent;
+        color: #22c55e;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .recover-btn:hover {
+        background: #22c55e;
+        color: #fff;
+      }
+      .file-recovered {
+        flex-shrink: 0;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #22c55e;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
       .job-error {
         color: var(--app-error-text);
         font-size: 0.85rem;
@@ -459,6 +497,27 @@ export class JobsViewerComponent {
 
   abandon(jobId: string): void {
     this.api.abandonJob(jobId).subscribe({ error: (err) => console.error('Abandon failed', err) });
+  }
+
+  readonly recovered = signal<ReadonlySet<string>>(new Set());
+
+  private recoverKey(jobId: string, path: string): string {
+    return `${jobId}|${path}`;
+  }
+
+  isRecovered(jobId: string, path: string): boolean {
+    return this.recovered().has(this.recoverKey(jobId, path));
+  }
+
+  recover(jobId: string, path: string): void {
+    this.api.recoverDeletedFile(jobId, path).subscribe({
+      next: () => {
+        const next = new Set(this.recovered());
+        next.add(this.recoverKey(jobId, path));
+        this.recovered.set(next);
+      },
+      error: (err) => console.error('Recover failed', err),
+    });
   }
 
   jobTypeLabel(type: string): string {

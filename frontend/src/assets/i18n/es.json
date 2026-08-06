@@ -73,6 +73,8 @@
   "jobs": {
     "empty": "Sin trabajos. Ingesta un documento o haz una pregunta para empezar.",
     "revert": "Revertir",
+    "recover": "Recuperar",
+    "recovered": "Recuperado",
     "files": "Ficheros",
     "awaitingReview": "Este trabajo está esperando tu revisión. Cambia a la pestaña Revisión.",
     "conceptProposals": "Conceptos propuestos",

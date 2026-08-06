@@ -1,6 +1,7 @@
 package com.dpswikillm.services;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -213,6 +214,42 @@ class FileServiceTests {
 
         verify(indexer).removeFromIndex("wiki/old.md");
         verify(indexer).indexFile("wiki/new.md");
+    }
+
+    @Test
+    void recoverDeletedFileRecreatesContentAndIndexesWithoutTouchingSiblings() throws Exception {
+        Files.createDirectories(vault.resolve("wiki"));
+        Files.writeString(vault.resolve("wiki/keep.md"), "untouched\n");
+        DocumentIndexService indexer = mock(DocumentIndexService.class);
+        WebDavSyncService webdav = mock(WebDavSyncService.class);
+        FileService service =
+                new FileService(
+                        resolver(),
+                        mock(SnapshotService.class),
+                        webdav,
+                        mock(ResourceSettingsService.class),
+                        indexer);
+
+        service.recoverDeletedFile("wiki/gone/note.md", "# Recovered\n\nBody.\n");
+
+        assertThat(vault.resolve("wiki/gone/note.md")).exists();
+        assertThat(Files.readString(vault.resolve("wiki/gone/note.md")))
+                .isEqualTo("# Recovered\n\nBody.\n");
+        // A sibling note the job did not touch is left exactly as it was.
+        assertThat(Files.readString(vault.resolve("wiki/keep.md"))).isEqualTo("untouched\n");
+        verify(indexer).indexFile("wiki/gone/note.md");
+        verify(webdav).pushSaved("wiki/gone/note.md", "# Recovered\n\nBody.\n");
+    }
+
+    @Test
+    void recoverDeletedFileRejectsWhenTargetAlreadyExists() throws Exception {
+        Files.createDirectories(vault.resolve("wiki"));
+        Files.writeString(vault.resolve("wiki/note.md"), "current\n");
+        FileService service = service();
+
+        assertThatThrownBy(() -> service.recoverDeletedFile("wiki/note.md", "recovered\n"))
+                .isInstanceOf(FileService.FileAlreadyExistsException.class);
+        assertThat(Files.readString(vault.resolve("wiki/note.md"))).isEqualTo("current\n");
     }
 
     private FileService service() {
