@@ -250,7 +250,10 @@ public class WebDavClient {
                 rel.append('/');
             }
             rel.append(segment);
-            String dirUrl = urlFor(rel.toString());
+            // Address collections with a trailing slash. Without it, servers like Apache mod_dav
+            // reply with a 301 to the slash-terminated URL, and some emit a non-percent-encoded
+            // Location header (spaces/emoji in the path) that HttpClient then refuses to parse.
+            String dirUrl = urlFor(rel.toString()) + "/";
             if (!sardine.exists(dirUrl)) {
                 sardine.createDirectory(dirUrl);
             }
