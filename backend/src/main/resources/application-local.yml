@@ -1,0 +1,30 @@
+# Perfil de DESARROLLO LOCAL.
+#
+# Las dependencias (Postgres, RabbitMQ, embeddings TEI y web-extractor) se
+# levantan con ./dev-backend.sh (compose.local.yaml) compartiendo la red del
+# workspace, por eso aquí todo apunta a localhost y no hay nada que configurar.
+#
+# Los secretos (clave del LLM, admin, JWT, WebDAV, Telegram...) son opcionales
+# y van en secrets.yml (gitignored). Copia backend/secrets.yml.example si los
+# necesitas; sin ese fichero el backend arranca con los valores por defecto de
+# application.yml (admin / admin, sin LLM).
+server:
+  port: 8090
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/dps_wiki
+    username: dps_wiki
+    password: dps_wiki
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: dps_wiki
+    password: dps_wiki
+
+app:
+  vault-path: ../vault
+  embeddings:
+    base-url: http://localhost:8080
+  extractor:
+    base-url: http://localhost:3000

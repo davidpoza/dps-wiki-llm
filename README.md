@@ -84,34 +84,45 @@ URLs con el compose actual:
 
 ## Desarrollo local
 
-Servicios auxiliares:
+Arranque con configuracion predefinida: no hay que configurar nada para empezar. Cada script se ejecuta en su propia terminal.
+
+Backend (levanta Postgres, RabbitMQ, embeddings TEI y web-extractor en Docker —compartiendo la red del workspace— y arranca Spring Boot con el perfil `local`):
 
 ```bash
-docker compose up -d postgres rabbitmq embeddings web-extractor
+./dev-backend.sh
 ```
 
-Backend:
+Frontend (Angular con proxy de `/api` al backend):
 
 ```bash
-cd backend
-mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dspring.docker.compose.enabled=false -Dspring.profiles.active=local"
+./dev-frontend.sh
 ```
 
-Frontend:
+Solo las dependencias (para arrancar el backend por tu cuenta, p.ej. desde el IDE):
 
 ```bash
-cd frontend
-pnpm install
-pnpm start
+./dev-up.sh
 ```
 
-Web-extractor:
+Parar las dependencias (anade `-v` para borrar tambien los datos de Postgres):
 
 ```bash
-cd web-extractor
-npm install
-npm start
+./dev-down.sh        # ./dev-down.sh -v
 ```
+
+URLs de desarrollo:
+
+- Frontend: `http://localhost:4200`
+- Backend: `http://localhost:8090/api` (OpenAPI: `/swagger-ui.html`, health: `/actuator/health`)
+- RabbitMQ management: `http://localhost:15672` (`dps_wiki` / `dps_wiki`)
+- Login inicial: `admin` / `admin`
+
+Perfiles y configuracion:
+
+- Backend: el perfil `local` (`backend/src/main/resources/application-local.yml`) ya apunta a las dependencias en `localhost`. Los secretos (clave LLM, admin, JWT, WebDAV, Telegram) son opcionales y van en `backend/src/main/resources/secrets.yml` (copia de `backend/secrets.yml.example`, gitignored). Sin ese fichero el backend arranca con valores por defecto (`admin` / `admin`, sin LLM).
+- Frontend: `frontend/proxy.conf.json` reenvia `/api` a `http://localhost:8090`; no requiere configuracion.
+
+> Las dependencias comparten la pila de red de este workspace, asi que solo debe haber un stack de desarrollo activo a la vez (ejecuta `./dev-down.sh` antes de cambiar de proyecto). La primera vez, los embeddings TEI descargan el modelo (unos minutos). Los scripts detectan el contenedor del workspace via `$(hostname)`; exporta `DEV_NETNS_CONTAINER` para forzar otro.
 
 ## Configuracion
 

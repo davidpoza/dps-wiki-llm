@@ -1,0 +1,99 @@
+# =============================================================================
+# Dependencias de DESARROLLO LOCAL para este entorno (workspace en contenedor).
+#
+# Postgres, RabbitMQ, los embeddings (TEI) y el web-extractor comparten la PILA
+# DE RED del contenedor del workspace (network_mode: container:...). Así, desde
+# el backend —que corre en el workspace vía `mvn spring-boot:run`— todas las
+# dependencias están en localhost, igual que en una máquina normal y sin
+# conectar redes a mano.
+#
+# El contenedor del workspace se toma de DEV_NETNS_CONTAINER (por defecto el
+# nombre de este workspace). Lo más robusto es pasar el id actual:
+#
+#   DEV_NETNS_CONTAINER="$(hostname)" docker compose -f compose.local.yaml up -d
+#   cd backend && mvn spring-boot:run -Dspring-boot.run.profiles=local
+#
+#   (o simplemente ejecuta ./dev-backend.sh, que ya hace lo anterior)
+#
+#   Postgres       -> localhost:5432   (dps_wiki / dps_wiki / dps_wiki)
+#   RabbitMQ       -> localhost:5672   (admin UI: http://localhost:15672)
+#   Embeddings TEI -> http://localhost:8080
+#   web-extractor  -> http://localhost:3000
+#
+# Como comparten la red del workspace, solo debe haber UN stack de desarrollo
+# activo a la vez. Parar:  ./dev-down.sh      (añade -v para borrar los datos)
+# =============================================================================
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: dpswiki-db-local
+    restart: unless-stopped
+    network_mode: "container:${DEV_NETNS_CONTAINER:-coder-davidpoza-prueba}"
+    environment:
+      POSTGRES_DB: dps_wiki
+      POSTGRES_USER: dps_wiki
+      POSTGRES_PASSWORD: dps_wiki
+      TZ: Europe/Madrid
+    volumes:
+      - dpswiki_db_local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dps_wiki -d dps_wiki"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: dpswiki-rabbitmq-local
+    restart: unless-stopped
+    network_mode: "container:${DEV_NETNS_CONTAINER:-coder-davidpoza-prueba}"
+    environment:
+      RABBITMQ_DEFAULT_USER: dps_wiki
+      RABBITMQ_DEFAULT_PASS: dps_wiki
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.7
+    container_name: dpswiki-embeddings-local
+    restart: unless-stopped
+    network_mode: "container:${DEV_NETNS_CONTAINER:-coder-davidpoza-prueba}"
+    command: ["--model-id", "intfloat/multilingual-e5-small", "--port", "8080"]
+    environment:
+      MODEL_ID: intfloat/multilingual-e5-small
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health"]
+      start_period: 600s
+      interval: 15s
+      timeout: 10s
+      retries: 20
+
+  web-extractor:
+    build:
+      context: ./web-extractor
+    container_name: dpswiki-extractor-local
+    restart: unless-stopped
+    init: true
+    network_mode: "container:${DEV_NETNS_CONTAINER:-coder-davidpoza-prueba}"
+    environment:
+      PORT: 3000
+      EXTRACTOR_CONCURRENCY: ${EXTRACTOR_CONCURRENCY:-3}
+      NAV_TIMEOUT_MS: ${EXTRACTOR_NAV_TIMEOUT_MS:-30000}
+      NETWORKIDLE_MS: ${EXTRACTOR_NETWORKIDLE_MS:-4000}
+      PDF_MAX_BYTES: ${PDF_MAX_BYTES:-20971520}
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+volumes:
+  dpswiki_db_local:
